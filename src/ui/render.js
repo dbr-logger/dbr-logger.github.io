@@ -886,7 +886,9 @@ export function createRenderer(store) {
   }
 
   function syncQueryScrollLockState() {
-    setQueryScrollLock(floatingFilterOpen && isTitleQueryElement(document.activeElement));
+    const isSmartphone = isSmartphoneDevice();
+    const shouldLock = floatingFilterOpen && isTitleQueryElement(document.activeElement) && isSmartphone;
+    setQueryScrollLock(shouldLock);
   }
 
   function shouldCloseFloatingFilterAfterSliderCommit() {
