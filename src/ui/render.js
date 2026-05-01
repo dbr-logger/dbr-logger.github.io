@@ -1992,7 +1992,7 @@ export function createRenderer(store) {
         appliedFilterSignature = snapshotFilterSignature;
       }
 
-      renderSummary(nodes.summary, snapshot.summary, snapshot.summaryFilters ?? snapshot.filters);
+      renderSummary(nodes.summary, snapshot.summary, snapshot.filters);
       latestFilterBounds = deriveFilterBounds(snapshot.songStates);
       latestVisibleCount = snapshot.visibleSongs.length;
       renderFilterDraftPanel();
