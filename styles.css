@@ -719,9 +719,11 @@ td {
   transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
 }
 
-.song-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 18px 32px rgba(43, 54, 61, 0.12);
+@media (hover: hover) {
+  .song-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 32px rgba(43, 54, 61, 0.12);
+  }
 }
 
 .song-card.is-selected {
