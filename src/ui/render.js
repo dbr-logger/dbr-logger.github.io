@@ -1,0 +1,1994 @@
+import { LAMP_OPTIONS } from "../constants.js?v=20260430-4";
+import { renderBpChart, renderScoreChart } from "./chart.js?v=20260430-4";
+import { formatIsoDate, todayIso } from "../utils/date.js?v=20260430-4";
+
+const LAMP_COLORS = {
+  "NO PLAY": "#d7dadd",
+  FAILED: "#e06767",
+  ASSIST: "#ccb9f4",
+  EASY: "#addfb4",
+  CLEAR: "#90cdf1",
+  HARD: "#f0a29c",
+  EXH: "#f0df8d",
+  FC: "#2f3236",
+};
+const RECOMMEND_OPTIONS = [
+  { value: "", label: "－" },
+  { value: "△", label: "△" },
+  { value: "○", label: "○" },
+  { value: "◎", label: "◎" },
+  { value: "☆", label: "☆" },
+];
+const SUMMARY_LAMP_DOUBLE_CLICK_MS = 220;
+const SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD = 40;
+const AXIS_OPTIONS = [
+  { value: "level", label: "Lv." },
+  { value: "splv", label: "SPLv." },
+  { value: "katate", label: "片手Lv." },
+  { value: "title", label: "曲名" },
+];
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function badge(label, className) {
+  return `<span class="pill ${className}">${escapeHtml(label)}</span>`;
+}
+
+function formatDifficultyLabel(song) {
+  if (song.level) {
+    return `☆${song.level}`;
+  }
+
+  return "未査定";
+}
+
+function formatSplvLabel(song) {
+  return song.splv ? `SP☆${song.splv}` : null;
+}
+
+function formatBp(value) {
+  return value === null || value === undefined ? "-" : String(value);
+}
+
+function formatBpPlaceholder(selectedSong) {
+  const best = formatBp(selectedSong.bestBp);
+  const latest = formatBp(selectedSong.currentBp);
+  return `最小値 ${best} / 現在値 ${latest}`;
+}
+
+function formatScore(value) {
+  return value === null || value === undefined ? "-" : String(value);
+}
+
+function formatScorePlaceholder(selectedSong) {
+  const best = formatScore(selectedSong.bestScore);
+  const latest = formatScore(selectedSong.currentScore);
+  return `自己ベスト ${best} / 現在値 ${latest}`;
+}
+
+function formatPercent(value, total) {
+  if (total === 0) {
+    return "0.0%";
+  }
+  return `${((value / total) * 100).toFixed(1)}%`;
+}
+
+function parseKatateFilterValue(rawValue) {
+  const normalized = String(rawValue ?? "").trim();
+  if (!normalized) {
+    return Number.NaN;
+  }
+
+  if (normalized === "12.10") {
+    return 13;
+  }
+
+  return Number(normalized);
+}
+
+function formatKatateFilterValue(value) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return "";
+  }
+
+  if (numericValue === 13) {
+    return "12.10";
+  }
+
+  return numericValue.toFixed(1);
+}
+
+function updateSliderFill(slider) {
+  if (!(slider instanceof HTMLInputElement) || slider.type !== "range") {
+    return;
+  }
+
+  const min = Number(slider.min || 0);
+  const max = Number(slider.max || 100);
+  const value = Number(slider.value || min);
+  const ratio = max <= min ? 0 : (value - min) / (max - min);
+  const percent = Math.max(0, Math.min(ratio, 1)) * 100;
+  slider.style.setProperty("--slider-fill", `${percent}%`);
+}
+
+function extractBalancedJsonObject(text) {
+  let depth = 0;
+  let startIndex = -1;
+  let inString = false;
+  let escaping = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaping) {
+        escaping = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escaping = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      if (depth === 0) {
+        startIndex = index;
+      }
+      depth += 1;
+      continue;
+    }
+
+    if (char === "}") {
+      if (depth === 0) {
+        continue;
+      }
+
+      depth -= 1;
+      if (depth === 0 && startIndex >= 0) {
+        return text.slice(startIndex, index + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function findFirstSectionIndex(text) {
+  const sectionPattern = /"?((bp|lamp|score|textageKey))"?\s*:\s*\{/g;
+  let firstIndex = -1;
+
+  for (const match of text.matchAll(sectionPattern)) {
+    if (match.index === undefined) {
+      continue;
+    }
+
+    if (firstIndex === -1 || match.index < firstIndex) {
+      firstIndex = match.index;
+    }
+  }
+
+  return firstIndex;
+}
+
+function parseImportedJsonText(text) {
+  const normalized = String(text ?? "").replace(/^\uFEFF/, "").trim();
+  if (!normalized) {
+    throw new Error("JSONテキストが空です。");
+  }
+
+  try {
+    return JSON.parse(normalized);
+  } catch {}
+
+  const fenceMatch = normalized.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenceMatch) {
+    try {
+      return JSON.parse(fenceMatch[1]);
+    } catch {}
+  }
+
+  const objectText = extractBalancedJsonObject(normalized);
+  if (objectText) {
+    try {
+      return JSON.parse(objectText);
+    } catch {}
+  }
+
+  const firstBraceIndex = normalized.indexOf("{");
+  const lastBraceIndex = normalized.lastIndexOf("}");
+  if (firstBraceIndex >= 0 && lastBraceIndex > firstBraceIndex) {
+    try {
+      return JSON.parse(normalized.slice(firstBraceIndex, lastBraceIndex + 1));
+    } catch {}
+  }
+
+  const firstSectionIndex = findFirstSectionIndex(normalized);
+  if (firstSectionIndex >= 0) {
+    const tail = normalized.slice(firstSectionIndex);
+    const tailObject = extractBalancedJsonObject(`{${tail}}`);
+    if (tailObject) {
+      try {
+        return JSON.parse(tailObject);
+      } catch {}
+    }
+
+    const tailLastBraceIndex = tail.lastIndexOf("}");
+    if (tailLastBraceIndex >= 0) {
+      try {
+        return JSON.parse(`{${tail.slice(0, tailLastBraceIndex + 1)}}`);
+      } catch {}
+    }
+  }
+
+  throw new Error("テキスト内から有効なJSON本体を見つけられませんでした。");
+}
+
+function askJsonImportDate() {
+  const defaultDate = todayIso();
+  const response = window.prompt("JSONの記録日を入力してください。空欄なら今日として読み込みます。", defaultDate);
+
+  if (response === null) {
+    return null;
+  }
+
+  const normalized = response.trim();
+  if (!normalized) {
+    return defaultDate;
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw new Error("記録日は YYYY-MM-DD 形式で入力してください。");
+  }
+
+  const parsed = new Date(`${normalized}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error("記録日の形式が不正です。");
+  }
+
+  const [year, month, day] = normalized.split("-").map(Number);
+  if (
+    parsed.getFullYear() !== year
+    || parsed.getMonth() + 1 !== month
+    || parsed.getDate() !== day
+  ) {
+    throw new Error("存在しない日付です。");
+  }
+
+  return normalized;
+}
+
+function deriveFilterBounds(songStates) {
+  const levelValues = songStates.map((song) => song.levelValue).filter((value) => value !== null);
+  const splvValues = songStates.map((song) => song.splvValue).filter((value) => value !== null);
+  const katateValues = songStates.map((song) => song.katateValue).filter((value) => value !== null);
+  const uniqueLevelValues = [...new Set(levelValues)].sort((a, b) => a - b);
+  const uniqueSplvValues = [...new Set(splvValues)].sort((a, b) => a - b);
+  const uniqueKatateValues = [...new Set(katateValues)].sort((a, b) => a - b);
+
+  return {
+    level: {
+      min: levelValues.length ? Math.min(...levelValues) : 0,
+      max: levelValues.length ? Math.max(...levelValues) : 15,
+      step: 0.01,
+      values: uniqueLevelValues,
+    },
+    splv: {
+      min: splvValues.length ? Math.min(...splvValues) : 1,
+      max: splvValues.length ? Math.max(...splvValues) : 12,
+      step: 1,
+      values: uniqueSplvValues,
+    },
+    katate: {
+      min: katateValues.length ? Math.min(...katateValues) : 11,
+      max: katateValues.length ? Math.max(...katateValues) : 13,
+      step: 0.1,
+      values: uniqueKatateValues,
+    },
+  };
+}
+
+function getAxisLabel(axisMode) {
+  return AXIS_OPTIONS.find((option) => option.value === axisMode)?.label ?? "Lv.";
+}
+
+function getAxisValues(bounds, axisMode) {
+  if (axisMode === "level") {
+    return bounds.level.values ?? [];
+  }
+
+  if (axisMode === "splv") {
+    return bounds.splv.values ?? [];
+  }
+
+  if (axisMode === "katate") {
+    return bounds.katate.values ?? [];
+  }
+
+  return [];
+}
+
+function formatAxisValue(axisMode, value) {
+  if (value === "" || value === null || value === undefined) {
+    return "ALL";
+  }
+
+  if (axisMode === "level") {
+    return `☆${Number(value).toFixed(2)}`;
+  }
+
+  if (axisMode === "splv") {
+    return `☆${value}`;
+  }
+
+  if (axisMode === "katate") {
+    return `☆${formatKatateFilterValue(value)}`;
+  }
+
+  return String(value);
+}
+
+function summarizeAxisFilter(filters) {
+  if (filters.axisMode === "title") {
+    return filters.titleQuery.trim() ? `${getAxisLabel(filters.axisMode)} ${filters.titleQuery.trim()}` : `${getAxisLabel(filters.axisMode)} ALL`;
+  }
+
+  return `${getAxisLabel(filters.axisMode)} ${formatAxisValue(filters.axisMode, filters.axisValue)}`;
+}
+
+function findClosestValue(values, rawValue, fallbackValue) {
+  if (!values.length) {
+    return fallbackValue;
+  }
+
+  const numericValue = Number(rawValue);
+  if (!Number.isFinite(numericValue)) {
+    return fallbackValue;
+  }
+
+  return values.reduce((closest, candidate) => (
+    Math.abs(candidate - numericValue) < Math.abs(closest - numericValue) ? candidate : closest
+  ), values[0]);
+}
+
+function findValueIndex(values, rawValue, fallbackIndex = 0) {
+  if (!values.length) {
+    return 0;
+  }
+
+  const numericValue = Number(rawValue);
+  if (!Number.isFinite(numericValue)) {
+    return fallbackIndex;
+  }
+
+  const exactIndex = values.findIndex((value) => value === numericValue);
+  if (exactIndex >= 0) {
+    return exactIndex;
+  }
+
+  const nearest = findClosestValue(values, numericValue, values[Math.max(0, Math.min(fallbackIndex, values.length - 1))]);
+  return values.indexOf(nearest);
+}
+
+function renderSummaryBands(summary) {
+  if (!summary.bands.length) {
+    return '<div class="summary-chart-empty empty-state">該当する曲がありません。</div>';
+  }
+
+  const rows = summary.bands.map((band) => {
+    let offset = 0;
+    const segmentOrder = [...LAMP_OPTIONS].reverse();
+    const segments = (band.total === 0 ? ["NO PLAY"] : segmentOrder).map((lamp) => {
+      const count = band.lampCounts[lamp] ?? 0;
+      const width = band.total === 0
+        ? 100
+        : (count / band.total) * 100;
+
+      if (width <= 0) {
+        return "";
+      }
+
+      const segment = `
+        <span
+          class="summary-band-segment"
+          style="left:${offset}%;width:${width}%;background:${LAMP_COLORS[lamp]}"
+          aria-hidden="true"
+        ></span>
+      `;
+      offset += width;
+      return segment;
+    }).join("");
+
+    return `
+      <div class="summary-band-row">
+        <div class="summary-band-label">${escapeHtml(band.label)}</div>
+        <div class="summary-band-track" role="img" aria-label="${escapeHtml(band.label)} のクリアランプ内訳">
+          ${segments}
+        </div>
+        <div class="summary-band-total">${band.total}</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <div class="summary-chart-wrap">
+      <div class="summary-chart-heading">
+        <span>総曲数</span>
+        <strong>${summary.bandTotalSongs ?? summary.totalSongs} 曲</strong>
+      </div>
+      <div class="summary-band-chart">
+        ${rows}
+      </div>
+    </div>
+  `;
+}
+
+function renderSummary(summaryContainer, summary, filters) {
+  const legend = LAMP_OPTIONS.map((lamp) => `
+    <button
+      class="summary-lamp-item ${filters.lamps.includes(lamp) ? "is-active" : "is-inactive"}"
+      type="button"
+      data-summary-lamp="${escapeHtml(lamp)}"
+      aria-pressed="${filters.lamps.includes(lamp) ? "true" : "false"}"
+    >
+      <div class="summary-lamp-main">
+        <span class="summary-lamp-dot" style="background:${LAMP_COLORS[lamp]}"></span>
+        <span class="summary-lamp-label">${escapeHtml(lamp)}</span>
+      </div>
+      <div class="summary-lamp-values">
+        <strong>${summary.lampCounts[lamp] ?? 0}</strong>
+        <span>${formatPercent(summary.lampCounts[lamp] ?? 0, summary.totalSongs)}</span>
+      </div>
+    </button>
+  `).join("");
+
+  summaryContainer.innerHTML = `
+    <div class="summary-panel">
+      ${renderSummaryBands(summary)}
+      <div class="summary-legend">
+        ${legend}
+      </div>
+    </div>
+  `;
+}
+
+function renderDifficultyFilters(container, filters) {
+  const recommendMarkup = RECOMMEND_OPTIONS.map((option) => {
+    const checked = filters.recommend.includes(option.value) ? "checked" : "";
+    return `
+      <label class="recommend-chip">
+        <input type="checkbox" data-filter="recommend" value="${escapeHtml(option.value)}" ${checked} />
+        <span>${escapeHtml(option.label)}</span>
+      </label>
+    `;
+  }).join("");
+
+  container.innerHTML = `
+    <div class="filters-grid">
+      <div class="field-stack">
+        <label class="field field-select">
+          <span>INFINITAS</span>
+          <select data-filter="inf">
+            <option value="all" ${filters.inf === "all" ? "selected" : ""}>すべて</option>
+            <option value="yes" ${filters.inf === "yes" ? "selected" : ""}>収録あり</option>
+            <option value="no" ${filters.inf === "no" ? "selected" : ""}>収録なし</option>
+          </select>
+        </label>
+        <label class="field field-select">
+          <span>AC収録</span>
+          <select data-filter="acdelete">
+            <option value="all" ${filters.acdelete === "all" ? "selected" : ""}>すべて</option>
+            <option value="no" ${filters.acdelete === "no" ? "selected" : ""}>収録あり</option>
+            <option value="yes" ${filters.acdelete === "yes" ? "selected" : ""}>収録なし</option>
+          </select>
+        </label>
+        <label class="field field-select">
+          <span>未査定曲</span>
+          <select data-filter="includeUnrated">
+            <option value="all" ${filters.includeUnrated === "all" ? "selected" : ""}>すべて</option>
+            <option value="rated" ${filters.includeUnrated === "rated" ? "selected" : ""}>査定済み</option>
+            <option value="unrated" ${filters.includeUnrated === "unrated" ? "selected" : ""}>未査定のみ</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="filters-footer">
+      <div class="recommend-group">
+        <span class="recommend-label">おすすめ</span>
+        <div class="recommend-options">
+          ${recommendMarkup}
+        </div>
+      </div>
+      <div class="filters-meta">
+        <button class="button button-tertiary" type="button" data-filter-action="reset">リセット</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewState = null) {
+  const axisValues = getAxisValues(bounds, filters.axisMode);
+  const sliderStops = ["", ...axisValues];
+  const previewValue = previewState?.mode === filters.axisMode ? previewState.value : null;
+  const effectiveAxisValue = previewValue !== null ? previewValue : filters.axisValue;
+  const sliderValueIndex = Math.max(0, sliderStops.findIndex((value) => String(value) === String(effectiveAxisValue)));
+  const currentAxisValue = filters.axisMode === "title"
+    ? filters.titleQuery
+    : formatAxisValue(filters.axisMode, effectiveAxisValue);
+
+  const controlMarkup = filters.axisMode === "title"
+    ? `
+      <label class="floating-filter-search">
+        <span>曲名検索</span>
+        <input type="search" data-axis-query value="${escapeHtml(filters.titleQuery)}" placeholder="曲名の一部を入力" />
+      </label>
+    `
+    : `
+      <div class="floating-filter-slider-block">
+        <div class="floating-filter-value">${escapeHtml(currentAxisValue)}</div>
+        <input
+          class="filter-slider floating-filter-slider"
+          type="range"
+          step="1"
+          min="0"
+          max="${Math.max(sliderStops.length - 1, 0)}"
+          value="${Math.max(sliderValueIndex, 0)}"
+          data-axis-slider
+          ${sliderStops.length ? "" : "disabled"}
+        />
+      </div>
+    `;
+
+  const clearButtonMarkup = filters.axisMode === "title"
+    ? '<button class="floating-filter-clear button button-tertiary" type="button" data-floating-clear>解除</button>'
+    : "";
+
+  container.innerHTML = `
+    <div class="floating-filter-actions">
+      <button class="floating-filter-toggle button button-primary" type="button" data-floating-toggle>
+        絞り込み: ${escapeHtml(summarizeAxisFilter(filters))}
+      </button>
+      ${clearButtonMarkup}
+    </div>
+    <section class="floating-filter-panel ${isOpen ? "is-open" : ""}" aria-hidden="${isOpen ? "false" : "true"}">
+      <div class="floating-filter-panel-header">
+        <div>
+          <p class="eyebrow">Quick Filter</p>
+          <h3>絞り込み軸</h3>
+        </div>
+      </div>
+      <label class="field field-select floating-filter-axis-select">
+        <span>絞り込み軸</span>
+        <select data-axis-mode>
+          ${AXIS_OPTIONS.map((option) => `<option value="${option.value}" ${option.value === filters.axisMode ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+        </select>
+      </label>
+      ${controlMarkup}
+    </section>
+  `;
+
+  container.querySelectorAll('input[type="range"]').forEach(updateSliderFill);
+}
+
+function renderSelectedSong(selectedSongContainer, selectedSong) {
+  if (!selectedSong) {
+    selectedSongContainer.innerHTML = '<div class="empty-state">表示できる曲がありません。</div>';
+    return;
+  }
+
+  const historyCountBadge = selectedSong.entryCount > 0
+    ? badge(`履歴 ${selectedSong.entryCount} 件`, "pill-neutral")
+    : "";
+
+  selectedSongContainer.innerHTML = `
+    <p class="eyebrow">Selected Song</p>
+    <h3>${escapeHtml(selectedSong.title)}</h3>
+    <div class="selected-song-meta">
+      ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
+      ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-neutral") : ""}
+      ${badge(selectedSong.bestLamp, "pill-lamp")}
+      ${badge(`Best ${formatBp(selectedSong.bestBp)}`, "pill-neutral")}
+      ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
+      ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}
+      ${historyCountBadge}
+    </div>
+  `;
+}
+
+function renderCatalog(catalogContainer, songs, selectedTitle) {
+  if (songs.length === 0) {
+    catalogContainer.innerHTML = '<div class="empty-state">このレベル帯には曲がありません。</div>';
+    return;
+  }
+
+  catalogContainer.innerHTML = songs.map((song) => {
+    const selectedClass = song.title === selectedTitle ? "is-selected" : "";
+    const encodedTitle = encodeURIComponent(song.title);
+    return `
+      <button class="song-card ${selectedClass}" type="button" data-title="${encodedTitle}">
+        <div class="song-card-meta">
+          ${badge(formatDifficultyLabel(song), "pill-level")}
+          ${formatSplvLabel(song) ? badge(formatSplvLabel(song), "pill-neutral") : ""}
+          ${badge(song.bestLamp, "pill-lamp")}
+        </div>
+        <p class="song-card-title">${escapeHtml(song.title)}</p>
+        <div class="song-card-meta">
+          ${badge(`Best ${formatBp(song.bestBp)}`, "pill-neutral")}
+          ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")}
+          ${badge(song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし", "pill-neutral")}
+        </div>
+      </button>
+    `;
+  }).join("");
+}
+
+function renderHistory(historyContainer, records) {
+  if (records.length === 0) {
+    historyContainer.innerHTML = '<tr><td colspan="4">履歴がありません。</td></tr>';
+    return;
+  }
+
+  historyContainer.innerHTML = records.map((record) => `
+    <tr>
+      <td>${formatIsoDate(record.date)}</td>
+      <td>${escapeHtml(record.lamp)}</td>
+      <td>${record.bp}</td>
+      <td>${formatScore(record.score)}</td>
+    </tr>
+  `).join("");
+}
+
+function renderPagination(container, pagination) {
+  if (pagination.totalItems === 0) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const prevDisabled = pagination.currentPage <= 1 ? "disabled" : "";
+  const nextDisabled = pagination.currentPage >= pagination.totalPages ? "disabled" : "";
+
+  container.innerHTML = `
+    <div class="pagination-controls">
+      <button class="button button-tertiary" type="button" data-page="prev" ${prevDisabled}>前へ</button>
+      <span class="pagination-label">${pagination.startIndex}-${pagination.endIndex} / ${pagination.totalItems}</span>
+      <button class="button button-tertiary" type="button" data-page="next" ${nextDisabled}>次へ</button>
+    </div>
+  `;
+}
+
+export function createRenderer(store) {
+  let activeScrollFrame = null;
+  let activeChartResizeFrame = null;
+  let latestChartHistory = [];
+  let latestScoreChartHistory = [];
+  let latestFilterBounds = {
+    level: { min: 0, max: 15, step: 0.01, values: [] },
+    splv: { min: 1, max: 12, step: 1, values: [] },
+    katate: { min: 11, max: 13, step: 0.1, values: [] },
+  };
+  let latestVisibleCount = 0;
+  let filterDraft = null;
+  let appliedFilterSignature = "";
+  let pendingCatalogBottomLock = null;
+  let summaryFiltersOpen = false;
+  let floatingFilterOpen = false;
+  let floatingAxisPreviewMode = null;
+  let floatingAxisPreviewValue = null;
+  let floatingQuerySelection = null;
+  let floatingQueryComposing = false;
+  let floatingQueryFocused = false;
+  let floatingQueryRestoreFocus = false;
+  let pendingQueryBlurIntent = null;
+  let lastSummaryLampClick = { lamp: "", timestamp: 0 };
+  let summaryLampPointerState = null;
+  let floatingOutsidePointerState = null;
+  let lastScrollY = window.scrollY;
+  let floatingDockSide = "bottom";
+  let scrollDirectionStreak = null;
+  let scrollDirectionDistance = 0;
+  let scrollDirectionTimestamp = 0;
+  let isProgrammaticScroll = false;
+
+  function easeInOutCubic(progress) {
+    return progress < 0.5
+      ? 4 * progress * progress * progress
+      : 1 - ((-2 * progress + 2) ** 3) / 2;
+  }
+
+  function getScrollOffset() {
+    return 78;
+  }
+
+  function scrollElementIntoView(element, offset = getScrollOffset()) {
+    if (!element) {
+      return;
+    }
+
+    cancelActiveScrollAnimation();
+
+    const startY = window.scrollY;
+    const targetY = Math.max(0, window.scrollY + element.getBoundingClientRect().top - offset);
+    const distance = targetY - startY;
+    const duration = 760;
+    const startTime = performance.now();
+    isProgrammaticScroll = true;
+
+    if (Math.abs(distance) < 1) {
+      window.scrollTo(0, targetY);
+      isProgrammaticScroll = false;
+      return;
+    }
+
+    function step(currentTime) {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = easeInOutCubic(progress);
+      window.scrollTo(0, startY + distance * eased);
+
+      if (progress < 1) {
+        activeScrollFrame = window.requestAnimationFrame(step);
+        return;
+      }
+
+      activeScrollFrame = null;
+      isProgrammaticScroll = false;
+    }
+
+    activeScrollFrame = window.requestAnimationFrame(step);
+  }
+
+  function cancelActiveScrollAnimation() {
+    if (activeScrollFrame === null) {
+      return;
+    }
+
+    window.cancelAnimationFrame(activeScrollFrame);
+    activeScrollFrame = null;
+    isProgrammaticScroll = false;
+  }
+
+  function scrollEntryPanelIntoView() {
+    scrollElementIntoView(document.querySelector("#entry-panel"));
+  }
+
+  function scrollSelectedCardIntoView() {
+    const encodedTitle = nodes.selectedSong?.dataset.title;
+    if (!encodedTitle) {
+      return;
+    }
+
+    const card = nodes.catalog?.querySelector(`[data-title="${encodedTitle}"]`);
+    if (!card) {
+      return;
+    }
+
+    scrollElementIntoView(card);
+  }
+
+  function scrollCatalogPanelIntoView() {
+    scrollElementIntoView(nodes.catalogPanel ?? nodes.catalog);
+  }
+
+  function canAutoScrollElementUpward(element, offset = getScrollOffset()) {
+    if (!element) {
+      return false;
+    }
+
+    const startY = window.scrollY;
+    const targetY = Math.max(0, window.scrollY + element.getBoundingClientRect().top - offset);
+    return targetY < startY - 1;
+  }
+
+  function canAutoScrollElement(element, offset = getScrollOffset()) {
+    if (!element) {
+      return false;
+    }
+
+    const startY = window.scrollY;
+    const targetY = Math.max(0, window.scrollY + element.getBoundingClientRect().top - offset);
+    return Math.abs(targetY - startY) >= 1;
+  }
+
+  function applyFiltersPreservingOverviewPosition(nextFilters) {
+    const overviewPanel = nodes.summaryPanel;
+    const catalogTarget = nodes.catalogPanel ?? nodes.catalog;
+    const shouldScroll = canAutoScrollElement(catalogTarget);
+
+    if (!overviewPanel) {
+      applyDifficultyFilters(nextFilters, { scrollToCatalog: shouldScroll });
+      return;
+    }
+
+    const beforeRect = overviewPanel.getBoundingClientRect();
+    const isOverviewAboveViewport = beforeRect.top < 0;
+    const shouldPreserve = beforeRect.top < 78;
+
+    store.setDifficultyFilters(nextFilters);
+
+    if (shouldPreserve) {
+      const afterRect = overviewPanel.getBoundingClientRect();
+      const delta = isOverviewAboveViewport
+        ? afterRect.bottom - beforeRect.bottom
+        : afterRect.top - beforeRect.top;
+
+      if (Math.abs(delta) >= 1) {
+        window.scrollBy(0, delta);
+      }
+
+      const clampedRect = overviewPanel.getBoundingClientRect();
+      if (clampedRect.top > 78 && Math.abs(clampedRect.top - 78) >= 1) {
+        window.scrollBy(0, clampedRect.top - 78);
+      }
+    }
+
+    if (shouldScroll) {
+      window.requestAnimationFrame(scrollCatalogPanelIntoView);
+    }
+  }
+
+  function renderFloatingFilterShell() {
+    renderFloatingAxisFilter(
+      nodes.floatingAxisFilter,
+      filterDraft ?? store.getSnapshot().filters,
+      latestFilterBounds,
+      floatingFilterOpen,
+      { mode: floatingAxisPreviewMode, value: floatingAxisPreviewValue },
+    );
+    syncFloatingDockClass();
+    if (floatingFilterOpen) {
+      if (floatingQueryFocused) {
+        pinFloatingFilterToDocument();
+        return;
+      }
+
+      releaseFloatingFilterPosition();
+      return;
+    }
+
+    releaseFloatingFilterPosition();
+  }
+
+  function isMobileViewport() {
+    return window.matchMedia("(max-width: 720px)").matches;
+  }
+
+  function isSmartphoneDevice() {
+    const userAgent = navigator.userAgent || "";
+    return /iPhone|iPod|Android.+Mobile/i.test(userAgent);
+  }
+
+  function setQueryScrollLock(locked) {
+    document.documentElement.classList.toggle("search-focus-scroll-lock", locked);
+    document.body.classList.toggle("search-focus-scroll-lock", locked);
+  }
+
+  function isTitleQueryElement(element) {
+    return element instanceof HTMLInputElement && element.hasAttribute("data-axis-query");
+  }
+
+  function syncQueryScrollLockState() {
+    setQueryScrollLock(floatingFilterOpen && isTitleQueryElement(document.activeElement));
+  }
+
+  function shouldCloseFloatingFilterAfterSliderCommit() {
+    if (isMobileViewport()) {
+      return true;
+    }
+
+    return canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog);
+  }
+
+  function syncFloatingDockClass() {
+    if (!nodes.floatingAxisFilter) {
+      return;
+    }
+
+    nodes.floatingAxisFilter.classList.toggle("is-docked-top", floatingDockSide === "top");
+    nodes.floatingAxisFilter.classList.toggle("is-docked-bottom", floatingDockSide === "bottom");
+  }
+
+  function isDifficultyImportButtonTopVisible() {
+    if (!nodes.csvImportButton) {
+      return false;
+    }
+
+    const rect = nodes.csvImportButton.getBoundingClientRect();
+    return rect.top >= 0 && rect.top <= window.innerHeight;
+  }
+
+  function freezeFloatingFilterPosition() {
+    if (!isMobileViewport() || !nodes.floatingAxisFilter) {
+      return;
+    }
+
+    const rect = nodes.floatingAxisFilter.getBoundingClientRect();
+    nodes.floatingAxisFilter.style.position = "";
+    nodes.floatingAxisFilter.style.top = `${Math.max(16, rect.top)}px`;
+    nodes.floatingAxisFilter.style.bottom = "auto";
+  }
+
+  function pinFloatingFilterToDocument() {
+    if (!isMobileViewport() || !nodes.floatingAxisFilter) {
+      return;
+    }
+
+    const rect = nodes.floatingAxisFilter.getBoundingClientRect();
+    nodes.floatingAxisFilter.style.position = "absolute";
+    nodes.floatingAxisFilter.style.top = `${window.scrollY + rect.top}px`;
+    nodes.floatingAxisFilter.style.bottom = "auto";
+    nodes.floatingAxisFilter.style.left = "16px";
+    nodes.floatingAxisFilter.style.right = "16px";
+    nodes.floatingAxisFilter.style.width = "auto";
+  }
+
+  function releaseFloatingFilterPosition() {
+    if (!nodes.floatingAxisFilter) {
+      return;
+    }
+
+    nodes.floatingAxisFilter.style.position = "";
+    nodes.floatingAxisFilter.style.top = "";
+    nodes.floatingAxisFilter.style.bottom = "";
+    nodes.floatingAxisFilter.style.left = "";
+    nodes.floatingAxisFilter.style.right = "";
+    nodes.floatingAxisFilter.style.width = "";
+  }
+
+  const nodes = {
+    summaryPanel: document.querySelector("#summary-cards")?.closest(".panel"),
+    summary: document.querySelector("#summary-cards"),
+    summaryFiltersToggle: document.querySelector("#summary-filters-toggle"),
+    summaryFiltersPanel: document.querySelector("#summary-filters-panel"),
+    floatingAxisFilter: document.querySelector("#floating-axis-filter"),
+    catalogPanel: document.querySelector("#song-catalog")?.closest(".panel"),
+    catalogSortSelect: document.querySelector("#catalog-sort-select"),
+    catalogMeta: document.querySelector("#catalog-meta"),
+    catalogPaginationTop: document.querySelector("#catalog-pagination-top"),
+    catalogPaginationBottom: document.querySelector("#catalog-pagination-bottom"),
+    catalog: document.querySelector("#song-catalog"),
+    selectedSong: document.querySelector("#selected-song"),
+    recordForm: document.querySelector("#record-form"),
+    recordDate: document.querySelector("#record-date"),
+    lampInput: document.querySelector("#lamp-input"),
+    bpInput: document.querySelector("#bp-input"),
+    scoreInput: document.querySelector("#score-input"),
+    memoInput: document.querySelector("#memo-input"),
+    deleteTodayButton: document.querySelector("#delete-today-button"),
+    backToCardButton: document.querySelector("#back-to-card-button"),
+    difficultyImportButton: document.querySelector("#difficulty-import-button"),
+    csvImportButton: document.querySelector("#csv-import-button"),
+    importButton: document.querySelector("#import-button"),
+    exportButton: document.querySelector("#export-button"),
+    csvExportButton: document.querySelector("#csv-export-button"),
+    clearAllButton: document.querySelector("#clear-all-button"),
+    csvImportFileInput: document.querySelector("#csv-import-file-input"),
+    importFileInput: document.querySelector("#import-file-input"),
+    chart: document.querySelector("#chart-container"),
+    scoreChart: document.querySelector("#score-chart-container"),
+    history: document.querySelector("#history-body"),
+  };
+
+  nodes.lampInput.innerHTML = LAMP_OPTIONS.map((lamp) => `<option value="${lamp}">${lamp}</option>`).join("");
+  nodes.recordDate.value = formatIsoDate(todayIso());
+  syncFloatingDockClass();
+
+  window.addEventListener("resize", () => {
+    if (activeChartResizeFrame !== null) {
+      window.cancelAnimationFrame(activeChartResizeFrame);
+    }
+
+    activeChartResizeFrame = window.requestAnimationFrame(() => {
+      renderBpChart(nodes.chart, latestChartHistory);
+      renderScoreChart(nodes.scoreChart, latestScoreChartHistory);
+      activeChartResizeFrame = null;
+    });
+  });
+
+  document.addEventListener("wheel", (event) => {
+    const input = event.target.closest('input[type="number"]');
+    if (!input || document.activeElement !== input) {
+      return;
+    }
+
+    event.preventDefault();
+  }, { passive: false });
+
+  window.addEventListener("scroll", () => {
+    if (isProgrammaticScroll) {
+      return;
+    }
+
+    if (window.scrollY <= 0) {
+      floatingDockSide = "bottom";
+      lastScrollY = window.scrollY;
+      syncFloatingDockClass();
+      return;
+    }
+
+    if (!isDifficultyImportButtonTopVisible()) {
+      floatingDockSide = "top";
+      lastScrollY = window.scrollY;
+      syncFloatingDockClass();
+      return;
+    }
+
+    const currentScrollY = window.scrollY;
+    const delta = currentScrollY - lastScrollY;
+    if (Math.abs(delta) < 4) {
+      return;
+    }
+
+    const direction = delta > 0 ? "down" : "up";
+    const now = performance.now();
+    if (scrollDirectionStreak !== direction || now - scrollDirectionTimestamp > 220) {
+      scrollDirectionStreak = direction;
+      scrollDirectionDistance = 0;
+    }
+
+    scrollDirectionDistance += Math.abs(delta);
+    scrollDirectionTimestamp = now;
+
+    if (scrollDirectionDistance >= 72) {
+      floatingDockSide = direction === "down" ? "top" : "bottom";
+      scrollDirectionDistance = 0;
+    }
+
+    lastScrollY = currentScrollY;
+    syncFloatingDockClass();
+  }, { passive: true });
+
+  function readFiltersFromPanel() {
+    const panel = nodes.summaryFiltersPanel;
+    const selectedRecommend = Array.from(panel.querySelectorAll('input[data-filter="recommend"]:checked')).map((input) => input.value);
+
+    return {
+      axisMode: filterDraft?.axisMode ?? "level",
+      axisValue: filterDraft?.axisValue ?? "",
+      titleQuery: filterDraft?.titleQuery ?? "",
+      inf: panel.querySelector('select[data-filter="inf"]')?.value ?? "all",
+      acdelete: panel.querySelector('select[data-filter="acdelete"]')?.value ?? "all",
+      recommend: selectedRecommend,
+      lamps: filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS],
+      includeUnrated: panel.querySelector('select[data-filter="includeUnrated"]')?.value ?? "all",
+    };
+  }
+
+  function applyDifficultyFilters(nextFilters, options = {}) {
+    store.setDifficultyFilters(nextFilters);
+    const shouldScroll = options.scrollToCatalog ?? canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog);
+    if (shouldScroll) {
+      window.requestAnimationFrame(scrollCatalogPanelIntoView);
+    }
+  }
+
+  function applyTitleQueryFilter(input, options = {}) {
+    floatingQuerySelection = {
+      start: input.selectionStart ?? input.value.length,
+      end: input.selectionEnd ?? input.value.length,
+    };
+    floatingQueryRestoreFocus = options.keepFocus ?? true;
+    applyDifficultyFilters(
+      { titleQuery: input.value, axisValue: "" },
+      { scrollToCatalog: options.scrollToCatalog ?? false },
+    );
+  }
+
+  function renderFilterDraftPanel() {
+    renderDifficultyFilters(nodes.summaryFiltersPanel, filterDraft);
+    nodes.summaryFiltersPanel.classList.toggle("is-collapsed", !summaryFiltersOpen);
+    if (nodes.summaryFiltersToggle) {
+      nodes.summaryFiltersToggle.setAttribute("aria-expanded", summaryFiltersOpen ? "true" : "false");
+      const label = nodes.summaryFiltersToggle.querySelector(".summary-filters-toggle-label");
+      if (label) {
+        label.textContent = summaryFiltersOpen ? "フィルタを閉じる" : "フィルタを表示";
+      }
+    }
+  }
+
+  nodes.summaryFiltersToggle?.addEventListener("click", () => {
+    summaryFiltersOpen = !summaryFiltersOpen;
+    renderFilterDraftPanel();
+  });
+
+  nodes.summaryFiltersPanel.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (!target.closest("[data-filter]")) {
+      return;
+    }
+
+    filterDraft = readFiltersFromPanel();
+    applyDifficultyFilters(filterDraft, { scrollToCatalog: false });
+  });
+
+  nodes.summaryFiltersPanel.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target.closest("[data-filter]")) {
+      filterDraft = readFiltersFromPanel();
+      applyDifficultyFilters(filterDraft, { scrollToCatalog: false });
+    }
+  });
+
+  nodes.summaryFiltersPanel.addEventListener("click", (event) => {
+    const resetButton = event.target.closest('[data-filter-action="reset"]');
+
+    if (!resetButton) {
+      return;
+    }
+
+    filterDraft = {
+      axisMode: filterDraft?.axisMode ?? "level",
+      axisValue: filterDraft?.axisValue ?? "",
+      titleQuery: filterDraft?.titleQuery ?? "",
+      inf: "all",
+      acdelete: "all",
+      recommend: ["", "△", "○", "◎", "☆"],
+      lamps: filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS],
+      includeUnrated: "all",
+    };
+    floatingAxisPreviewMode = null;
+    floatingAxisPreviewValue = null;
+    applyDifficultyFilters(filterDraft, { scrollToCatalog: false });
+  });
+
+  nodes.floatingAxisFilter.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target.closest("[data-floating-toggle]")) {
+      const willOpen = !floatingFilterOpen;
+      floatingFilterOpen = !floatingFilterOpen;
+      renderFloatingFilterShell();
+      syncQueryScrollLockState();
+      return;
+    }
+
+    if (target.closest("[data-floating-clear]")) {
+      pendingQueryBlurIntent = null;
+      floatingQueryFocused = false;
+      floatingQueryRestoreFocus = false;
+      floatingFilterOpen = false;
+      syncQueryScrollLockState();
+      store.clearTitleFilter();
+      if (canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)) {
+        scrollCatalogPanelIntoView();
+      }
+      return;
+    }
+  });
+
+  nodes.floatingAxisFilter.addEventListener("pointerdown", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target.closest("[data-axis-mode]")) {
+      pendingQueryBlurIntent = "axis-mode";
+      return;
+    }
+
+    if (target.closest("[data-floating-clear]")) {
+      pendingQueryBlurIntent = "clear";
+      return;
+    }
+
+    if (target.closest("[data-floating-toggle]")) {
+      pendingQueryBlurIntent = "toggle";
+      return;
+    }
+
+    pendingQueryBlurIntent = null;
+  });
+
+  nodes.floatingAxisFilter.addEventListener("input", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target instanceof HTMLInputElement && target.hasAttribute("data-axis-slider")) {
+      const activeFilters = filterDraft ?? store.getSnapshot().filters;
+      const axisValues = getAxisValues(latestFilterBounds, activeFilters.axisMode);
+      const nextValue = ["", ...axisValues][Number(target.value)] ?? "";
+      floatingAxisPreviewMode = activeFilters.axisMode;
+      floatingAxisPreviewValue = nextValue === "" ? "" : String(nextValue);
+      const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value");
+      if (valueNode) {
+        valueNode.textContent = formatAxisValue(activeFilters.axisMode, floatingAxisPreviewValue);
+      }
+      updateSliderFill(target);
+      return;
+    }
+
+    if (target instanceof HTMLInputElement && target.hasAttribute("data-axis-query")) {
+      floatingQuerySelection = {
+        start: target.selectionStart ?? target.value.length,
+        end: target.selectionEnd ?? target.value.length,
+      };
+      return;
+    }
+
+    if (target instanceof HTMLSelectElement && target.hasAttribute("data-axis-mode")) {
+      pendingQueryBlurIntent = null;
+      floatingAxisPreviewMode = null;
+      floatingAxisPreviewValue = null;
+      floatingQueryFocused = false;
+      syncQueryScrollLockState();
+      applyFiltersPreservingOverviewPosition({ axisMode: target.value });
+    }
+  });
+
+  nodes.floatingAxisFilter.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target instanceof HTMLInputElement && target.hasAttribute("data-axis-slider")) {
+      const activeFilters = filterDraft ?? store.getSnapshot().filters;
+      const committedValue = floatingAxisPreviewMode === activeFilters.axisMode
+        ? floatingAxisPreviewValue
+        : ["", ...getAxisValues(latestFilterBounds, activeFilters.axisMode)][Number(target.value)] ?? "";
+      floatingAxisPreviewMode = null;
+      floatingAxisPreviewValue = null;
+      if (shouldCloseFloatingFilterAfterSliderCommit()) {
+        floatingQueryFocused = false;
+        floatingFilterOpen = false;
+        syncQueryScrollLockState();
+      }
+      applyDifficultyFilters({ axisValue: committedValue === "" ? "" : String(committedValue) });
+      return;
+    }
+
+    if (target instanceof HTMLInputElement && target.hasAttribute("data-axis-query")) {
+      floatingQuerySelection = {
+        start: target.selectionStart ?? target.value.length,
+        end: target.selectionEnd ?? target.value.length,
+      };
+    }
+  });
+
+  nodes.floatingAxisFilter.addEventListener("pointerup", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.hasAttribute("data-axis-slider")) {
+      return;
+    }
+
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+    if (floatingAxisPreviewMode !== activeFilters.axisMode) {
+      return;
+    }
+
+    const committedValue = floatingAxisPreviewMode === activeFilters.axisMode
+      ? floatingAxisPreviewValue
+      : ["", ...getAxisValues(latestFilterBounds, activeFilters.axisMode)][Number(target.value)] ?? "";
+
+    if (String(committedValue ?? "") !== String(activeFilters.axisValue ?? "")) {
+      return;
+    }
+
+    floatingAxisPreviewMode = null;
+    floatingAxisPreviewValue = null;
+
+    if (shouldCloseFloatingFilterAfterSliderCommit()) {
+      floatingQueryFocused = false;
+      floatingFilterOpen = false;
+      syncQueryScrollLockState();
+    }
+
+    applyDifficultyFilters({ axisValue: committedValue === "" ? "" : String(committedValue) });
+  });
+
+  nodes.floatingAxisFilter.addEventListener("search", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.hasAttribute("data-axis-query")) {
+      return;
+    }
+
+    if (floatingQueryComposing) {
+      return;
+    }
+
+    target.blur();
+  });
+
+  nodes.floatingAxisFilter.addEventListener("keydown", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.hasAttribute("data-axis-query")) {
+      return;
+    }
+
+    if (event.key !== "Enter" || event.isComposing || floatingQueryComposing) {
+      return;
+    }
+
+    target.blur();
+  });
+
+  nodes.floatingAxisFilter.addEventListener("compositionstart", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.hasAttribute("data-axis-query")) {
+      return;
+    }
+
+    floatingQueryComposing = true;
+  });
+
+  nodes.floatingAxisFilter.addEventListener("focusin", (event) => {
+    const target = event.target;
+    if (!isTitleQueryElement(target)) {
+      return;
+    }
+
+    floatingQueryFocused = true;
+    floatingQueryRestoreFocus = false;
+    syncQueryScrollLockState();
+    pinFloatingFilterToDocument();
+  });
+
+  nodes.floatingAxisFilter.addEventListener("focusout", (event) => {
+    const target = event.target;
+    if (!isTitleQueryElement(target)) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      syncQueryScrollLockState();
+      if (isTitleQueryElement(activeElement)) {
+        return;
+      }
+
+      if (floatingQueryRestoreFocus) {
+        return;
+      }
+
+      if (pendingQueryBlurIntent === "axis-mode" || pendingQueryBlurIntent === "clear" || pendingQueryBlurIntent === "toggle") {
+        pendingQueryBlurIntent = null;
+        floatingQueryFocused = false;
+        floatingQueryRestoreFocus = false;
+        syncQueryScrollLockState();
+        return;
+      }
+
+      if (activeElement instanceof HTMLSelectElement && activeElement.hasAttribute("data-axis-mode")) {
+        floatingQueryFocused = false;
+        floatingQueryRestoreFocus = false;
+        syncQueryScrollLockState();
+        return;
+      }
+
+      floatingQueryFocused = false;
+      floatingQueryRestoreFocus = false;
+      syncQueryScrollLockState();
+      applyTitleQueryFilter(target, { keepFocus: false, scrollToCatalog: false });
+      floatingFilterOpen = false;
+      renderFloatingFilterShell();
+      syncQueryScrollLockState();
+      scrollCatalogPanelIntoView();
+    });
+  });
+
+  nodes.floatingAxisFilter.addEventListener("compositionend", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.hasAttribute("data-axis-query")) {
+      return;
+    }
+
+    floatingQueryComposing = false;
+  });
+
+  function toggleSummaryLampFilter(lamp) {
+    const currentLamps = filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS];
+    let nextLamps = currentLamps.includes(lamp)
+      ? currentLamps.filter((value) => value !== lamp)
+      : [...currentLamps, lamp];
+
+    if (nextLamps.length === 0) {
+      nextLamps = [...LAMP_OPTIONS];
+    }
+
+    filterDraft = {
+      ...(filterDraft ?? store.getSnapshot().filters),
+      lamps: nextLamps,
+    };
+    applyDifficultyFilters({ lamps: nextLamps }, { scrollToCatalog: false });
+  }
+
+  function soloSummaryLampFilter(lamp) {
+    filterDraft = {
+      ...(filterDraft ?? store.getSnapshot().filters),
+      lamps: [lamp],
+    };
+    applyDifficultyFilters({ lamps: [lamp] }, { scrollToCatalog: false });
+  }
+
+  function handleSummaryLampActivation(lamp, timestamp = performance.now()) {
+    if (lastSummaryLampClick.lamp === lamp && timestamp - lastSummaryLampClick.timestamp <= SUMMARY_LAMP_DOUBLE_CLICK_MS) {
+      filterDraft = {
+        ...(filterDraft ?? store.getSnapshot().filters),
+        lamps: [lamp],
+      };
+      applyDifficultyFilters({ lamps: [lamp] }, { scrollToCatalog: false });
+      lastSummaryLampClick = { lamp: "", timestamp: 0 };
+      return;
+    }
+
+    lastSummaryLampClick = { lamp, timestamp };
+    toggleSummaryLampFilter(lamp);
+  }
+
+  function getSummaryLampButton(target) {
+    if (!(target instanceof HTMLElement)) {
+      return null;
+    }
+
+    const button = target.closest("[data-summary-lamp]");
+    return button instanceof HTMLElement ? button : null;
+  }
+
+  function clearSummaryLampSwipeStyle(button) {
+    if (!(button instanceof HTMLElement)) {
+      return;
+    }
+
+    button.style.transition = "";
+    button.style.transform = "";
+  }
+
+  function animateSummaryLampSwipeReturn(button) {
+    if (!(button instanceof HTMLElement)) {
+      return;
+    }
+
+    const currentTransform = button.style.transform || "translateX(0)";
+    button.style.transition = "none";
+    button.style.transform = currentTransform;
+    button.getBoundingClientRect();
+    button.style.transition = "transform 180ms ease";
+    button.style.transform = "translateX(0)";
+    window.setTimeout(() => {
+      clearSummaryLampSwipeStyle(button);
+    }, 190);
+  }
+
+  function animateSummaryLampSwipeSolo(button, onComplete) {
+    clearSummaryLampSwipeStyle(button);
+    onComplete();
+  }
+
+  nodes.summary.addEventListener("pointerdown", (event) => {
+    if (event.button !== undefined && event.button !== 0) {
+      return;
+    }
+
+    const button = getSummaryLampButton(event.target);
+    if (!button) {
+      summaryLampPointerState = null;
+      return;
+    }
+
+    const lamp = button.dataset.summaryLamp;
+    if (!lamp || !LAMP_OPTIONS.includes(lamp)) {
+      summaryLampPointerState = null;
+      return;
+    }
+
+    summaryLampPointerState = {
+      lamp,
+      button,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastDeltaX: 0,
+      lastDeltaY: 0,
+      moved: false,
+    };
+  });
+
+  nodes.summary.addEventListener("pointermove", (event) => {
+    if (!summaryLampPointerState || event.pointerId !== summaryLampPointerState.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - summaryLampPointerState.startX;
+    const deltaY = event.clientY - summaryLampPointerState.startY;
+    summaryLampPointerState.lastDeltaX = deltaX;
+    summaryLampPointerState.lastDeltaY = deltaY;
+    if (Math.abs(deltaX) > 12 || Math.abs(deltaY) > 12) {
+      summaryLampPointerState.moved = true;
+    }
+
+    if (!isSmartphoneDevice() || !(summaryLampPointerState.button instanceof HTMLElement)) {
+      return;
+    }
+
+    if (deltaX >= 0) {
+      summaryLampPointerState.button.style.transition = "none";
+      summaryLampPointerState.button.style.transform = "translateX(0)";
+      return;
+    }
+
+    const clampedOffset = Math.max(-SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD, deltaX);
+    summaryLampPointerState.button.style.transition = "none";
+    summaryLampPointerState.button.style.transform = `translateX(${clampedOffset}px)`;
+  });
+
+  nodes.summary.addEventListener("pointerup", (event) => {
+    if (!summaryLampPointerState || event.pointerId !== summaryLampPointerState.pointerId) {
+      return;
+    }
+
+    const lamp = summaryLampPointerState.lamp;
+    const moved = summaryLampPointerState.moved;
+    const activeButton = summaryLampPointerState.button;
+    const deltaX = event.clientX - summaryLampPointerState.startX;
+    const deltaY = event.clientY - summaryLampPointerState.startY;
+    summaryLampPointerState = null;
+
+    const button = getSummaryLampButton(event.target);
+    if (!lamp || !LAMP_OPTIONS.includes(lamp)) {
+      return;
+    }
+
+    if (isSmartphoneDevice()) {
+      const absDeltaX = Math.abs(deltaX);
+      const isLeftSwipe = deltaX <= -SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD;
+      if (isLeftSwipe) {
+        lastSummaryLampClick = { lamp: "", timestamp: 0 };
+        animateSummaryLampSwipeSolo(activeButton, () => {
+          soloSummaryLampFilter(lamp);
+        });
+        return;
+      }
+
+      const targetLamp = button?.dataset.summaryLamp;
+      const isTap = absDeltaX <= 12 && Math.abs(deltaY) <= 12 && button && lamp === targetLamp;
+      if (isTap) {
+        clearSummaryLampSwipeStyle(activeButton);
+        toggleSummaryLampFilter(lamp);
+        return;
+      }
+
+      animateSummaryLampSwipeReturn(activeButton);
+      return;
+    }
+
+    if (!button || moved) {
+      return;
+    }
+
+    const targetLamp = button.dataset.summaryLamp;
+    if (lamp !== targetLamp) {
+      return;
+    }
+
+    handleSummaryLampActivation(lamp, Number.isFinite(event.timeStamp) ? event.timeStamp : performance.now());
+  });
+
+  nodes.summary.addEventListener("pointercancel", () => {
+    const pointerState = summaryLampPointerState;
+    if (!pointerState) {
+      return;
+    }
+
+    if (isSmartphoneDevice() && pointerState.lastDeltaX <= -SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD) {
+      lastSummaryLampClick = { lamp: "", timestamp: 0 };
+      animateSummaryLampSwipeSolo(pointerState.button, () => {
+        soloSummaryLampFilter(pointerState.lamp);
+      });
+      summaryLampPointerState = null;
+      return;
+    }
+
+    animateSummaryLampSwipeReturn(pointerState.button);
+    summaryLampPointerState = null;
+  });
+
+  nodes.summary.addEventListener("click", (event) => {
+    if (event.detail !== 0) {
+      return;
+    }
+
+    const button = getSummaryLampButton(event.target);
+    if (!button) {
+      return;
+    }
+
+    const lamp = button.dataset.summaryLamp;
+    if (!lamp || !LAMP_OPTIONS.includes(lamp)) {
+      return;
+    }
+
+    if (isSmartphoneDevice()) {
+      toggleSummaryLampFilter(lamp);
+      return;
+    }
+
+    handleSummaryLampActivation(lamp, performance.now());
+  });
+
+  nodes.catalog.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-title]");
+    if (!button) {
+      return;
+    }
+    store.selectSong(decodeURIComponent(button.dataset.title));
+    window.requestAnimationFrame(scrollEntryPanelIntoView);
+  });
+
+  function handlePaginationClick(event, anchorToBottom = false) {
+    const button = event.target.closest("[data-page]");
+    if (!button) {
+      return;
+    }
+
+    if (anchorToBottom && nodes.catalogPanel) {
+      pendingCatalogBottomLock = nodes.catalogPanel.getBoundingClientRect().bottom;
+    }
+
+    const snapshot = store.getSnapshot();
+    if (button.dataset.page === "prev") {
+      store.setPage(snapshot.pagination.currentPage - 1);
+      return;
+    }
+
+    if (button.dataset.page === "next") {
+      store.setPage(snapshot.pagination.currentPage + 1);
+    }
+  }
+
+  nodes.catalogPaginationTop.addEventListener("click", (event) => handlePaginationClick(event, false));
+  nodes.catalogPaginationBottom.addEventListener("click", (event) => handlePaginationClick(event, true));
+  nodes.catalogSortSelect?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+
+    store.setSortMode(target.value);
+  });
+
+  [nodes.bpInput, nodes.scoreInput].forEach((input) => input?.addEventListener("wheel", (event) => {
+    if (document.activeElement === input) {
+      event.preventDefault();
+      input.blur();
+    }
+  }, { passive: false }));
+
+  nodes.recordForm.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement || target instanceof HTMLSelectElement)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (target === nodes.memoInput) {
+      target.blur();
+      return;
+    }
+
+    const fields = [
+      nodes.lampInput,
+      nodes.bpInput,
+      nodes.scoreInput,
+      nodes.memoInput,
+    ].filter((field) => field && !field.disabled);
+
+    const currentIndex = fields.indexOf(target);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const nextField = fields[currentIndex + 1];
+    if (nextField instanceof HTMLElement) {
+      nextField.focus();
+      if (nextField instanceof HTMLInputElement) {
+        nextField.select?.();
+      }
+    }
+  });
+
+  nodes.recordForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const result = store.saveRecord({
+      lamp: nodes.lampInput.value,
+      bp: nodes.bpInput.value,
+      score: nodes.scoreInput.value,
+      memo: nodes.memoInput.value,
+    });
+
+    if (result.ok) {
+      nodes.bpInput.value = "";
+      nodes.scoreInput.value = "";
+    } else {
+      window.alert(result.message);
+    }
+  });
+
+  nodes.deleteTodayButton.addEventListener("click", () => {
+    const result = store.deleteTodayRecord();
+    if (!result.ok) {
+      window.alert(result.message);
+      return;
+    }
+
+    nodes.bpInput.value = "";
+    nodes.scoreInput.value = "";
+  });
+
+  nodes.memoInput?.addEventListener("blur", () => {
+    store.saveSongNote(nodes.memoInput.value);
+  });
+
+  nodes.backToCardButton?.addEventListener("click", () => {
+    scrollSelectedCardIntoView();
+  });
+
+  nodes.difficultyImportButton.addEventListener("click", async () => {
+    const originalLabel = nodes.difficultyImportButton.textContent;
+    nodes.difficultyImportButton.disabled = true;
+    nodes.difficultyImportButton.textContent = "読込中...";
+
+    try {
+      const result = await store.importDifficultyTable();
+      window.alert(`難易度表を読み込みました。\n曲数: ${result.titleCount}\n譜面数: ${result.entries.length}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "難易度表の読み込みに失敗しました。";
+      window.alert(message);
+    } finally {
+      nodes.difficultyImportButton.disabled = false;
+      nodes.difficultyImportButton.textContent = originalLabel;
+    }
+  });
+
+  nodes.importButton.addEventListener("click", () => {
+    nodes.importFileInput.click();
+  });
+
+  nodes.csvImportButton.addEventListener("click", () => {
+    nodes.csvImportFileInput.click();
+  });
+
+  nodes.csvImportFileInput.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const result = store.importCsvData(text);
+      window.alert(`CSVを読み込みました。\n取込件数: ${result.count}\n合計件数: ${result.totalCount}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "CSVの読み込みに失敗しました。";
+      window.alert(message);
+    } finally {
+      nodes.csvImportFileInput.value = "";
+    }
+  });
+
+  nodes.importFileInput.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const referenceDate = askJsonImportDate();
+      if (referenceDate === null) {
+        return;
+      }
+
+      const text = await file.text();
+      const payload = parseImportedJsonText(text);
+      const result = store.importJsonData(payload, referenceDate);
+      window.alert(`JSONを読み込みました。\n取込件数: ${result.count}\n合計件数: ${result.totalCount}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "JSONの読み込みに失敗しました。";
+      window.alert(message);
+    } finally {
+      nodes.importFileInput.value = "";
+    }
+  });
+
+  nodes.exportButton.addEventListener("click", () => {
+    const payload = store.getExportJson();
+    const json = JSON.stringify(payload, null, 2);
+    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "dbr_data.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  });
+
+  nodes.csvExportButton.addEventListener("click", () => {
+    const csv = store.getExportCsv();
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "dbr_records.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  });
+
+  nodes.clearAllButton.addEventListener("click", () => {
+    const confirmed = window.confirm("保存済みのプレー記録をすべて削除します。よろしいですか？");
+    if (!confirmed) {
+      return;
+    }
+
+    store.clearAllRecords();
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!floatingFilterOpen || !isMobileViewport()) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Node)) {
+      return;
+    }
+
+    if (nodes.floatingAxisFilter.contains(target)) {
+      floatingOutsidePointerState = null;
+      return;
+    }
+
+    floatingOutsidePointerState = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+  });
+
+  document.addEventListener("pointermove", (event) => {
+    if (!floatingOutsidePointerState || event.pointerId !== floatingOutsidePointerState.pointerId) {
+      return;
+    }
+
+    const deltaX = Math.abs(event.clientX - floatingOutsidePointerState.startX);
+    const deltaY = Math.abs(event.clientY - floatingOutsidePointerState.startY);
+    if (deltaX > 8 || deltaY > 8) {
+      floatingOutsidePointerState.moved = true;
+    }
+  });
+
+  document.addEventListener("pointerup", (event) => {
+    if (!floatingOutsidePointerState || event.pointerId !== floatingOutsidePointerState.pointerId) {
+      return;
+    }
+
+    const moved = floatingOutsidePointerState.moved;
+    floatingOutsidePointerState = null;
+    if (moved) {
+      return;
+    }
+
+    floatingFilterOpen = false;
+    floatingQueryFocused = false;
+    floatingQueryRestoreFocus = false;
+    renderFloatingFilterShell();
+  });
+
+  document.addEventListener("pointercancel", (event) => {
+    if (!floatingOutsidePointerState || event.pointerId !== floatingOutsidePointerState.pointerId) {
+      return;
+    }
+
+    floatingOutsidePointerState = null;
+  });
+
+  return {
+    render(snapshot) {
+      const snapshotFilterSignature = JSON.stringify(snapshot.filters);
+      if (filterDraft === null || snapshotFilterSignature !== appliedFilterSignature) {
+        filterDraft = structuredClone(snapshot.filters);
+        appliedFilterSignature = snapshotFilterSignature;
+      }
+
+      renderSummary(nodes.summary, snapshot.summary, snapshot.summaryFilters ?? snapshot.filters);
+      latestFilterBounds = deriveFilterBounds(snapshot.songStates);
+      latestVisibleCount = snapshot.visibleSongs.length;
+      renderFilterDraftPanel();
+      renderFloatingFilterShell();
+      if (floatingQueryRestoreFocus && snapshot.filters.axisMode === "title" && floatingFilterOpen) {
+        const queryInput = nodes.floatingAxisFilter.querySelector('input[data-axis-query]');
+        if (queryInput instanceof HTMLInputElement) {
+          queryInput.focus();
+          const start = floatingQuerySelection?.start ?? queryInput.value.length;
+          const end = floatingQuerySelection?.end ?? queryInput.value.length;
+          queryInput.setSelectionRange(start, end);
+        }
+        floatingQueryRestoreFocus = false;
+      }
+      floatingQuerySelection = null;
+      renderCatalog(nodes.catalog, snapshot.pagedSongs, snapshot.selectedSong?.title ?? null);
+      renderPagination(nodes.catalogPaginationTop, snapshot.pagination);
+      renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
+      renderSelectedSong(nodes.selectedSong, snapshot.selectedSong);
+      renderHistory(nodes.history, snapshot.selectedHistory);
+      latestChartHistory = snapshot.selectedHistory.slice().reverse();
+      latestScoreChartHistory = snapshot.selectedHistory
+        .filter((record) => record.score !== null && record.score !== undefined)
+        .slice()
+        .reverse();
+      nodes.scoreChart.dataset.maxScore = snapshot.selectedSong?.notes ? String(snapshot.selectedSong.notes * 4) : "";
+      renderBpChart(nodes.chart, latestChartHistory);
+      renderScoreChart(nodes.scoreChart, latestScoreChartHistory);
+
+      if (pendingCatalogBottomLock !== null && nodes.catalogPanel) {
+        const newBottom = nodes.catalogPanel.getBoundingClientRect().bottom;
+        window.scrollBy(0, newBottom - pendingCatalogBottomLock);
+        pendingCatalogBottomLock = null;
+      }
+
+      nodes.recordDate.value = formatIsoDate(todayIso());
+      nodes.catalogMeta.textContent = "";
+      const selectedCardExists = snapshot.selectedSong
+        ? Boolean(nodes.catalog?.querySelector(`[data-title="${encodeURIComponent(snapshot.selectedSong.title)}"]`))
+        : false;
+
+      if (snapshot.selectedSong) {
+        nodes.selectedSong.dataset.title = encodeURIComponent(snapshot.selectedSong.title);
+        nodes.lampInput.value = snapshot.selectedSong.bestLamp;
+        nodes.bpInput.placeholder = formatBpPlaceholder(snapshot.selectedSong);
+        nodes.scoreInput.placeholder = formatScorePlaceholder(snapshot.selectedSong);
+        nodes.memoInput.value = snapshot.selectedSong.note ?? "";
+      } else {
+        delete nodes.selectedSong.dataset.title;
+        nodes.lampInput.value = LAMP_OPTIONS[0];
+        nodes.bpInput.placeholder = "BPを入力";
+        nodes.scoreInput.placeholder = "スコアを入力";
+        nodes.memoInput.value = "";
+      }
+
+      nodes.deleteTodayButton.disabled = !snapshot.hasTodayRecord;
+      if (nodes.backToCardButton) {
+        nodes.backToCardButton.disabled = !selectedCardExists;
+      }
+      if (nodes.catalogSortSelect) {
+        nodes.catalogSortSelect.value = snapshot.sortMode;
+      }
+    },
+  };
+}

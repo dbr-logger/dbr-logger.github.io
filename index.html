@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DBR Progress Manager</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <meta name="app-build" content="20260430-4" />
+    <script>
+      (function () {
+        const CURRENT_BUILD = "20260430-4";
+        const KEY = "dbr-index-refresh-build";
+
+        function checkBuildVersion() {
+          fetch("./version.json?ts=" + Date.now(), { cache: "no-store" })
+            .then((response) => response.ok ? response.json() : null)
+            .then((payload) => {
+              const latestBuild = typeof payload?.build === "string" ? payload.build.trim() : "";
+              if (!latestBuild || latestBuild === CURRENT_BUILD) {
+                sessionStorage.removeItem(KEY);
+                return;
+              }
+
+              if (sessionStorage.getItem(KEY) === latestBuild) {
+                return;
+              }
+
+              sessionStorage.setItem(KEY, latestBuild);
+              const url = new URL(window.location.href);
+              url.searchParams.set("v", latestBuild);
+              window.location.replace(url.toString());
+            })
+            .catch(() => {});
+        }
+
+        checkBuildVersion();
+        window.addEventListener("pageshow", checkBuildVersion);
+        window.addEventListener("focus", checkBuildVersion);
+        document.addEventListener("visibilitychange", function () {
+          if (document.visibilityState === "visible") {
+            checkBuildVersion();
+          }
+        });
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700;800&family=Noto+Sans+JP:wght@400;700;800&display=swap" rel="stylesheet" />
+    <link id="app-stylesheet" rel="stylesheet" href="./styles.css?v=20260430-4" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="hero panel">
+        <div>
+          <p class="eyebrow">DBR Progress Manager</p>
+          <h1>DBR進捗管理</h1>
+        </div>
+        <div class="hero-actions">
+          <button id="csv-import-button" class="button button-secondary" type="button">CSV読み込み</button>
+          <button id="csv-export-button" class="button button-secondary" type="button">CSVを書き出す</button>
+          <button id="import-button" class="button button-secondary" type="button">JSON読み込み</button>
+          <button id="export-button" class="button button-secondary" type="button">JSONを書き出す</button>
+          <button id="difficulty-import-button" class="button button-secondary" type="button">難易度表読み込み</button>
+          <button id="clear-all-button" class="button button-danger" type="button">データ全削除</button>
+          <input id="csv-import-file-input" type="file" accept="text/csv,.csv" hidden />
+          <input id="import-file-input" type="file" accept="application/json,.json" hidden />
+        </div>
+      </header>
+      <main class="layout">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Overview</p>
+              <h2>全体サマリー</h2>
+            </div>
+          </div>
+          <div id="summary-cards" class="summary-grid"></div>
+          <button id="summary-filters-toggle" class="summary-filters-toggle" type="button" aria-expanded="false">
+            <span class="summary-filters-toggle-icon" aria-hidden="true">▸</span>
+            <span class="summary-filters-toggle-label">フィルタを表示</span>
+          </button>
+          <div id="summary-filters-panel" class="filters-panel"></div>
+        </section>
+
+        <section class="layout-two-column">
+          <section class="panel">
+            <div class="panel-header catalog-header">
+              <div>
+                <p class="eyebrow">Catalog</p>
+                <h2>曲一覧</h2>
+              </div>
+              <label class="header-select">
+                <span>並び順</span>
+                <select id="catalog-sort-select">
+                  <option value="title">曲名</option>
+                  <option value="level">Lv.</option>
+                  <option value="splv">SPLv.</option>
+                  <option value="katate">片手Lv.</option>
+                  <option value="clear">クリア</option>
+                </select>
+              </label>
+            </div>
+            <div id="catalog-meta" class="catalog-meta"></div>
+            <div id="catalog-pagination-top" class="pagination-bar"></div>
+            <div id="song-catalog" class="song-grid" aria-live="polite"></div>
+            <div id="catalog-pagination-bottom" class="pagination-bar"></div>
+          </section>
+
+          <section class="stack">
+            <section id="entry-panel" class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Entry</p>
+                  <h2>プレー記録</h2>
+                </div>
+              </div>
+              <div id="selected-song" class="selected-song-card"></div>
+
+              <form id="record-form" class="record-form">
+                <div class="form-row">
+                  <label class="field">
+                    <span>保存日</span>
+                    <input id="record-date" type="text" readonly />
+                  </label>
+                  <label class="field field-select">
+                    <span>クリア</span>
+                    <select id="lamp-input" required></select>
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label class="field">
+                    <span>BP</span>
+                    <input id="bp-input" type="number" min="0" inputmode="numeric" required />
+                  </label>
+                  <label class="field">
+                    <span>スコア</span>
+                    <input id="score-input" type="number" min="0" inputmode="numeric" required />
+                  </label>
+                </div>
+                <label class="field field-grow">
+                  <span>メモ</span>
+                  <input id="memo-input" type="text" maxlength="200" placeholder="メモを入力" />
+                </label>
+                <div class="form-actions">
+                  <div class="action-group">
+                    <button class="button button-primary" type="submit">保存する</button>
+                    <button id="delete-today-button" class="button button-secondary" type="button">当日の記録を削除</button>
+                    <button id="back-to-card-button" class="button button-tertiary" type="button">戻る</button>
+                  </div>
+                </div>
+              </form>
+            </section>
+
+            <section class="panel analytics-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Analytics</p>
+                  <h2>推移グラフ</h2>
+                </div>
+              </div>
+              <section class="analytics-block">
+                <div>
+                  <h3>BP推移</h3>
+                </div>
+                <div id="chart-container" class="chart-container"></div>
+              </section>
+              <section class="analytics-block">
+                <div>
+                  <h3>スコア推移</h3>
+                </div>
+                <div id="score-chart-container" class="chart-container"></div>
+              </section>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">History</p>
+                  <h2>選択曲の履歴</h2>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="history-table">
+                  <thead>
+                    <tr>
+                      <th>日付</th>
+                      <th>クリア</th>
+                      <th>BP</th>
+                      <th>スコア</th>
+                    </tr>
+                  </thead>
+                  <tbody id="history-body"></tbody>
+                </table>
+              </div>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+    <div id="floating-axis-filter" class="floating-axis-filter"></div>
+
+    <script type="module" src="./src/main.js?v=20260430-4"></script>
+  </body>
+</html>
