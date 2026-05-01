@@ -1864,7 +1864,7 @@ export function createRenderer(store) {
   });
 
   document.addEventListener("pointerdown", (event) => {
-    if (!floatingFilterOpen || !isMobileViewport()) {
+    if (!floatingFilterOpen) {
       return;
     }
 
