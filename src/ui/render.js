@@ -391,7 +391,7 @@ function findValueIndex(values, rawValue, fallbackIndex = 0) {
 
 function renderSummaryBands(summary) {
   if (!summary.bands.length) {
-    return '<div class="summary-chart-empty empty-state">該当する曲がありません。</div>';
+    return '<div class="summary-chart-empty empty-state">難易度表が未読み込みです。</div>';
   }
 
   const rows = summary.bands.map((band) => {
