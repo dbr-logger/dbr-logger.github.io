@@ -7,7 +7,7 @@ import { compareIsoDates, todayIso } from "../utils/date.js?v=20260430-4";
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const PAGE_SIZE = 100;
-const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear"];
+const SORT_OPTIONS = ["title", "level", "splv", "katate", "latest", "clear"];
 const AXIS_MODES = ["level", "splv", "katate", "title"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
 const CHART_SUFFIX_ORDER = new Map([
@@ -356,6 +356,19 @@ function compareTitleValue(a, b) {
 
 function compareKatateValue(a, b) {
   return (a.katateValue ?? Number.POSITIVE_INFINITY) - (b.katateValue ?? Number.POSITIVE_INFINITY);
+}
+
+function compareLatestDateValue(a, b) {
+  if (a.latestDate === null && b.latestDate === null) {
+    return 0;
+  }
+  if (a.latestDate === null) {
+    return -1;
+  }
+  if (b.latestDate === null) {
+    return 1;
+  }
+  return compareIsoDates(a.latestDate, b.latestDate);
 }
 
 export function createStore() {
@@ -904,6 +917,10 @@ export function createStore() {
 
       if (state.sortMode === "katate") {
         return compareKatateValue(a, b) || (allowUnrated ? compareSplvValue(a, b) || compareTitleValue(a, b) : compareLevelValue(a, b) || compareSplvValue(a, b) || compareTitleValue(a, b));
+      }
+
+      if (state.sortMode === "latest") {
+        return compareLatestDateValue(a, b) || tieBreak();
       }
 
       if (state.sortMode === "clear") {
