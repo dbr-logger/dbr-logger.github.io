@@ -1043,7 +1043,7 @@ export function createRenderer(store) {
 
     const direction = delta > 0 ? "down" : "up";
     const now = performance.now();
-    if (scrollDirectionStreak !== direction || now - scrollDirectionTimestamp > 220) {
+    if (scrollDirectionStreak !== direction) {
       scrollDirectionStreak = direction;
       scrollDirectionDistance = 0;
     }
