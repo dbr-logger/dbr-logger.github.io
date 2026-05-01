@@ -1248,7 +1248,12 @@ export function createRenderer(store) {
       floatingAxisPreviewValue = null;
       floatingQueryFocused = false;
       syncQueryScrollLockState();
+      // 「曲名」(title) を選択した場合は自動スクロールを有効にする
+      const shouldScrollToTitle = target.value === "title";
       applyFiltersPreservingOverviewPosition({ axisMode: target.value });
+      if (shouldScrollToTitle && canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)) {
+        window.requestAnimationFrame(scrollCatalogPanelIntoView);
+      }
     }
   });
 
