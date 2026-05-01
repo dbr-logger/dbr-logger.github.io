@@ -688,6 +688,8 @@ export function createRenderer(store) {
   let latestVisibleCount = 0;
   let filterDraft = null;
   let appliedFilterSignature = "";
+  let deferredFilterTimer = null;
+  let deferredFilterRevision = 0;
   let pendingCatalogBottomLock = null;
   let summaryFiltersOpen = false;
   let floatingFilterOpen = false;
@@ -1433,11 +1435,23 @@ export function createRenderer(store) {
   }
   
   function deferDifficultyFilters(nextFilters, options = {}) {
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        applyDifficultyFilters(nextFilters, options);
-      });
-    });
+    deferredFilterRevision += 1;
+    const revision = deferredFilterRevision;
+  
+    if (deferredFilterTimer !== null) {
+      window.clearTimeout(deferredFilterTimer);
+      deferredFilterTimer = null;
+    }
+  
+    deferredFilterTimer = window.setTimeout(() => {
+      deferredFilterTimer = null;
+  
+      if (revision !== deferredFilterRevision) {
+        return;
+      }
+  
+      applyDifficultyFilters(nextFilters, options);
+    }, 120);
   }  
 
   function toggleSummaryLampFilter(lamp) {
