@@ -955,7 +955,7 @@ export function createStore() {
         startIndex: visibleSongs.length === 0 ? 0 : pageStart + 1,
         endIndex: Math.min(pageStart + PAGE_SIZE, visibleSongs.length),
       },
-      summary: buildSummary(summaryBandBaseSongs, summarySongs, summarySongs, summaryFilters.axisMode),
+      summary: buildSummary(summaryBandBaseSongs, summarySongs, visibleSongs, summaryFilters.axisMode),
       summaryFilters,
     };
   }
