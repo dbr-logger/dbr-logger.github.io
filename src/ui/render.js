@@ -1451,7 +1451,7 @@ export function createRenderer(store) {
       }
   
       applyDifficultyFilters(nextFilters, options);
-    }, 120);
+    }, 300);
   }  
 
   function toggleSummaryLampFilter(lamp) {
