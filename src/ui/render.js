@@ -590,7 +590,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
 }
 
 function renderSelectedSong(selectedSongContainer, selectedSong) {
-  if (!selectedSong || isCatalogEmpty) {
+  if (!selectedSong) {
     selectedSongContainer.innerHTML = '<div class="empty-state">表示できる曲がありません。</div>';
     return;
   }
@@ -1957,7 +1957,7 @@ export function createRenderer(store) {
       renderCatalog(nodes.catalog, snapshot.pagedSongs, snapshot.selectedSong?.title ?? null);
       renderPagination(nodes.catalogPaginationTop, snapshot.pagination);
       renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
-      renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs.length === 0);
+      renderSelectedSong(nodes.selectedSong, snapshot.selectedSong);
       renderHistory(nodes.history, snapshot.selectedHistory);
       latestChartHistory = snapshot.selectedHistory.slice().reverse();
       latestScoreChartHistory = snapshot.selectedHistory
