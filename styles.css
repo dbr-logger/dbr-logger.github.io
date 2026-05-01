@@ -644,8 +644,16 @@ td {
   box-shadow: none;
 }
 
-.summary-lamp-item:not(:disabled):hover {
-  transform: translateY(-1px);
+@media (hover: hover) {
+  .summary-lamp-item:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+}
+
+@media (hover: none) {
+  .summary-lamp-item:not(:disabled):hover {
+    transform: none;
+  }
 }
 
 .summary-lamp-item:focus-visible {
