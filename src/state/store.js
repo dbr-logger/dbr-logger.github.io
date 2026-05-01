@@ -440,9 +440,7 @@ export function createStore() {
   function matchesFiltersFor(entry, filters) {
     if (filters.axisMode === "title") {
       const query = filters.titleQuery.trim().toLocaleLowerCase("ja");
-      if (query && !entry.title.toLocaleLowerCase("ja").includes(query)) {
-        return false;
-      }
+      return !query || entry.title.toLocaleLowerCase("ja").includes(query);
     }
 
     if (filters.axisMode === "katate" && entry.katateValue === null) {
