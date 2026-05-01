@@ -1,5 +1,5 @@
-import { INITIAL_CSV_PATH, LAMP_OPTIONS } from "../constants.js?v=20260430-4";
-import { exportVerticalCsv, fetchInitialCsv, importVerticalCsv, importWideCsv } from "../data/csv.js?v=20260430-4";
+import { LAMP_OPTIONS } from "../constants.js?v=20260430-4";
+import { exportVerticalCsv, importVerticalCsv } from "../data/csv.js?v=20260430-4";
 import { attachKatateToDifficultyTable, fetchDifficultyTable } from "../data/difficulty.js?v=20260430-4";
 import { exportDbrJson, importDbrJson } from "../data/export-json.js?v=20260430-4";
 import { loadStoredState, saveStoredState } from "../data/storage.js?v=20260430-4";
@@ -17,10 +17,6 @@ const CHART_SUFFIX_ORDER = new Map([
   ["A", 3],
   ["L", 4],
 ]);
-const INITIAL_CSV_TITLE_ALIASES = new Map([
-  ['灼熱Beach Side Bunny (かめりあ\'s"Summertime D\'n\'B" Remix)', '灼熱Beach Side Bunny (かめりあ\'s "Summertime D\'n\'B" Remix)(A)'],
-]);
-
 function createRecordId(title, date) {
   const seed = Math.random().toString(16).slice(2, 8);
   return `${title}--${date}--${seed}`;
@@ -146,23 +142,6 @@ function normalizeSortMode(sortMode) {
   return SORT_OPTIONS.includes(sortMode) ? sortMode : "level";
 }
 
-function resolveInitialCsvRecordTitle(title) {
-  const normalizedTitle = String(title ?? "").trim();
-  if (!normalizedTitle) {
-    return normalizedTitle;
-  }
-
-  if (INITIAL_CSV_TITLE_ALIASES.has(normalizedTitle)) {
-    return INITIAL_CSV_TITLE_ALIASES.get(normalizedTitle);
-  }
-
-  if (/\(([BNHAL])\)$/.test(normalizedTitle)) {
-    return normalizedTitle;
-  }
-
-  return `${normalizedTitle}(A)`;
-}
-
 function buildRecordIndex(records) {
   const index = new Map();
 
@@ -226,7 +205,6 @@ function normalizeStoredData(stored) {
       ? normalizeSortMode(stored.titleSortBase ?? stored.sortMode)
       : normalizeSortMode(stored.sortMode),
     titleSortBase: normalizeSortMode(stored.titleSortBase),
-    initialCsvImported: Boolean(stored.initialCsvImported),
   };
 }
 
@@ -406,7 +384,6 @@ export function createStore() {
       includeUnrated: "all",
     },
     sortMode: "level",
-    initialCsvImported: false,
     currentPage: 1,
     selectedTitle: null,
     statusMessage: "",
@@ -431,30 +408,7 @@ export function createStore() {
       axisMemory: state.axisMemory,
       filters: state.filters,
       sortMode: state.sortMode,
-      initialCsvImported: state.initialCsvImported,
     });
-  }
-
-  async function tryImportInitialCsvRecords() {
-    if (state.initialCsvImported || state.records.length > 0) {
-      return false;
-    }
-
-    const csvText = await fetchInitialCsv(INITIAL_CSV_PATH);
-    const imported = importWideCsv(csvText);
-    state.records = imported.records.map((record) => ({
-      id: record.id || createRecordId(resolveInitialCsvRecordTitle(record.title), record.date),
-      date: record.date,
-      title: resolveInitialCsvRecordTitle(record.title),
-      level: Number(record.level) || 0,
-      lamp: LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY",
-      bp: Number(record.bp) || 0,
-      score: null,
-      textageKey: "",
-      source: "import",
-    })).sort(sortRecords);
-    state.initialCsvImported = true;
-    return state.records.length > 0;
   }
 
   function ensureSelectedSong() {
@@ -552,7 +506,6 @@ export function createStore() {
         state.axisMemory = normalized.axisMemory;
         state.filters = normalized.filters;
         state.sortMode = normalized.sortMode;
-        state.initialCsvImported = normalized.initialCsvImported;
 
         if (state.difficultyTable?.entries?.length) {
           try {
@@ -563,18 +516,6 @@ export function createStore() {
             }
           } catch {
             // Keep existing data if local katate hydration fails.
-          }
-        }
-
-        if (!state.initialCsvImported && state.records.length === 0) {
-          try {
-            const imported = await tryImportInitialCsvRecords();
-            if (imported) {
-              didMutateStoredData = true;
-              state.statusMessage = `初期CSVからプレー記録を読み込みました。記録数 ${state.records.length} 件`;
-            }
-          } catch {
-            // Continue without blocking initialization if the optional bootstrap import fails.
           }
         }
 
@@ -591,14 +532,7 @@ export function createStore() {
         state.records = [];
         state.difficultyTable = null;
         state.sourceLabel = "";
-        try {
-          const imported = await tryImportInitialCsvRecords();
-          state.statusMessage = imported
-            ? `初期CSVからプレー記録を読み込みました。記録数 ${state.records.length} 件`
-            : "難易度表を読み込むと曲一覧を表示できます。";
-        } catch {
-          state.statusMessage = "難易度表を読み込むと曲一覧を表示できます。";
-        }
+        state.statusMessage = "難易度表を読み込むと曲一覧を表示できます。";
         persist();
       }
 

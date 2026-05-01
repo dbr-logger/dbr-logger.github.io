@@ -1,5 +1,3 @@
-import { parseImportedDateLabel } from "../utils/date.js?v=20260430-4";
-
 function parseCsvLine(line) {
   const values = [];
   let current = "";
@@ -53,23 +51,6 @@ function createSongId(title) {
   return title.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/(^-|-$)/g, "");
 }
 
-export async function fetchInitialCsv(path) {
-  if (!path) {
-    throw new Error("初期CSVパスが指定されていません。");
-  }
-
-  if (window.location.protocol === "file:") {
-    throw new Error("初期CSVの自動読込は file:// では動作しません。HTTPサーバで起動してください。");
-  }
-
-  const response = await fetch(path, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`初期CSVの読込に失敗しました: ${response.status} ${response.statusText}`);
-  }
-
-  return response.text();
-}
-
 export function parseCsv(text) {
   const normalizedText = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").trim();
   const lines = normalizedText.split("\n").filter(Boolean);
@@ -86,59 +67,6 @@ export function parseCsv(text) {
       return row;
     }, {});
   });
-}
-
-export function importWideCsv(text, referenceDate = new Date()) {
-  const rows = parseCsv(text);
-  const songs = [];
-  const records = [];
-  const seenTitles = new Set();
-  const dateColumns = rows.length > 0
-    ? Object.keys(rows[0]).filter((header) => /^BP\(\d{1,2}\/\d{1,2}\)$/.test(header))
-    : [];
-
-  rows.forEach((row, index) => {
-    const title = (row.TITLE ?? "").trim();
-    if (!title) {
-      return;
-    }
-
-    if (!seenTitles.has(title)) {
-      songs.push({
-        id: createSongId(title) || `song-${index + 1}`,
-        title,
-        level: parseNumber(row.LEVEL) ?? 0,
-        sortOrder: parseNumber(row["並べ替え用"]) ?? index + 1,
-        reserveOrder: parseNumber(row["予備"]) ?? index + 1,
-        initialLamp: row["クリア"] || "NO PLAY",
-        initialBestBp: parseNumber(row["BP(best)"]),
-      });
-      seenTitles.add(title);
-    }
-
-    dateColumns.forEach((column) => {
-      const bp = parseNumber(row[column]);
-      const date = parseImportedDateLabel(column, referenceDate);
-      if (bp === null || date === null) {
-        return;
-      }
-
-      records.push({
-        id: `${createSongId(title) || `song-${index + 1}`}--${date}`,
-        date,
-        title,
-        level: parseNumber(row.LEVEL) ?? 0,
-        lamp: row["クリア"] || "NO PLAY",
-        bp,
-        source: "import",
-      });
-    });
-  });
-
-  songs.sort((a, b) => a.sortOrder - b.sortOrder || a.reserveOrder - b.reserveOrder);
-  records.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title, "ja"));
-
-  return { songs, records };
 }
 
 export function importVerticalCsv(text) {
