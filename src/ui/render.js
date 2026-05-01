@@ -590,7 +590,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
 }
 
 function renderSelectedSong(selectedSongContainer, selectedSong) {
-  if (!selectedSong) {
+  if (!selectedSong || songs.length === 0) {
     selectedSongContainer.innerHTML = '<div class="empty-state">表示できる曲がありません。</div>';
     return;
   }
