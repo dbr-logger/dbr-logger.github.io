@@ -616,7 +616,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong) {
 
 function renderCatalog(catalogContainer, songs, selectedTitle) {
   if (songs.length === 0) {
-    catalogContainer.innerHTML = '<div class="empty-state">このレベル帯には曲がありません。</div>';
+    catalogContainer.innerHTML = '<div class="empty-state">該当する曲がありません。</div>';
     return;
   }
 
