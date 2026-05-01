@@ -485,30 +485,30 @@ function renderDifficultyFilters(container, filters) {
   container.innerHTML = `
     <div class="filters-grid">
       <div class="field-stack">
-        <label class="field field-select">
+        <div class="field field-select">
           <span>INFINITAS</span>
           <select data-filter="inf">
             <option value="all" ${filters.inf === "all" ? "selected" : ""}>すべて</option>
             <option value="yes" ${filters.inf === "yes" ? "selected" : ""}>収録あり</option>
             <option value="no" ${filters.inf === "no" ? "selected" : ""}>収録なし</option>
           </select>
-        </label>
-        <label class="field field-select">
+        </div>
+        <div class="field field-select">
           <span>AC収録</span>
           <select data-filter="acdelete">
             <option value="all" ${filters.acdelete === "all" ? "selected" : ""}>すべて</option>
             <option value="no" ${filters.acdelete === "no" ? "selected" : ""}>収録あり</option>
             <option value="yes" ${filters.acdelete === "yes" ? "selected" : ""}>収録なし</option>
           </select>
-        </label>
-        <label class="field field-select">
+        </div>
+        <div class="field field-select">
           <span>未査定曲</span>
           <select data-filter="includeUnrated">
             <option value="all" ${filters.includeUnrated === "all" ? "selected" : ""}>すべて</option>
             <option value="rated" ${filters.includeUnrated === "rated" ? "selected" : ""}>査定済み</option>
             <option value="unrated" ${filters.includeUnrated === "unrated" ? "selected" : ""}>未査定のみ</option>
           </select>
-        </label>
+        </div>
       </div>
     </div>
     <div class="filters-footer">
@@ -576,12 +576,12 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
           <h3>絞り込み軸</h3>
         </div>
       </div>
-      <label class="field field-select floating-filter-axis-select">
+      <div class="field field-select floating-filter-axis-select">
         <span>絞り込み軸</span>
         <select data-axis-mode>
           ${AXIS_OPTIONS.map((option) => `<option value="${option.value}" ${option.value === filters.axisMode ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
         </select>
-      </label>
+      </div>
       ${controlMarkup}
     </section>
   `;
@@ -811,7 +811,7 @@ export function createRenderer(store) {
   function applyFiltersPreservingOverviewPosition(nextFilters) {
     const overviewPanel = nodes.summaryPanel;
     const catalogTarget = nodes.catalogPanel ?? nodes.catalog;
-    const shouldScroll = canAutoScrollElement(catalogTarget);
+    const shouldScroll = canAutoScrollElementUpward(catalogTarget);
 
     if (!overviewPanel) {
       applyDifficultyFilters(nextFilters, { scrollToCatalog: shouldScroll });
@@ -1074,7 +1074,12 @@ export function createRenderer(store) {
 
   function applyDifficultyFilters(nextFilters, options = {}) {
     store.setDifficultyFilters(nextFilters);
-    const shouldScroll = options.scrollToCatalog ?? canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog);
+    const activeAxisMode = nextFilters.axisMode ?? store.getSnapshot().filters.axisMode;
+    const shouldScroll = options.scrollToCatalog ?? (
+      activeAxisMode === "title"
+        ? canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)
+        : canAutoScrollElementUpward(nodes.catalogPanel ?? nodes.catalog)
+    );
     if (shouldScroll) {
       window.requestAnimationFrame(scrollCatalogPanelIntoView);
     }

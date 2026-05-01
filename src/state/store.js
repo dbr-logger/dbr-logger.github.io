@@ -925,6 +925,11 @@ export function createStore() {
       ? songStates.filter((entry) => entry.katateValue !== null)
       : songStates;
     const summarySongs = summaryBandBaseSongs.filter((entry) => matchesFiltersFor(entry, summaryScopeFilters));
+    const summaryCountFilters = {
+      ...state.filters,
+      lamps: [...LAMP_OPTIONS],
+    };
+    const summaryCountSongs = songStates.filter((entry) => matchesFiltersFor(entry, summaryCountFilters));
     const totalPages = Math.max(1, Math.ceil(visibleSongs.length / PAGE_SIZE));
     const currentPage = Math.max(1, Math.min(state.currentPage, totalPages));
     const pageStart = (currentPage - 1) * PAGE_SIZE;
@@ -955,7 +960,7 @@ export function createStore() {
         startIndex: visibleSongs.length === 0 ? 0 : pageStart + 1,
         endIndex: Math.min(pageStart + PAGE_SIZE, visibleSongs.length),
       },
-      summary: buildSummary(summaryBandBaseSongs, summarySongs, visibleSongs, summaryFilters.axisMode),
+      summary: buildSummary(summaryBandBaseSongs, summarySongs, summaryCountSongs, summaryFilters.axisMode),
       summaryFilters,
     };
   }
