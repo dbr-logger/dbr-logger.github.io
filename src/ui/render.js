@@ -1974,6 +1974,11 @@ export function createRenderer(store) {
     }
 
     floatingOutsidePointerState = null;
+    floatingFilterOpen = false;
+    floatingQueryFocused = false;
+    floatingQueryRestoreFocus = false;
+    syncQueryScrollLockState();
+    renderFloatingFilterShell();
   });
 
   return {
