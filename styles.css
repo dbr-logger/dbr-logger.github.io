@@ -257,8 +257,10 @@ td {
   transition: transform 160ms ease, opacity 160ms ease, box-shadow 160ms ease;
 }
 
-.button:hover {
-  transform: translateY(-1px);
+@media (hover: hover) {
+  .button:hover {
+    transform: translateY(-1px);
+  }
 }
 
 .button-primary {
