@@ -954,6 +954,11 @@ td {
   font-weight: 700;
 }
 
+.floating-filter-value {
+  min-height: 22px;
+  line-height: 22px;
+}
+
 .floating-filter-search input {
   appearance: none;
   -webkit-appearance: none;
