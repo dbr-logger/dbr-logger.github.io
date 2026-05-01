@@ -1419,6 +1419,27 @@ export function createRenderer(store) {
     floatingQueryComposing = false;
   });
 
+  function applySummaryLampVisualState(activeLamps) {
+    const activeSet = new Set(activeLamps);
+  
+    nodes.summary.querySelectorAll("[data-summary-lamp]").forEach((button) => {
+      const lamp = button.dataset.summaryLamp;
+      const isActive = activeSet.has(lamp);
+  
+      button.classList.toggle("is-active", isActive);
+      button.classList.toggle("is-inactive", !isActive);
+      button.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+  
+  function deferDifficultyFilters(nextFilters, options = {}) {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        applyDifficultyFilters(nextFilters, options);
+      });
+    });
+  }  
+
   function toggleSummaryLampFilter(lamp) {
     const currentLamps = filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS];
     let nextLamps = currentLamps.includes(lamp)
@@ -1433,7 +1454,8 @@ export function createRenderer(store) {
       ...(filterDraft ?? store.getSnapshot().filters),
       lamps: nextLamps,
     };
-    applyDifficultyFilters({ lamps: nextLamps }, { scrollToCatalog: false });
+    applySummaryLampVisualState(nextLamps);
+    deferDifficultyFilters({ lamps: nextLamps }, { scrollToCatalog: false });
   }
 
   function soloSummaryLampFilter(lamp) {
@@ -1441,7 +1463,8 @@ export function createRenderer(store) {
       ...(filterDraft ?? store.getSnapshot().filters),
       lamps: [lamp],
     };
-    applyDifficultyFilters({ lamps: [lamp] }, { scrollToCatalog: false });
+    applySummaryLampVisualState([lamp]);
+    deferDifficultyFilters({ lamps: [lamp] }, { scrollToCatalog: false });
   }
 
   function handleSummaryLampActivation(lamp, timestamp = performance.now()) {
@@ -1450,7 +1473,8 @@ export function createRenderer(store) {
         ...(filterDraft ?? store.getSnapshot().filters),
         lamps: [lamp],
       };
-      applyDifficultyFilters({ lamps: [lamp] }, { scrollToCatalog: false });
+      applySummaryLampVisualState([lamp]);
+      deferDifficultyFilters({ lamps: [lamp] }, { scrollToCatalog: false });
       lastSummaryLampClick = { lamp: "", timestamp: 0 };
       return;
     }
@@ -1903,6 +1927,14 @@ export function createRenderer(store) {
     if (deltaX > 8 || deltaY > 8) {
       floatingOutsidePointerState.moved = true;
     }
+    if (deltaY > 16) {
+      floatingOutsidePointerState = null;
+      floatingFilterOpen = false;
+      floatingQueryFocused = false;
+      floatingQueryRestoreFocus = false;
+      syncQueryScrollLockState();
+      renderFloatingFilterShell();
+    }    
   });
 
   document.addEventListener("pointerup", (event) => {
