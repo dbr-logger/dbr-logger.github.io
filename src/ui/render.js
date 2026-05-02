@@ -644,6 +644,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
           ${badge(song.bestLamp, "pill-lamp")}
         </div>
         <p class="song-card-title">${escapeHtml(song.title)}</p>
+        ${song.note ? `<p class="song-card-note">${escapeHtml(song.note.replace(/\s+/g, " ").trim())}</p>` : ""}
         <div class="song-card-meta">
           ${badge(`Best ${formatBp(song.bestBp)}`, "pill-neutral")}
           ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")}
