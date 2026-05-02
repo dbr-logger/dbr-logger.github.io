@@ -1835,7 +1835,15 @@ export function createRenderer(store) {
   });
 
   nodes.memoInput?.addEventListener("blur", () => {
+    const currentLamp = nodes.lampInput.value;
+    const currentBp = nodes.bpInput.value;
+    const currentScore = nodes.scoreInput.value;
+  
     store.saveSongNote(nodes.memoInput.value);
+  
+    nodes.lampInput.value = currentLamp;
+    nodes.bpInput.value = currentBp;
+    nodes.scoreInput.value = currentScore;
   });
 
   nodes.backToCardButton?.addEventListener("click", () => {
