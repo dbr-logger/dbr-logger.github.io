@@ -26,7 +26,12 @@ const AXIS_OPTIONS = [
   { value: "splv", label: "SPLv." },
   { value: "katate", label: "片手Lv." },
   { value: "title", label: "曲名" },
+  { value: "memo", label: "メモ" },
 ];
+
+function isTextAxisMode(axisMode) {
+  return axisMode === "title" || axisMode === "memo";
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -348,8 +353,10 @@ function formatAxisValue(axisMode, value) {
 }
 
 function summarizeAxisFilter(filters) {
-  if (filters.axisMode === "title") {
-    return filters.titleQuery.trim() ? `${getAxisLabel(filters.axisMode)} ${filters.titleQuery.trim()}` : `${getAxisLabel(filters.axisMode)} ALL`;
+  if (isTextAxisMode(filters.axisMode)) {
+    return filters.titleQuery.trim()
+      ? `${getAxisLabel(filters.axisMode)} ${filters.titleQuery.trim()}`
+      : `${getAxisLabel(filters.axisMode)} ALL`;
   }
 
   return `${getAxisLabel(filters.axisMode)} ${formatAxisValue(filters.axisMode, filters.axisValue)}`;
@@ -443,7 +450,7 @@ function renderSummaryBands(summary) {
 }
 
 function renderSummary(summaryContainer, summary, filters) {
-  const lampFilterDisabled = filters.axisMode === "title";
+  const lampFilterDisabled = isTextAxisMode(filters.axisMode);
 
   const legend = LAMP_OPTIONS.map((lamp) => `
     <button
@@ -534,15 +541,18 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
   const previewValue = previewState?.mode === filters.axisMode ? previewState.value : null;
   const effectiveAxisValue = previewValue !== null ? previewValue : filters.axisValue;
   const sliderValueIndex = Math.max(0, sliderStops.findIndex((value) => String(value) === String(effectiveAxisValue)));
-  const currentAxisValue = filters.axisMode === "title"
+  const currentAxisValue = isTextAxisMode(filters.axisMode)
     ? filters.titleQuery
     : formatAxisValue(filters.axisMode, effectiveAxisValue);
 
-  const controlMarkup = filters.axisMode === "title"
+  const searchLabel = filters.axisMode === "memo" ? "メモ検索" : "曲名検索";
+  const searchPlaceholder = filters.axisMode === "memo" ? "メモの一部を入力" : "曲名の一部を入力";
+  
+  const controlMarkup = isTextAxisMode(filters.axisMode)
     ? `
       <label class="floating-filter-search">
-        <span>曲名検索</span>
-        <input type="search" data-axis-query value="${escapeHtml(filters.titleQuery)}" placeholder="曲名の一部を入力" />
+        <span>${escapeHtml(searchLabel)}</span>
+        <input type="search" data-axis-query value="${escapeHtml(filters.titleQuery)}" placeholder="${escapeHtml(searchPlaceholder)}" />
       </label>
     `
     : `
@@ -561,7 +571,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
       </div>
     `;
 
-  const clearButtonMarkup = filters.axisMode === "title"
+  const clearButtonMarkup = isTextAxisMode(filters.axisMode)
     ? '<button class="floating-filter-clear button button-tertiary" type="button" data-floating-clear>解除</button>'
     : "";
 
