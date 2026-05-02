@@ -717,8 +717,8 @@ export function createRenderer(store) {
   let summaryLampPointerState = null;
   let floatingOutsidePointerState = null;
   let lastScrollY = window.scrollY;
+  let lastUserScrollAt = 0;
   let floatingDockSide = "bottom";
-  let suppressFloatingDockSyncUntil = 0;
   let scrollDirectionStreak = null;
   let scrollDirectionDistance = 0;
   let scrollDirectionTimestamp = 0;
@@ -1040,6 +1040,10 @@ export function createRenderer(store) {
   }, { passive: false });
 
   window.addEventListener("scroll", () => {
+    if (!isProgrammaticScroll) {
+      lastUserScrollAt = performance.now();
+    }
+    
     if (isProgrammaticScroll) {
       return;
     }
@@ -1054,11 +1058,7 @@ export function createRenderer(store) {
     if (!isDifficultyImportButtonTopVisible()) {
       floatingDockSide = "top";
       lastScrollY = window.scrollY;
-      
-      if (performance.now() >= suppressFloatingDockSyncUntil) {
-        syncFloatingDockClass();
-      }
-      
+      syncFloatingDockClass();
       return;
     }
 
@@ -1229,7 +1229,12 @@ export function createRenderer(store) {
 
     if (target.closest("[data-axis-mode]")) {
       pendingQueryBlurIntent = "axis-mode";
-      suppressFloatingDockSyncUntil = performance.now() + 500;
+    
+      if (isSmartphoneDevice() && performance.now() - lastUserScrollAt < 750) {
+        event.preventDefault();
+        return;
+      }
+    
       return;
     }
 
