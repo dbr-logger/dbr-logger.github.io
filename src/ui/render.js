@@ -1977,6 +1977,7 @@ export function createRenderer(store) {
     floatingFilterOpen = false;
     floatingQueryFocused = false;
     floatingQueryRestoreFocus = false;
+    syncQueryScrollLockState();
     renderFloatingFilterShell();
   });
 
