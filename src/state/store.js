@@ -593,17 +593,24 @@ export function createStore() {
       : state.filters.titleQuery;
 
     if (axisModeChanged) {
-      if (isTextAxisMode(nextAxisMode)) {
-        state.titleFilterBase = { ...previousFilters };
-        state.titleSortBase = state.sortMode;
+      const wasTextAxisMode = isTextAxisMode(previousFilters.axisMode);
+      const nextIsTextAxisMode = isTextAxisMode(nextAxisMode);
+    
+      if (nextIsTextAxisMode) {
+        if (!wasTextAxisMode) {
+          state.titleFilterBase = { ...previousFilters };
+          state.titleSortBase = state.sortMode;
+        }
+    
         state.sortMode = "title";
         nextAxisValue = "";
         nextTitleQuery = state.sessionTitleQuery;
       } else {
-        if (isTextAxisMode(previousFilters.axisMode)) {
+        if (wasTextAxisMode) {
           state.sessionTitleQuery = previousFilters.titleQuery;
           state.sortMode = state.titleSortBase;
         }
+    
         state.titleFilterBase = null;
         nextAxisValue = typeof nextFilters.axisValue === "string"
           ? nextFilters.axisValue
