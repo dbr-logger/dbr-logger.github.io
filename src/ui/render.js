@@ -718,6 +718,7 @@ export function createRenderer(store) {
   let floatingOutsidePointerState = null;
   let lastScrollY = window.scrollY;
   let floatingDockSide = "bottom";
+  let suppressFloatingDockSyncUntil = 0;
   let scrollDirectionStreak = null;
   let scrollDirectionDistance = 0;
   let scrollDirectionTimestamp = 0;
@@ -1053,7 +1054,11 @@ export function createRenderer(store) {
     if (!isDifficultyImportButtonTopVisible()) {
       floatingDockSide = "top";
       lastScrollY = window.scrollY;
-      syncFloatingDockClass();
+      
+      if (performance.now() >= suppressFloatingDockSyncUntil) {
+        syncFloatingDockClass();
+      }
+      
       return;
     }
 
@@ -1224,6 +1229,7 @@ export function createRenderer(store) {
 
     if (target.closest("[data-axis-mode]")) {
       pendingQueryBlurIntent = "axis-mode";
+      suppressFloatingDockSyncUntil = performance.now() + 500;
       return;
     }
 
