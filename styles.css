@@ -1236,4 +1236,13 @@ td {
     width: auto;
   }
 
+  .manual-page {
+    padding: 24px 16px;
+  }
+  
+  .manual-content {
+    max-width: 860px;
+    margin: 0 auto;
+  }
+
 }
