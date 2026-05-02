@@ -82,8 +82,11 @@ function parseOptionalNumber(value) {
 }
 
 function normalizeRecommendSelection(values) {
-  const selected = Array.isArray(values) ? values.filter((value) => RECOMMEND_OPTIONS.includes(value)) : RECOMMEND_OPTIONS;
-  return selected.length > 0 ? [...new Set(selected)] : [...RECOMMEND_OPTIONS];
+  if (!Array.isArray(values)) {
+    return [...RECOMMEND_OPTIONS];
+  }
+
+  return [...new Set(values.filter((value) => RECOMMEND_OPTIONS.includes(value)))];
 }
 
 function normalizeLampSelection(values) {
