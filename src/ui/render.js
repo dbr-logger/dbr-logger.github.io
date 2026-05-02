@@ -932,6 +932,12 @@ export function createRenderer(store) {
     return rect.top >= 0 && rect.top <= window.innerHeight;
   }
 
+  function syncFloatingDockSideFromViewport() {
+    floatingDockSide = !isDifficultyImportButtonTopVisible() ? "top" : "bottom";
+    lastScrollY = window.scrollY;
+    syncFloatingDockClass();
+  }
+
   function freezeFloatingFilterPosition() {
     if (!isMobileViewport() || !nodes.floatingAxisFilter) {
       return;
@@ -1006,7 +1012,10 @@ export function createRenderer(store) {
 
   nodes.lampInput.innerHTML = LAMP_OPTIONS.map((lamp) => `<option value="${lamp}">${lamp}</option>`).join("");
   nodes.recordDate.value = formatIsoDate(todayIso());
-  syncFloatingDockClass();
+  requestAnimationFrame(() => {
+    syncFloatingDockSideFromViewport();
+    requestAnimationFrame(syncFloatingDockSideFromViewport);
+  });
 
   window.addEventListener("resize", () => {
     if (activeChartResizeFrame !== null) {
