@@ -8,7 +8,7 @@ import { compareIsoDates, todayIso } from "../utils/date.js?v=20260430-4";
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const PAGE_SIZE = 100;
 const SORT_OPTIONS = ["title", "level", "splv", "katate", "latest", "clear"];
-const AXIS_MODES = ["level", "splv", "katate", "title"];
+const AXIS_MODES = ["level", "splv", "katate", "title", "memo"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
 const CHART_SUFFIX_ORDER = new Map([
   ["B", 0],
@@ -106,6 +106,10 @@ function normalizeAxisMode(value) {
   return AXIS_MODES.includes(value) ? value : "level";
 }
 
+function isTextAxisMode(axisMode) {
+  return axisMode === "title" || axisMode === "memo";
+}
+
 function normalizeAxisMemory(axisMemory) {
   return {
     level: typeof axisMemory?.level === "string" ? axisMemory.level : "",
@@ -171,7 +175,7 @@ function buildDifficultyTextageIndex(difficultyTable) {
 function normalizeStoredData(stored) {
   const normalizedFilters = normalizeStoredFilters(stored.filters);
   const normalizedTitleFilterBase = stored.titleFilterBase ? normalizeStoredFilters(stored.titleFilterBase) : null;
-  const restoredFilters = normalizedFilters.axisMode === "title"
+  const restoredFilters = isTextAxisMode(normalizedFilters.axisMode)
     ? (normalizedTitleFilterBase ? { ...normalizedTitleFilterBase } : {
       ...normalizedFilters,
       axisMode: "level",
@@ -447,6 +451,12 @@ export function createStore() {
       const query = filters.titleQuery.trim().toLocaleLowerCase("ja");
       return !query || entry.title.toLocaleLowerCase("ja").includes(query);
     }
+    
+    if (filters.axisMode === "memo") {
+      const query = filters.titleQuery.trim().toLocaleLowerCase("ja");
+      const note = String(entry.note ?? "").toLocaleLowerCase("ja");
+      return !query || note.includes(query);
+    }
 
     if (filters.axisMode === "katate" && entry.katateValue === null) {
       return false;
@@ -583,14 +593,14 @@ export function createStore() {
       : state.filters.titleQuery;
 
     if (axisModeChanged) {
-      if (nextAxisMode === "title") {
+      if (isTextAxisMode(nextAxisMode)) {
         state.titleFilterBase = { ...previousFilters };
         state.titleSortBase = state.sortMode;
         state.sortMode = "title";
         nextAxisValue = "";
         nextTitleQuery = state.sessionTitleQuery;
       } else {
-        if (previousFilters.axisMode === "title") {
+        if (isTextAxisMode(previousFilters.axisMode)) {
           state.sessionTitleQuery = previousFilters.titleQuery;
           state.sortMode = state.titleSortBase;
         }
@@ -619,7 +629,7 @@ export function createStore() {
       nextStateFilters.axisValue = "";
     }
 
-    if (nextStateFilters.axisMode === "title") {
+    if (isTextAxisMode(nextStateFilters.axisMode)) {
       state.sessionTitleQuery = nextStateFilters.titleQuery;
     } else if (AXIS_MEMORY_MODES.includes(nextStateFilters.axisMode)) {
       nextAxisMemory[nextStateFilters.axisMode] = nextStateFilters.axisValue;
@@ -939,10 +949,10 @@ export function createStore() {
       return compareLevelValue(a, b) || compareSplvValue(a, b) || compareTitleValue(a, b);
     });
     const visibleSongs = songStates.filter((entry) => matchesFiltersFor(entry, state.filters));
-    const summaryFilters = state.filters.axisMode === "title" && state.titleFilterBase
+    const summaryFilters = isTextAxisMode(state.filters.axisMode) && state.titleFilterBase
       ? state.titleFilterBase
       : state.filters;
-    const summaryScopeFilters = summaryFilters.axisMode === "title"
+    const summaryScopeFilters = isTextAxisMode(summaryFilters.axisMode)
       ? { ...summaryFilters }
       : { ...summaryFilters, axisValue: "" };
     const summaryBandBaseSongs = summaryFilters.axisMode === "katate"
