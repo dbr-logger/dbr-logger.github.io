@@ -744,6 +744,16 @@ td {
   word-break: break-word;
 }
 
+.song-card-note {
+  margin: -8px 0 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .song-card-meta,
 .selected-song-meta {
   display: flex;
