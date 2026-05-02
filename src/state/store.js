@@ -460,7 +460,7 @@ export function createStore() {
     const visibleTitles = new Set(snapshot.pagedSongs.map((song) => song.title));
   
     if (!state.selectedTitle || !visibleTitles.has(state.selectedTitle)) {
-      state.selectedTitle = snapshot.pagedSongs[0]?.title ?? snapshot.visibleSongs[0]?.title ?? snapshot.songStates[0]?.title ?? null;
+      state.selectedTitle = snapshot.pagedSongs[0]?.title ?? snapshot.visibleSongs[0]?.title ?? null;
   
       return {
         ...snapshot,
@@ -1011,7 +1011,6 @@ export function createStore() {
     const selectedSong = pagedSongs.find((song) => song.title === state.selectedTitle)
       ?? pagedSongs[0]
       ?? visibleSongs[0]
-      ?? songStates[0]
       ?? null;
     const selectedHistory = selectedSong ? [...selectedSong.history].sort((a, b) => compareIsoDates(b.date, a.date)) : [];
     const hasTodayRecord = selectedHistory.some((record) => record.date === todayIso());
