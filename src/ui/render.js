@@ -1230,7 +1230,7 @@ export function createRenderer(store) {
     if (target.closest("[data-axis-mode]")) {
       pendingQueryBlurIntent = "axis-mode";
     
-      if (performance.now() - lastUserScrollAt < 750) {
+      if (!isSmartphoneDevice() && performance.now() - lastUserScrollAt < 350) {
         event.preventDefault();
         return;
       }
