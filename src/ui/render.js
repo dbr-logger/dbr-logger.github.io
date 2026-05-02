@@ -1093,7 +1093,7 @@ export function createRenderer(store) {
     store.setDifficultyFilters(nextFilters);
     const activeAxisMode = nextFilters.axisMode ?? store.getSnapshot().filters.axisMode;
     const shouldScroll = options.scrollToCatalog ?? (
-      activeAxisMode === "title"
+      isTextAxisMode(activeAxisMode)
         ? canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)
         : canAutoScrollElementUpward(nodes.catalogPanel ?? nodes.catalog)
     );
