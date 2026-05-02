@@ -1265,8 +1265,7 @@ export function createRenderer(store) {
       floatingAxisPreviewValue = null;
       floatingQueryFocused = false;
       syncQueryScrollLockState();
-      // 「曲名」(title) を選択した場合は自動スクロールを有効にする
-      const shouldScrollToTitle = target.value === "title";
+      const shouldScrollToTitle = isTextAxisMode(target.value);
       applyFiltersPreservingOverviewPosition({ axisMode: target.value });
       if (shouldScrollToTitle && canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)) {
         window.requestAnimationFrame(scrollCatalogPanelIntoView);
@@ -2007,7 +2006,7 @@ export function createRenderer(store) {
       latestVisibleCount = snapshot.visibleSongs.length;
       renderFilterDraftPanel();
       renderFloatingFilterShell();
-      if (floatingQueryRestoreFocus && snapshot.filters.axisMode === "title" && floatingFilterOpen) {
+      if (floatingQueryRestoreFocus && isTextAxisMode(snapshot.filters.axisMode) && floatingFilterOpen) {
         const queryInput = nodes.floatingAxisFilter.querySelector('input[data-axis-query]');
         if (queryInput instanceof HTMLInputElement) {
           queryInput.focus();
