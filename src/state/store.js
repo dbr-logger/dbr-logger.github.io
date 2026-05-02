@@ -174,6 +174,16 @@ function buildDifficultyTextageIndex(difficultyTable) {
 
 function normalizeStoredData(stored) {
   const normalizedFilters = normalizeStoredFilters(stored.filters);
+  
+  const normalizedTextQueryMemory = {
+    title: typeof stored.textQueryMemory?.title === "string" ? stored.textQueryMemory.title : "",
+    memo: typeof stored.textQueryMemory?.memo === "string" ? stored.textQueryMemory.memo : "",
+  };
+  
+  if (isTextAxisMode(normalizedFilters.axisMode)) {
+    normalizedTextQueryMemory[normalizedFilters.axisMode] = normalizedFilters.titleQuery;
+  }
+  
   const normalizedTitleFilterBase = stored.titleFilterBase ? normalizeStoredFilters(stored.titleFilterBase) : null;
   const restoredFilters = isTextAxisMode(normalizedFilters.axisMode)
     ? (normalizedTitleFilterBase ? { ...normalizedTitleFilterBase } : {
@@ -204,6 +214,7 @@ function normalizeStoredData(stored) {
     songNotes: typeof stored.songNotes === "object" && stored.songNotes !== null ? { ...stored.songNotes } : {},
     filters: restoredFilters,
     titleFilterBase: null,
+    textQueryMemory: normalizedTextQueryMemory,
     axisMemory: normalizeAxisMemory(stored.axisMemory),
     sortMode: normalizedFilters.axisMode === "title"
       ? normalizeSortMode(stored.titleSortBase ?? stored.sortMode)
@@ -389,7 +400,10 @@ export function createStore() {
       splv: "",
       katate: "",
     },
-    sessionTitleQuery: "",
+    textQueryMemory: {
+      title: "",
+      memo: "",
+    },
     filters: {
       axisMode: "level",
       axisValue: "",
@@ -421,10 +435,25 @@ export function createStore() {
       songNotes: state.songNotes,
       titleFilterBase: state.titleFilterBase,
       titleSortBase: state.titleSortBase,
+      textQueryMemory: state.textQueryMemory,
       axisMemory: state.axisMemory,
       filters: state.filters,
       sortMode: state.sortMode,
     });
+  }
+
+  function rememberTextQuery(axisMode, query) {
+    if (!isTextAxisMode(axisMode)) {
+      return;
+    }
+  
+    state.textQueryMemory[axisMode] = typeof query === "string" ? query : "";
+  }
+  
+  function getRememberedTextQuery(axisMode) {
+    return isTextAxisMode(axisMode)
+      ? state.textQueryMemory[axisMode] ?? ""
+      : "";
   }
 
   function ensureSelectedSong(snapshot = getSnapshot()) {
@@ -531,6 +560,7 @@ export function createStore() {
         state.songNotes = normalized.songNotes;
         state.titleFilterBase = normalized.titleFilterBase;
         state.titleSortBase = normalized.titleSortBase;
+        state.textQueryMemory = normalized.textQueryMemory;
         state.axisMemory = normalized.axisMemory;
         state.filters = normalized.filters;
         state.sortMode = normalized.sortMode;
@@ -596,6 +626,10 @@ export function createStore() {
       const wasTextAxisMode = isTextAxisMode(previousFilters.axisMode);
       const nextIsTextAxisMode = isTextAxisMode(nextAxisMode);
     
+      if (wasTextAxisMode) {
+        rememberTextQuery(previousFilters.axisMode, previousFilters.titleQuery);
+      }
+    
       if (nextIsTextAxisMode) {
         if (!wasTextAxisMode) {
           state.titleFilterBase = { ...previousFilters };
@@ -604,10 +638,9 @@ export function createStore() {
     
         state.sortMode = "title";
         nextAxisValue = "";
-        nextTitleQuery = state.sessionTitleQuery;
+        nextTitleQuery = getRememberedTextQuery(nextAxisMode);
       } else {
         if (wasTextAxisMode) {
-          state.sessionTitleQuery = previousFilters.titleQuery;
           state.sortMode = state.titleSortBase;
         }
     
@@ -637,7 +670,7 @@ export function createStore() {
     }
 
     if (isTextAxisMode(nextStateFilters.axisMode)) {
-      state.sessionTitleQuery = nextStateFilters.titleQuery;
+      rememberTextQuery(nextStateFilters.axisMode, nextStateFilters.titleQuery);
     } else if (AXIS_MEMORY_MODES.includes(nextStateFilters.axisMode)) {
       nextAxisMemory[nextStateFilters.axisMode] = nextStateFilters.axisValue;
     }
@@ -657,7 +690,7 @@ export function createStore() {
       return;
     }
 
-    state.sessionTitleQuery = state.filters.titleQuery;
+    rememberTextQuery(state.filters.axisMode, state.filters.titleQuery);
     state.filters = { ...state.titleFilterBase };
     state.titleFilterBase = null;
     state.sortMode = state.titleSortBase;
