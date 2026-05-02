@@ -694,6 +694,7 @@ export function createRenderer(store) {
   let activeChartResizeFrame = null;
   let latestChartHistory = [];
   let latestScoreChartHistory = [];
+  let skipNextEntryLampSync = false;
   let latestFilterBounds = {
     level: { min: 0, max: 15, step: 0.01, values: [] },
     splv: { min: 1, max: 12, step: 1, values: [] },
@@ -1835,15 +1836,8 @@ export function createRenderer(store) {
   });
 
   nodes.memoInput?.addEventListener("blur", () => {
-    const currentLamp = nodes.lampInput.value;
-    const currentBp = nodes.bpInput.value;
-    const currentScore = nodes.scoreInput.value;
-  
+    skipNextEntryLampSync = true;
     store.saveSongNote(nodes.memoInput.value);
-  
-    nodes.lampInput.value = currentLamp;
-    nodes.bpInput.value = currentBp;
-    nodes.scoreInput.value = currentScore;
   });
 
   nodes.backToCardButton?.addEventListener("click", () => {
@@ -2075,7 +2069,11 @@ export function createRenderer(store) {
 
       if (snapshot.selectedSong) {
         nodes.selectedSong.dataset.title = encodeURIComponent(snapshot.selectedSong.title);
-        nodes.lampInput.value = snapshot.selectedSong.bestLamp;
+      
+        if (!skipNextEntryLampSync) {
+          nodes.lampInput.value = snapshot.selectedSong.bestLamp;
+        }
+      
         nodes.bpInput.placeholder = formatBpPlaceholder(snapshot.selectedSong);
         nodes.scoreInput.placeholder = formatScorePlaceholder(snapshot.selectedSong);
         nodes.memoInput.value = snapshot.selectedSong.note ?? "";
@@ -2094,6 +2092,8 @@ export function createRenderer(store) {
       if (nodes.catalogSortSelect) {
         nodes.catalogSortSelect.value = snapshot.sortMode;
       }
+      
+      skipNextEntryLampSync = false;
     },
   };
 }
