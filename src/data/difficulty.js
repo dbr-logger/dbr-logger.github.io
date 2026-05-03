@@ -60,6 +60,7 @@ function normalizeDifficultyEntry(entry) {
     ver: normalizeString(entry.ver),
     bpm: normalizeString(entry.bpm),
     notes: Number(entry.notes) || 0,
+    scratch: Number(entry.scratch) || 0,
     comment: normalizeString(entry.comment),
     inf: normalizeString(entry.inf),
     infpack: normalizeString(entry.infpack),

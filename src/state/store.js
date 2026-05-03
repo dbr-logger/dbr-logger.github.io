@@ -250,9 +250,31 @@ function deriveSongState(song, history = []) {
 }
 
 function createDifficultyCatalogEntries(difficultyTable) {
-  return difficultyTable.entries
-    .filter((entry) => String(entry?.splv ?? "").trim() !== "新規提案")
-    .map((entry, index) => ({
+  const chartMap = new Map();
+
+  difficultyTable.entries.forEach((entry) => {
+    const chartKey = `${entry.title}|${entry.textageid || ""}`;
+    const isProposal = entry.level && entry.splv === "新規提案";
+
+    if (!chartMap.has(chartKey)) {
+      chartMap.set(chartKey, { ...entry, isProposed: isProposal });
+    } else {
+      const existing = chartMap.get(chartKey);
+      if (isProposal && !existing.isProposed) {
+        chartMap.set(chartKey, {
+          ...entry,
+          splv: existing.splv && existing.splv !== "新規提案" ? existing.splv : entry.splv,
+          isProposed: true,
+        });
+      } else if (!isProposal && existing.isProposed) {
+        if (entry.splv && entry.splv !== "新規提案") {
+          existing.splv = entry.splv;
+        }
+      }
+    }
+  });
+
+  return [...chartMap.values()].map((entry, index) => ({
     id: `difficulty:${entry.title}:${entry.textageid || "none"}:${entry.splv || "none"}:${entry.level || "none"}:${index}`,
     title: entry.title,
     level: entry.level,
@@ -267,6 +289,7 @@ function createDifficultyCatalogEntries(difficultyTable) {
     acdelete: Boolean(entry.acdelete),
     notes: Number(entry.notes) || 0,
     textageid: entry.textageid,
+    isProposed: entry.isProposed ?? false,
     chartType: entry.splv || entry.level ? "difficulty" : "difficulty-raw",
     initialLamp: "NO PLAY",
     initialBestBp: null,
@@ -905,6 +928,9 @@ export function createStore() {
         record.score === null || record.score === undefined ? best : Math.max(best, record.score)
       ), Number.NEGATIVE_INFINITY);
       const storedTextageKey = history.find((record) => record.textageKey)?.textageKey ?? "";
+      const textageid = difficultyTextageIndex.get(title) ?? "";
+      const suffix = title.slice(-3);
+      const latestTextageKey = textageid && /^\([A-Z]\)$/.test(suffix) ? `${textageid}${suffix}` : storedTextageKey;
 
       return {
         title,
@@ -912,8 +938,8 @@ export function createStore() {
         bestLamp,
         bestBp: Number.isFinite(bestBp) ? bestBp : null,
         bestScore: Number.isFinite(bestScore) ? bestScore : null,
-        textageid: difficultyTextageIndex.get(title) ?? "",
-        textageKey: storedTextageKey,
+        textageid,
+        textageKey: latestTextageKey,
       };
     });
 
@@ -998,11 +1024,47 @@ export function createStore() {
   async function importDifficultyTable() {
     const result = await fetchDifficultyTable();
     state.difficultyTable = result;
+    migrateRecordTitlesByTextageKey(result);
+    updateTextageKeyFromDifficultyTable(result);
     invalidateCatalogVisibleOrder();
     state.statusMessage = `難易度表を読み込みました。${result.titleCount}曲 / ${result.entries.length}譜面`;
     persist();
     emit();
     return result;
+  }
+
+  function migrateRecordTitlesByTextageKey(difficultyTable) {
+    const textageKeyToNewTitle = new Map();
+    difficultyTable.entries.forEach((entry) => {
+      if (!entry.textageid || !entry.title) return;
+      const suffix = entry.title.slice(-3);
+      if (!/^\([A-Z]\)$/.test(suffix)) return;
+      const key = `${entry.textageid}${suffix}`;
+      textageKeyToNewTitle.set(key, entry.title);
+    });
+
+    state.records = state.records.map((record) => {
+      if (!record.textageKey) return record;
+      const newTitle = textageKeyToNewTitle.get(record.textageKey);
+      if (!newTitle || newTitle === record.title) return record;
+      return { ...record, title: newTitle };
+    });
+  }
+
+  function updateTextageKeyFromDifficultyTable(difficultyTable) {
+    const titleToTextageKey = new Map();
+    difficultyTable.entries.forEach((entry) => {
+      if (!entry.textageid || !entry.title) return;
+      const suffix = entry.title.slice(-3);
+      if (!/^\([A-Z]\)$/.test(suffix)) return;
+      titleToTextageKey.set(entry.title, `${entry.textageid}${suffix}`);
+    });
+
+    state.records = state.records.map((record) => {
+      const newTextageKey = titleToTextageKey.get(record.title);
+      if (!newTextageKey || newTextageKey === record.textageKey) return record;
+      return { ...record, textageKey: newTextageKey };
+    });
   }
 
   function getSnapshot() {
