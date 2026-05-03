@@ -1,6 +1,7 @@
 import { LAMP_OPTIONS } from "../constants.js?v=20260430-4";
 import { renderBpChart, renderScoreChart } from "./chart.js?v=20260430-4";
 import { formatIsoDate, todayIso } from "../utils/date.js?v=20260430-4";
+import { renderProposalButton } from "./proposal.js";
 
 const LAMP_COLORS = {
   "NO PLAY": "#d7dadd",
@@ -635,13 +636,15 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
 
   catalogContainer.innerHTML = songs.map((song) => {
     const selectedClass = song.title === selectedTitle ? "is-selected" : "";
+    const proposedClass = song.isProposed ? "is-proposed" : "";
     const encodedTitle = encodeURIComponent(song.title);
     return `
-      <button class="song-card ${selectedClass}" type="button" data-title="${encodedTitle}">
+      <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}">
         <div class="song-card-meta">
           ${badge(formatDifficultyLabel(song), "pill-level")}
           ${formatSplvLabel(song) ? badge(formatSplvLabel(song), "pill-neutral") : ""}
           ${badge(song.bestLamp, "pill-lamp")}
+          ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
         </div>
         <p class="song-card-title">${escapeHtml(song.title)}</p>
         ${song.note ? `<p class="song-card-note">${escapeHtml(song.note.replace(/\s+/g, " ").trim())}</p>` : ""}
@@ -2045,6 +2048,11 @@ export function createRenderer(store) {
       renderPagination(nodes.catalogPaginationTop, snapshot.pagination);
       renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
       renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs);
+      renderProposalButton(
+        nodes.selectedSong,
+        snapshot.selectedSong,
+        snapshot.difficultyTable
+      );
       renderHistory(nodes.history, snapshot.selectedHistory);
       latestChartHistory = snapshot.selectedHistory.slice().reverse();
       latestScoreChartHistory = snapshot.selectedHistory
