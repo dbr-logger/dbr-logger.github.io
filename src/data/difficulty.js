@@ -60,6 +60,7 @@ function normalizeDifficultyEntry(entry) {
     ver: normalizeString(entry.ver),
     bpm: normalizeString(entry.bpm),
     notes: Number(entry.notes) || 0,
+    scratch: Number(entry.scratch) || 0,
     comment: normalizeString(entry.comment),
     inf: normalizeString(entry.inf),
     infpack: normalizeString(entry.infpack),
@@ -72,7 +73,12 @@ function normalizeDifficultyEntry(entry) {
 }
 
 async function fetchJson(url) {
-  const response = await fetch(url, { cache: "no-store" });
+  let response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch (e) {
+    throw new Error("難易度表データの取得に失敗しました（ネットワークエラー）");
+  }
   if (!response.ok) {
     throw new Error(`難易度表データの取得に失敗しました: ${response.status} ${response.statusText}`);
   }

@@ -1257,3 +1257,13 @@ td {
   margin: 0 auto;
   line-height: 1.75;
 }
+
+.song-card.is-proposed {
+  background: rgba(255, 230, 100, 0.18);
+  border-color: rgba(200, 160, 0, 0.35);
+}
+
+.pill-proposed {
+  background: rgba(220, 170, 0, 0.18);
+  color: #7a5a00;
+}

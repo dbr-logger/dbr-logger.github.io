@@ -1,6 +1,7 @@
 import { LAMP_OPTIONS } from "../constants.js?v=20260430-4";
 import { renderBpChart, renderScoreChart } from "./chart.js?v=20260430-4";
 import { formatIsoDate, todayIso } from "../utils/date.js?v=20260430-4";
+import { renderProposalButton } from "./proposal.js";
 
 const LAMP_COLORS = {
   "NO PLAY": "#d7dadd",
@@ -635,13 +636,15 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
 
   catalogContainer.innerHTML = songs.map((song) => {
     const selectedClass = song.title === selectedTitle ? "is-selected" : "";
+    const proposedClass = song.isProposed ? "is-proposed" : "";
     const encodedTitle = encodeURIComponent(song.title);
     return `
-      <button class="song-card ${selectedClass}" type="button" data-title="${encodedTitle}">
+      <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}">
         <div class="song-card-meta">
           ${badge(formatDifficultyLabel(song), "pill-level")}
           ${formatSplvLabel(song) ? badge(formatSplvLabel(song), "pill-neutral") : ""}
           ${badge(song.bestLamp, "pill-lamp")}
+          ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
         </div>
         <p class="song-card-title">${escapeHtml(song.title)}</p>
         ${song.note ? `<p class="song-card-note">${escapeHtml(song.note.replace(/\s+/g, " ").trim())}</p>` : ""}
@@ -1848,6 +1851,9 @@ export function createRenderer(store) {
     const originalLabel = nodes.difficultyImportButton.textContent;
     nodes.difficultyImportButton.disabled = true;
     nodes.difficultyImportButton.textContent = "読込中...";
+    const originalText = nodes.exportButton.textContent;
+    nodes.exportButton.disabled = true;
+    nodes.exportButton.textContent = "読込中...";
 
     try {
       const result = await store.importDifficultyTable();
@@ -1858,6 +1864,8 @@ export function createRenderer(store) {
     } finally {
       nodes.difficultyImportButton.disabled = false;
       nodes.difficultyImportButton.textContent = originalLabel;
+      nodes.exportButton.disabled = false;
+      nodes.exportButton.textContent = originalText;
     }
   });
 
@@ -1911,7 +1919,31 @@ export function createRenderer(store) {
     }
   });
 
-  nodes.exportButton.addEventListener("click", () => {
+  nodes.exportButton.addEventListener("click", async () => {
+    const snapshot = store.getSnapshot();
+    const importedAt = snapshot.difficultyTable?.importedAt;
+    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+    const isStale = !importedAt || (Date.now() - new Date(importedAt).getTime() >= TWELVE_HOURS_MS);
+
+    if (isStale) {
+      const originalLabel = nodes.difficultyImportButton.textContent;
+      nodes.difficultyImportButton.disabled = true;
+      nodes.difficultyImportButton.textContent = "読込中...";
+      const originalText = nodes.exportButton.textContent;
+      nodes.exportButton.disabled = true;
+      nodes.exportButton.textContent = "読込中...";
+      try {
+        await store.importDifficultyTable();
+      } catch (error) {
+          window.alert("難易度表の読み込みに失敗しました。読み込みせずJSONを書き出します。");
+      } finally {
+        nodes.difficultyImportButton.disabled = false;
+        nodes.difficultyImportButton.textContent = originalLabel;
+        nodes.exportButton.disabled = false;
+        nodes.exportButton.textContent = originalText;
+      }
+    }
+
     const payload = store.getExportJson();
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json;charset=utf-8" });
@@ -2045,6 +2077,11 @@ export function createRenderer(store) {
       renderPagination(nodes.catalogPaginationTop, snapshot.pagination);
       renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
       renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs);
+      renderProposalButton(
+        nodes.selectedSong,
+        snapshot.selectedSong,
+        snapshot.difficultyTable
+      );
       renderHistory(nodes.history, snapshot.selectedHistory);
       latestChartHistory = snapshot.selectedHistory.slice().reverse();
       latestScoreChartHistory = snapshot.selectedHistory
