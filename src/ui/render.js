@@ -1851,6 +1851,9 @@ export function createRenderer(store) {
     const originalLabel = nodes.difficultyImportButton.textContent;
     nodes.difficultyImportButton.disabled = true;
     nodes.difficultyImportButton.textContent = "読込中...";
+    const originalText = nodes.exportButton.textContent;
+    nodes.exportButton.disabled = true;
+    nodes.exportButton.textContent = "読込中...";
 
     try {
       const result = await store.importDifficultyTable();
@@ -1861,6 +1864,8 @@ export function createRenderer(store) {
     } finally {
       nodes.difficultyImportButton.disabled = false;
       nodes.difficultyImportButton.textContent = originalLabel;
+      nodes.exportButton.disabled = false;
+      nodes.exportButton.textContent = originalText;
     }
   });
 
@@ -1914,7 +1919,31 @@ export function createRenderer(store) {
     }
   });
 
-  nodes.exportButton.addEventListener("click", () => {
+  nodes.exportButton.addEventListener("click", async () => {
+    const snapshot = store.getSnapshot();
+    const importedAt = snapshot.difficultyTable?.importedAt;
+    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+    const isStale = !importedAt || (Date.now() - new Date(importedAt).getTime() >= TWELVE_HOURS_MS);
+
+    if (isStale) {
+      const originalLabel = nodes.difficultyImportButton.textContent;
+      nodes.difficultyImportButton.disabled = true;
+      nodes.difficultyImportButton.textContent = "読込中...";
+      const originalText = nodes.exportButton.textContent;
+      nodes.exportButton.disabled = true;
+      nodes.exportButton.textContent = "読込中...";
+      try {
+        await store.importDifficultyTable();
+      } catch (error) {
+          window.alert("難易度表の読み込みに失敗しました。読み込みせずJSONを書き出します。");
+      } finally {
+        nodes.difficultyImportButton.disabled = false;
+        nodes.difficultyImportButton.textContent = originalLabel;
+        nodes.exportButton.disabled = false;
+        nodes.exportButton.textContent = originalText;
+      }
+    }
+
     const payload = store.getExportJson();
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json;charset=utf-8" });
