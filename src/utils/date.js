@@ -6,6 +6,17 @@ export function todayIso() {
   return `${year}-${month}-${day}`;
 }
 
+export function formatLocalDateTime(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  const seconds = String(date.getSeconds()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+}
+
 export function formatIsoDate(isoDate) {
   if (!isoDate) {
     return "-";
@@ -19,7 +30,7 @@ export function compareIsoDates(a, b) {
   return a.localeCompare(b);
 }
 
-export function parseImportedDateLabel(label, referenceDate = new Date()) {
+export function parseImportedDateLabel(label, referenceDateIso = todayIso()) {
   const match = label.match(/^BP\((\d{1,2})\/(\d{1,2})\)$/);
 
   if (!match) {
@@ -28,10 +39,14 @@ export function parseImportedDateLabel(label, referenceDate = new Date()) {
 
   const month = Number(match[1]);
   const day = Number(match[2]);
-  let year = referenceDate.getFullYear();
 
-  const candidate = new Date(year, month - 1, day);
-  if (candidate.getTime() > referenceDate.getTime()) {
+  const referenceIso = referenceDateIso instanceof Date
+    ? `${referenceDateIso.getFullYear()}-${String(referenceDateIso.getMonth() + 1).padStart(2, "0")}-${String(referenceDateIso.getDate()).padStart(2, "0")}`
+    : String(referenceDateIso ?? todayIso());
+  let year = Number(referenceIso.slice(0, 4));
+  const candidateIso = `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+
+  if (candidateIso > referenceIso) {
     year -= 1;
   }
 

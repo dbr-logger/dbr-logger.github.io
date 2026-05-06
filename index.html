@@ -46,10 +46,23 @@
         });
       })();
     </script>
+    <script>
+      (function () {
+        const KEY = "dbr-theme";
+        try {
+          const storedTheme = window.localStorage.getItem(KEY);
+          if (storedTheme === "dark") {
+            document.documentElement.dataset.theme = "dark";
+          }
+        } catch {
+          // ignore
+        }
+      })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700;800&family=Noto+Sans+JP:wght@400;700;800&display=swap" rel="stylesheet" />
-    <link id="app-stylesheet" rel="stylesheet" href="./styles.css?v=20260430-4" />
+    <link id="app-stylesheet" rel="stylesheet" href="./styles.css?v=20260507-1" />
   </head>
   <body>
     <div class="app-shell">
@@ -58,10 +71,23 @@
           <p class="eyebrow">DBR Logger</p>
           <h1>DBR進捗管理</h1>
           <p class="hero-manual-link">
-            <a href="./manual.html">マニュアル</a>
+            <a href="./manual.html" target="_blank" rel="noopener noreferrer">マニュアル</a>
           </p>
         </div>
         <div class="hero-actions">
+          <button id="theme-toggle-button" class="button button-tertiary theme-toggle-button" type="button" aria-label="ダークテーマに切り替え" aria-pressed="false" title="ダークテーマに切り替え">
+            <span class="theme-toggle-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                <path
+                  d="M21 12.8A8.9 8.9 0 1 1 11.2 3a7.2 7.2 0 0 0 9.8 9.8Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-linejoin="round"
+                  stroke-width="1.8"
+                ></path>
+              </svg>
+            </span>
+          </button>
           <button id="csv-import-button" class="button button-secondary" type="button">CSV読み込み</button>
           <button id="csv-export-button" class="button button-secondary" type="button">CSVを書き出す</button>
           <button id="import-button" class="button button-secondary" type="button">JSON読み込み</button>
@@ -75,17 +101,28 @@
       <main class="layout">
         <section class="panel">
           <div class="panel-header">
-            <div>
-              <p class="eyebrow">Overview</p>
+            <div class="section-heading-group">
+              <div class="section-toggle-row">
+                <button id="summary-toggle-button" class="summary-toggle-button" type="button" aria-expanded="true" aria-label="Overviewを折りたたむ" title="Overviewを折りたたむ">
+                  <span class="summary-toggle-icon" aria-hidden="true">▾</span>
+                </button>
+                <button id="summary-toggle-text-button" class="summary-toggle-text-button eyebrow" type="button" aria-expanded="true" aria-label="Overviewを折りたたむ" title="Overviewを折りたたむ">Overview</button>
+              </div>
               <h2>全体サマリー</h2>
             </div>
           </div>
-          <div id="summary-cards" class="summary-grid"></div>
-          <button id="summary-filters-toggle" class="summary-filters-toggle" type="button" aria-expanded="false">
-            <span class="summary-filters-toggle-icon" aria-hidden="true">▸</span>
-            <span class="summary-filters-toggle-label">フィルタを表示</span>
-          </button>
-          <div id="summary-filters-panel" class="filters-panel"></div>
+          <div id="summary-content" class="summary-content">
+            <div id="summary-cards" class="summary-grid"></div>
+            <button id="summary-filters-toggle" class="summary-filters-toggle" type="button" aria-expanded="false">
+              <span class="summary-filters-toggle-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" focusable="false" aria-hidden="true">
+                  <path d="M7.25 4.75L13.25 10L7.25 15.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+                </svg>
+              </span>
+              <span class="summary-filters-toggle-label">フィルタを表示</span>
+            </button>
+            <div id="summary-filters-panel" class="filters-panel"></div>
+          </div>
         </section>
 
         <section class="layout-two-column">
@@ -125,29 +162,31 @@
 
               <form id="record-form" class="record-form">
                 <div class="form-row">
-                  <label class="field">
+                  <div class="field">
                     <span>保存日</span>
-                    <input id="record-date" type="text" readonly />
-                  </label>
-                  <label class="field field-select">
+                    <input id="record-date" type="text" readonly aria-label="保存日" />
+                  </div>
+                  <div class="field">
                     <span>クリア</span>
-                    <select id="lamp-input" required></select>
-                  </label>
+                    <div class="field-select entry-select-wrap">
+                      <select id="lamp-input" aria-label="クリア"></select>
+                    </div>
+                  </div>
                 </div>
                 <div class="form-row">
-                  <label class="field">
+                  <div class="field">
                     <span>BP</span>
-                    <input id="bp-input" type="number" min="0" inputmode="numeric" required />
-                  </label>
-                  <label class="field">
+                    <input id="bp-input" type="number" min="0" inputmode="numeric" aria-label="BP" />
+                  </div>
+                  <div class="field">
                     <span>スコア</span>
-                    <input id="score-input" type="number" min="0" inputmode="numeric" required />
-                  </label>
+                    <input id="score-input" type="number" min="0" inputmode="numeric" aria-label="スコア" />
+                  </div>
                 </div>
-                <label class="field field-grow">
+                <div class="field field-grow">
                   <span>メモ</span>
-                  <input id="memo-input" type="text" maxlength="200" placeholder="メモを入力" />
-                </label>
+                  <input id="memo-input" type="text" maxlength="200" placeholder="メモを入力" aria-label="メモ" />
+                </div>
                 <div class="form-actions">
                   <div class="action-group">
                     <button class="button button-primary" type="submit">保存する</button>
@@ -200,12 +239,13 @@
                 </table>
               </div>
             </section>
+
           </section>
         </section>
       </main>
     </div>
     <div id="floating-axis-filter" class="floating-axis-filter"></div>
 
-    <script type="module" src="./src/main.js?v=20260430-4"></script>
+    <script type="module" src="./src/main.js?v=20260507-1"></script>
   </body>
 </html>

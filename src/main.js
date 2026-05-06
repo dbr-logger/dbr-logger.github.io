@@ -1,4 +1,4 @@
-const FALLBACK_BUILD_VERSION = "20260430-4";
+const FALLBACK_BUILD_VERSION = "20260507-1";
 
 async function resolveBuildVersion() {
   try {

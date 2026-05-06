@@ -24,6 +24,19 @@ function compareByTitle(a, b) {
   return a.title.localeCompare(b.title, "ja");
 }
 
+function hasOwn(section, key) {
+  return Object.prototype.hasOwnProperty.call(section ?? {}, key);
+}
+
+function parseOptionalInteger(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : Number.NaN;
+}
+
 function buildTextageKey(song) {
   const explicitKey = String(song.textageKey ?? "").trim();
   if (explicitKey) {
@@ -49,22 +62,27 @@ export function exportDbrJson(songStates) {
   };
 
   songStates
-    .filter((song) => song.entryCount > 0 && song.bestBp !== null)
+    .filter((song) => song.entryCount > 0)
     .sort(compareByTitle)
     .forEach((song) => {
       const lampCode = LAMP_EXPORT_CODES[song.bestLamp] ?? null;
       const textageKey = buildTextageKey(song);
 
-      if (!lampCode || !textageKey) {
-        return;
+      if (Number.isFinite(song.bestBp)) {
+        payload.bp[`bp_${song.title}`] = String(song.bestBp);
       }
 
-      payload.bp[`bp_${song.title}`] = String(song.bestBp);
-      payload.lamp[`lamp_${song.title}`] = lampCode;
-      if (song.bestScore !== null) {
+      if (lampCode) {
+        payload.lamp[`lamp_${song.title}`] = lampCode;
+      }
+
+      if (Number.isFinite(song.bestScore)) {
         payload.score[`score_${song.title}`] = String(song.bestScore);
       }
-      payload.textageKey[song.title] = textageKey;
+
+      if (textageKey) {
+        payload.textageKey[song.title] = textageKey;
+      }
     });
 
   return payload;
@@ -108,30 +126,40 @@ export function importDbrJson(payload, referenceDate) {
   });
 
   const records = [...titles].sort((a, b) => a.localeCompare(b, "ja")).map((title) => {
-    const bp = Number(parseSectionValue(bpSection, "bp_", title));
-    const score = Number(parseSectionValue(scoreSection, "score_", title));
-    const lampCode = String(parseSectionValue(lampSection, "lamp_", title) ?? "").trim();
-    const lamp = LAMP_IMPORT_CODES[lampCode];
+    const bpKey = `bp_${title}`;
+    const lampKey = `lamp_${title}`;
+    const scoreKey = `score_${title}`;
+    const textageKey = String(textageKeySection[title] ?? "").trim();
 
-    if (!Number.isInteger(bp) || bp < 0) {
+    const hasBp = hasOwn(bpSection, bpKey);
+    const hasLamp = hasOwn(lampSection, lampKey);
+    const hasScore = hasOwn(scoreSection, scoreKey);
+
+    const bp = hasBp ? parseOptionalInteger(parseSectionValue(bpSection, "bp_", title)) : null;
+    const score = hasScore ? parseOptionalInteger(parseSectionValue(scoreSection, "score_", title)) : null;
+    const lampRaw = hasLamp ? String(parseSectionValue(lampSection, "lamp_", title) ?? "").trim() : "";
+
+    if (hasBp && bp === null) {
       return null;
     }
 
-    if (!Number.isInteger(score) || score < 0) {
+    if (hasScore && score === null) {
       return null;
     }
 
-    if (!lamp) {
+    if (hasLamp && lampRaw && lampRaw !== "NO PLAY" && !LAMP_IMPORT_CODES[lampRaw]) {
       return null;
     }
 
     return {
       title,
       date: referenceDate,
-      lamp,
+      lamp: lampRaw === "NO PLAY"
+        ? "NO PLAY"
+        : (lampRaw ? LAMP_IMPORT_CODES[lampRaw] : "NO PLAY"),
       bp,
       score,
-      textageKey: String(textageKeySection[title] ?? "").trim(),
+      textageKey,
       source: "json-import",
     };
   }).filter(Boolean);

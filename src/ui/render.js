@@ -1,17 +1,18 @@
-import { LAMP_OPTIONS } from "../constants.js?v=20260430-4";
-import { renderBpChart, renderScoreChart } from "./chart.js?v=20260430-4";
-import { formatIsoDate, todayIso } from "../utils/date.js?v=20260430-4";
+import { LAMP_OPTIONS } from "../constants.js?v=20260507-1";
+import { renderBpChart, renderScoreChart } from "./chart.js?v=20260507-1";
+import { formatIsoDate, todayIso } from "../utils/date.js?v=20260507-1";
 import { renderProposalButton } from "./proposal.js";
+import { escapeHtml } from "../utils/html.js";
 
 const LAMP_COLORS = {
-  "NO PLAY": "#d7dadd",
-  FAILED: "#e06767",
-  ASSIST: "#ccb9f4",
-  EASY: "#addfb4",
-  CLEAR: "#90cdf1",
-  HARD: "#f0a29c",
-  EXH: "#f0df8d",
-  FC: "#2f3236",
+  "NO PLAY": "var(--lamp-no-play)",
+  FAILED: "var(--lamp-failed)",
+  ASSIST: "var(--lamp-assist)",
+  EASY: "var(--lamp-easy)",
+  CLEAR: "var(--lamp-clear)",
+  HARD: "var(--lamp-hard)",
+  EXH: "var(--lamp-exh)",
+  FC: "var(--lamp-fc)",
 };
 const RECOMMEND_OPTIONS = [
   { value: "", label: "－" },
@@ -22,6 +23,7 @@ const RECOMMEND_OPTIONS = [
 ];
 const SUMMARY_LAMP_DOUBLE_CLICK_MS = 220;
 const SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD = 40;
+const THEME_STORAGE_KEY = "dbr-theme";
 const AXIS_OPTIONS = [
   { value: "level", label: "Lv." },
   { value: "splv", label: "SPLv." },
@@ -34,13 +36,97 @@ function isTextAxisMode(axisMode) {
   return axisMode === "title" || axisMode === "memo";
 }
 
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+function getCurrentTheme() {
+  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function persistTheme(theme) {
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // ignore
+  }
+}
+
+function applyTheme(theme) {
+  if (theme === "dark") {
+    document.documentElement.dataset.theme = "dark";
+  } else {
+    delete document.documentElement.dataset.theme;
+  }
+}
+
+function syncThemeToggleButton(button, theme) {
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const isDark = theme === "dark";
+  button.innerHTML = isDark
+    ? `
+      <span class="theme-toggle-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.25" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+          <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8">
+            <path d="M12 1.75v2.2"></path>
+            <path d="M12 20.05v2.2"></path>
+            <path d="M4.95 4.95l1.56 1.56"></path>
+            <path d="M17.49 17.49l1.56 1.56"></path>
+            <path d="M1.75 12h2.2"></path>
+            <path d="M20.05 12h2.2"></path>
+            <path d="M4.95 19.05l1.56-1.56"></path>
+            <path d="M17.49 6.51l1.56-1.56"></path>
+          </g>
+        </svg>
+      </span>
+    `
+    : `
+      <span class="theme-toggle-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+          <path
+            d="M21 12.8A8.9 8.9 0 1 1 11.2 3a7.2 7.2 0 0 0 9.8 9.8Z"
+            fill="none"
+            stroke="currentColor"
+            stroke-linejoin="round"
+            stroke-width="1.8"
+          ></path>
+        </svg>
+      </span>
+    `;
+  button.setAttribute("aria-label", isDark ? "ライトテーマに切り替え" : "ダークテーマに切り替え");
+  button.setAttribute("aria-pressed", String(isDark));
+  button.title = isDark ? "ライトテーマに切り替え" : "ダークテーマに切り替え";
+}
+
+function createChevronIconMarkup(className) {
+  return `
+    <span class="${className}" aria-hidden="true">
+      <svg viewBox="0 0 20 20" focusable="false" aria-hidden="true">
+        <path d="M7.25 4.75L13.25 10L7.25 15.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+      </svg>
+    </span>
+  `;
+}
+
+function syncSummaryToggleButton(button, isOpen) {
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  button.innerHTML = createChevronIconMarkup("summary-toggle-icon");
+  button.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  button.setAttribute("aria-label", isOpen ? "Overviewを折りたたむ" : "Overviewを展開する");
+  button.title = isOpen ? "Overviewを折りたたむ" : "Overviewを展開する";
+}
+
+function syncSummaryToggleText(button, isOpen) {
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  button.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  button.setAttribute("aria-label", isOpen ? "Overviewを折りたたむ" : "Overviewを展開する");
+  button.title = isOpen ? "Overviewを折りたたむ" : "Overviewを展開する";
 }
 
 function badge(label, className) {
@@ -403,26 +489,21 @@ function renderSummaryBands(summary) {
   }
 
   const rows = summary.bands.map((band) => {
-    let offset = 0;
     const segmentOrder = [...LAMP_OPTIONS].reverse();
     const segments = (band.total === 0 ? ["NO PLAY"] : segmentOrder).map((lamp) => {
       const count = band.lampCounts[lamp] ?? 0;
-      const width = band.total === 0
-        ? 100
-        : (count / band.total) * 100;
-
-      if (width <= 0) {
+      if (count <= 0 && band.total !== 0) {
         return "";
       }
 
+      const flexGrow = band.total === 0 ? 1 : count;
       const segment = `
         <span
           class="summary-band-segment"
-          style="left:${offset}%;width:${width}%;background:${LAMP_COLORS[lamp]}"
+          style="flex:${flexGrow} 1 0px;background:${LAMP_COLORS[lamp]}"
           aria-hidden="true"
         ></span>
       `;
-      offset += width;
       return segment;
     }).join("");
 
@@ -551,10 +632,10 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
   
   const controlMarkup = isTextAxisMode(filters.axisMode)
     ? `
-      <label class="floating-filter-search">
+      <div class="field floating-filter-search">
         <span>${escapeHtml(searchLabel)}</span>
         <input type="search" data-axis-query value="${escapeHtml(filters.titleQuery)}" placeholder="${escapeHtml(searchPlaceholder)}" />
-      </label>
+      </div>
     `
     : `
       <div class="floating-filter-slider-block">
@@ -590,11 +671,13 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
           <h3>絞り込み軸</h3>
         </div>
       </div>
-      <div class="field field-select floating-filter-axis-select">
+      <div class="field floating-filter-axis-select">
         <span>絞り込み軸</span>
-        <select data-axis-mode>
-          ${AXIS_OPTIONS.map((option) => `<option value="${option.value}" ${option.value === filters.axisMode ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
-        </select>
+        <div class="field-select quickfilter-select-wrap">
+          <select data-axis-mode>
+            ${AXIS_OPTIONS.map((option) => `<option value="${option.value}" ${option.value === filters.axisMode ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+          </select>
+        </div>
       </div>
       ${controlMarkup}
     </section>
@@ -604,10 +687,14 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
 }
 
 function renderSelectedSong(selectedSongContainer, selectedSong, songs) {
+  selectedSongContainer.classList.remove("is-proposed");
+
   if (!selectedSong || songs.length === 0) {
     selectedSongContainer.innerHTML = '<div class="empty-state">表示できる曲がありません。</div>';
     return;
   }
+
+  selectedSongContainer.classList.toggle("is-proposed", Boolean(selectedSong.isProposed));
 
   const historyCountBadge = selectedSong.entryCount > 0
     ? badge(`履歴 ${selectedSong.entryCount} 件`, "pill-neutral")
@@ -616,7 +703,9 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs) {
   selectedSongContainer.innerHTML = `
     <p class="eyebrow">Selected Song</p>
     <h3>${escapeHtml(selectedSong.title)}</h3>
+    ${selectedSong.note ? `<p class="selected-song-note">${escapeHtml(selectedSong.note.replace(/\s+/g, " ").trim())}</p>` : ""}
     <div class="selected-song-meta">
+      ${selectedSong.isProposed ? badge("新規提案中", "pill-proposed") : ""}
       ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
       ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-neutral") : ""}
       ${badge(selectedSong.bestLamp, "pill-lamp")}
@@ -641,10 +730,10 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
     return `
       <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}">
         <div class="song-card-meta">
+          ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
           ${badge(formatDifficultyLabel(song), "pill-level")}
           ${formatSplvLabel(song) ? badge(formatSplvLabel(song), "pill-neutral") : ""}
           ${badge(song.bestLamp, "pill-lamp")}
-          ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
         </div>
         <p class="song-card-title">${escapeHtml(song.title)}</p>
         ${song.note ? `<p class="song-card-note">${escapeHtml(song.note.replace(/\s+/g, " ").trim())}</p>` : ""}
@@ -666,10 +755,10 @@ function renderHistory(historyContainer, records) {
 
   historyContainer.innerHTML = records.map((record) => `
     <tr>
-      <td>${formatIsoDate(record.date)}</td>
+      <td>${escapeHtml(formatIsoDate(record.date))}</td>
       <td>${escapeHtml(record.lamp)}</td>
-      <td>${record.bp}</td>
-      <td>${formatScore(record.score)}</td>
+      <td>${escapeHtml(formatBp(record.bp))}</td>
+      <td>${escapeHtml(formatScore(record.score))}</td>
     </tr>
   `).join("");
 }
@@ -697,7 +786,6 @@ export function createRenderer(store) {
   let activeChartResizeFrame = null;
   let latestChartHistory = [];
   let latestScoreChartHistory = [];
-  let skipNextEntryLampSync = false;
   let latestFilterBounds = {
     level: { min: 0, max: 15, step: 0.01, values: [] },
     splv: { min: 1, max: 12, step: 1, values: [] },
@@ -709,6 +797,8 @@ export function createRenderer(store) {
   let deferredFilterTimer = null;
   let deferredFilterRevision = 0;
   let pendingCatalogBottomLock = null;
+  let floatingAxisModeCommitTimer = null;
+  let summaryOpen = true;
   let summaryFiltersOpen = false;
   let floatingFilterOpen = false;
   let floatingAxisPreviewMode = null;
@@ -807,6 +897,22 @@ export function createRenderer(store) {
 
   function scrollCatalogPanelIntoView() {
     scrollElementIntoView(nodes.catalogPanel ?? nodes.catalog);
+  }
+
+  function resetFloatingFilterFocusState() {
+    floatingQueryFocused = false;
+    floatingQueryRestoreFocus = false;
+    syncQueryScrollLockState();
+  }
+
+  function closeFloatingFilter({ preserveScroll = false } = {}) {
+    resetFloatingFilterFocusState();
+    floatingFilterOpen = false;
+    renderFloatingFilterShell();
+    syncQueryScrollLockState();
+    if (!preserveScroll) {
+      scrollCatalogPanelIntoView();
+    }
   }
 
   function canAutoScrollElementUpward(element, offset = getScrollOffset()) {
@@ -927,6 +1033,7 @@ export function createRenderer(store) {
 
     nodes.floatingAxisFilter.classList.toggle("is-docked-top", floatingDockSide === "top");
     nodes.floatingAxisFilter.classList.toggle("is-docked-bottom", floatingDockSide === "bottom");
+    nodes.floatingAxisFilter.classList.toggle("is-at-bottom", isAtPageBottom());
   }
 
   function isDifficultyImportButtonTopVisible() {
@@ -936,6 +1043,12 @@ export function createRenderer(store) {
 
     const rect = nodes.csvImportButton.getBoundingClientRect();
     return rect.top >= 0 && rect.top <= window.innerHeight;
+  }
+
+  function isAtPageBottom() {
+    const doc = document.documentElement;
+    const scrollBottom = window.scrollY + window.innerHeight;
+    return scrollBottom >= doc.scrollHeight - 2;
   }
 
   function syncFloatingDockSideFromViewport() {
@@ -982,9 +1095,65 @@ export function createRenderer(store) {
     nodes.floatingAxisFilter.style.width = "";
   }
 
+  function setButtonLoading(button, isLoading, loadingText = "読み込み中...") {
+    if (!button) {
+      return;
+    }
+
+    if (isLoading) {
+      if (!("originalText" in button.dataset)) {
+        button.dataset.originalText = button.textContent ?? "";
+      }
+
+      button.disabled = true;
+      button.textContent = loadingText;
+      button.classList.add("is-busy");
+      return;
+    }
+
+    button.disabled = false;
+    button.textContent = button.dataset.originalText || button.textContent;
+    button.classList.remove("is-busy");
+    delete button.dataset.originalText;
+  }
+
+  function lockHeroButtonsExcept(activeButton) {
+    document.querySelectorAll(".hero-actions .button").forEach((button) => {
+      if (button === activeButton) {
+        return;
+      }
+
+      if ("disabled" in button) {
+        button.disabled = true;
+      }
+
+      button.classList.add("is-locked");
+      button.setAttribute("aria-disabled", "true");
+    });
+  }
+
+  function clearHeroButtonStates() {
+    document.querySelectorAll(".hero-actions .button").forEach((button) => {
+      if ("disabled" in button) {
+        button.disabled = false;
+      }
+
+      button.classList.remove("is-busy", "is-locked");
+      button.removeAttribute("aria-disabled");
+
+      if ("originalText" in button.dataset) {
+        button.textContent = button.dataset.originalText;
+        delete button.dataset.originalText;
+      }
+    });
+  }
+
   const nodes = {
     summaryPanel: document.querySelector("#summary-cards")?.closest(".panel"),
+    summaryContent: document.querySelector("#summary-content"),
     summary: document.querySelector("#summary-cards"),
+    summaryToggleButton: document.querySelector("#summary-toggle-button"),
+    summaryToggleTextButton: document.querySelector("#summary-toggle-text-button"),
     summaryFiltersToggle: document.querySelector("#summary-filters-toggle"),
     summaryFiltersPanel: document.querySelector("#summary-filters-panel"),
     floatingAxisFilter: document.querySelector("#floating-axis-filter"),
@@ -994,6 +1163,7 @@ export function createRenderer(store) {
     catalogPaginationTop: document.querySelector("#catalog-pagination-top"),
     catalogPaginationBottom: document.querySelector("#catalog-pagination-bottom"),
     catalog: document.querySelector("#song-catalog"),
+    themeToggleButton: document.querySelector("#theme-toggle-button"),
     selectedSong: document.querySelector("#selected-song"),
     recordForm: document.querySelector("#record-form"),
     recordDate: document.querySelector("#record-date"),
@@ -1016,11 +1186,40 @@ export function createRenderer(store) {
     history: document.querySelector("#history-body"),
   };
 
-  nodes.lampInput.innerHTML = LAMP_OPTIONS.map((lamp) => `<option value="${lamp}">${lamp}</option>`).join("");
+  nodes.summaryPanel?.classList.add("summary-overview-panel");
+
+  nodes.lampInput.innerHTML = LAMP_OPTIONS.map((lamp) => `<option value="${escapeHtml(lamp)}">${escapeHtml(lamp)}</option>`).join("");
+  syncThemeToggleButton(nodes.themeToggleButton, getCurrentTheme());
+  syncSummaryToggleButton(nodes.summaryToggleButton, summaryOpen);
+  syncSummaryToggleText(nodes.summaryToggleTextButton, summaryOpen);
+  nodes.summaryPanel?.classList.toggle("is-collapsed", !summaryOpen);
   nodes.recordDate.value = formatIsoDate(todayIso());
   requestAnimationFrame(() => {
     syncFloatingDockSideFromViewport();
     requestAnimationFrame(syncFloatingDockSideFromViewport);
+  });
+
+  nodes.themeToggleButton?.addEventListener("click", () => {
+    const nextTheme = getCurrentTheme() === "dark" ? "light" : "dark";
+    applyTheme(nextTheme);
+    persistTheme(nextTheme);
+    syncThemeToggleButton(nodes.themeToggleButton, nextTheme);
+  });
+
+  nodes.summaryToggleButton?.addEventListener("click", () => {
+    summaryOpen = !summaryOpen;
+    syncSummaryToggleButton(nodes.summaryToggleButton, summaryOpen);
+    syncSummaryToggleText(nodes.summaryToggleTextButton, summaryOpen);
+    nodes.summaryContent?.classList.toggle("is-collapsed", !summaryOpen);
+    nodes.summaryPanel?.classList.toggle("is-collapsed", !summaryOpen);
+  });
+
+  nodes.summaryToggleTextButton?.addEventListener("click", () => {
+    summaryOpen = !summaryOpen;
+    syncSummaryToggleButton(nodes.summaryToggleButton, summaryOpen);
+    syncSummaryToggleText(nodes.summaryToggleTextButton, summaryOpen);
+    nodes.summaryContent?.classList.toggle("is-collapsed", !summaryOpen);
+    nodes.summaryPanel?.classList.toggle("is-collapsed", !summaryOpen);
   });
 
   window.addEventListener("resize", () => {
@@ -1031,6 +1230,7 @@ export function createRenderer(store) {
     activeChartResizeFrame = window.requestAnimationFrame(() => {
       renderBpChart(nodes.chart, latestChartHistory);
       renderScoreChart(nodes.scoreChart, latestScoreChartHistory);
+      syncFloatingDockClass();
       activeChartResizeFrame = null;
     });
   });
@@ -1214,14 +1414,10 @@ export function createRenderer(store) {
 
     if (target.closest("[data-floating-clear]")) {
       pendingQueryBlurIntent = null;
-      floatingQueryFocused = false;
-      floatingQueryRestoreFocus = false;
-      floatingFilterOpen = false;
-      syncQueryScrollLockState();
       store.clearTitleFilter();
-      if (canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)) {
-        scrollCatalogPanelIntoView();
-      }
+      closeFloatingFilter({
+        preserveScroll: !canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog),
+      });
       return;
     }
   });
@@ -1281,20 +1477,6 @@ export function createRenderer(store) {
         start: target.selectionStart ?? target.value.length,
         end: target.selectionEnd ?? target.value.length,
       };
-      return;
-    }
-
-    if (target instanceof HTMLSelectElement && target.hasAttribute("data-axis-mode")) {
-      pendingQueryBlurIntent = null;
-      floatingAxisPreviewMode = null;
-      floatingAxisPreviewValue = null;
-      floatingQueryFocused = false;
-      syncQueryScrollLockState();
-      const shouldScrollToTitle = isTextAxisMode(target.value);
-      applyFiltersPreservingOverviewPosition({ axisMode: target.value });
-      if (shouldScrollToTitle && canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)) {
-        window.requestAnimationFrame(scrollCatalogPanelIntoView);
-      }
     }
   });
 
@@ -1325,6 +1507,29 @@ export function createRenderer(store) {
         start: target.selectionStart ?? target.value.length,
         end: target.selectionEnd ?? target.value.length,
       };
+      return;
+    }
+
+    if (target instanceof HTMLSelectElement && target.hasAttribute("data-axis-mode")) {
+      const shouldScrollToTitle = isTextAxisMode(target.value);
+      const nextAxisMode = target.value;
+      if (floatingAxisModeCommitTimer !== null) {
+        window.clearTimeout(floatingAxisModeCommitTimer);
+        floatingAxisModeCommitTimer = null;
+      }
+
+      floatingAxisModeCommitTimer = window.setTimeout(() => {
+        floatingAxisModeCommitTimer = null;
+        pendingQueryBlurIntent = null;
+        floatingAxisPreviewMode = null;
+        floatingAxisPreviewValue = null;
+        floatingQueryFocused = false;
+        syncQueryScrollLockState();
+        applyFiltersPreservingOverviewPosition({ axisMode: nextAxisMode });
+        if (shouldScrollToTitle && canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)) {
+          window.requestAnimationFrame(scrollCatalogPanelIntoView);
+        }
+      }, 0);
     }
   });
 
@@ -1369,7 +1574,10 @@ export function createRenderer(store) {
       return;
     }
 
-    target.blur();
+    floatingQuerySelection = {
+      start: target.selectionStart ?? target.value.length,
+      end: target.selectionEnd ?? target.value.length,
+    };
   });
 
   nodes.floatingAxisFilter.addEventListener("keydown", (event) => {
@@ -1419,33 +1627,16 @@ export function createRenderer(store) {
         return;
       }
 
+      if (activeElement instanceof HTMLSelectElement && activeElement.hasAttribute("data-axis-mode")) {
+        return;
+      }
+
       if (floatingQueryRestoreFocus) {
         return;
       }
 
-      if (pendingQueryBlurIntent === "axis-mode" || pendingQueryBlurIntent === "clear" || pendingQueryBlurIntent === "toggle") {
-        pendingQueryBlurIntent = null;
-        floatingQueryFocused = false;
-        floatingQueryRestoreFocus = false;
-        syncQueryScrollLockState();
-        return;
-      }
-
-      if (activeElement instanceof HTMLSelectElement && activeElement.hasAttribute("data-axis-mode")) {
-        floatingQueryFocused = false;
-        floatingQueryRestoreFocus = false;
-        syncQueryScrollLockState();
-        return;
-      }
-
-      floatingQueryFocused = false;
-      floatingQueryRestoreFocus = false;
-      syncQueryScrollLockState();
       applyTitleQueryFilter(target, { keepFocus: false, scrollToCatalog: false });
-      floatingFilterOpen = false;
-      renderFloatingFilterShell();
-      syncQueryScrollLockState();
-      scrollCatalogPanelIntoView();
+      closeFloatingFilter({ preserveScroll: false });
     });
   });
 
@@ -1838,22 +2029,13 @@ export function createRenderer(store) {
     nodes.scoreInput.value = "";
   });
 
-  nodes.memoInput?.addEventListener("blur", () => {
-    skipNextEntryLampSync = true;
-    store.saveSongNote(nodes.memoInput.value);
-  });
-
   nodes.backToCardButton?.addEventListener("click", () => {
     scrollSelectedCardIntoView();
   });
 
   nodes.difficultyImportButton.addEventListener("click", async () => {
-    const originalLabel = nodes.difficultyImportButton.textContent;
-    nodes.difficultyImportButton.disabled = true;
-    nodes.difficultyImportButton.textContent = "読込中...";
-    const originalText = nodes.exportButton.textContent;
-    nodes.exportButton.disabled = true;
-    nodes.exportButton.textContent = "読込中...";
+    setButtonLoading(nodes.difficultyImportButton, true, "読み込み中...");
+    lockHeroButtonsExcept(nodes.difficultyImportButton);
 
     try {
       const result = await store.importDifficultyTable();
@@ -1862,10 +2044,7 @@ export function createRenderer(store) {
       const message = error instanceof Error ? error.message : "難易度表の読み込みに失敗しました。";
       window.alert(message);
     } finally {
-      nodes.difficultyImportButton.disabled = false;
-      nodes.difficultyImportButton.textContent = originalLabel;
-      nodes.exportButton.disabled = false;
-      nodes.exportButton.textContent = originalText;
+      clearHeroButtonStates();
     }
   });
 
@@ -1920,39 +2099,31 @@ export function createRenderer(store) {
   });
 
   nodes.exportButton.addEventListener("click", async () => {
-    const snapshot = store.getSnapshot();
-    const importedAt = snapshot.difficultyTable?.importedAt;
-    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
-    const isStale = !importedAt || (Date.now() - new Date(importedAt).getTime() >= TWELVE_HOURS_MS);
+    setButtonLoading(nodes.exportButton, true, "書き出し中...");
+    lockHeroButtonsExcept(nodes.exportButton);
 
-    if (isStale) {
-      const originalLabel = nodes.difficultyImportButton.textContent;
-      nodes.difficultyImportButton.disabled = true;
-      nodes.difficultyImportButton.textContent = "読込中...";
-      const originalText = nodes.exportButton.textContent;
-      nodes.exportButton.disabled = true;
-      nodes.exportButton.textContent = "読込中...";
+    try {
       try {
         await store.importDifficultyTable();
       } catch (error) {
-          window.alert("難易度表の読み込みに失敗しました。読み込みせずJSONを書き出します。");
-      } finally {
-        nodes.difficultyImportButton.disabled = false;
-        nodes.difficultyImportButton.textContent = originalLabel;
-        nodes.exportButton.disabled = false;
-        nodes.exportButton.textContent = originalText;
+        console.error("JSON書き出し前の難易度表読み込みに失敗:", error);
+        window.alert("難易度表の読み込みに失敗しました。読み込みをスキップしてJSONを書き出します。");
       }
-    }
 
-    const payload = store.getExportJson();
-    const json = JSON.stringify(payload, null, 2);
-    const blob = new Blob([json], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = "dbr_data.json";
-    anchor.click();
-    URL.revokeObjectURL(url);
+      const payload = store.getExportJson();
+      const json = JSON.stringify(payload, null, 2);
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+
+      anchor.href = url;
+      anchor.download = "dbr_data.json";
+      anchor.click();
+
+      URL.revokeObjectURL(url);
+    } finally {
+      clearHeroButtonStates();
+    }
   });
 
   nodes.csvExportButton.addEventListener("click", () => {
@@ -1985,7 +2156,7 @@ export function createRenderer(store) {
       return;
     }
 
-    if (nodes.floatingAxisFilter.contains(target)) {
+    if (target.closest(".floating-filter-panel")) {
       floatingOutsidePointerState = null;
       return;
     }
@@ -2010,11 +2181,7 @@ export function createRenderer(store) {
     }
     if (deltaY > 16) {
       floatingOutsidePointerState = null;
-      floatingFilterOpen = false;
-      floatingQueryFocused = false;
-      floatingQueryRestoreFocus = false;
-      syncQueryScrollLockState();
-      renderFloatingFilterShell();
+      closeFloatingFilter({ preserveScroll: true });
     }    
   });
 
@@ -2029,11 +2196,7 @@ export function createRenderer(store) {
       return;
     }
 
-    floatingFilterOpen = false;
-    floatingQueryFocused = false;
-    floatingQueryRestoreFocus = false;
-    syncQueryScrollLockState();
-    renderFloatingFilterShell();
+    closeFloatingFilter({ preserveScroll: true });
   });
 
   document.addEventListener("pointercancel", (event) => {
@@ -2042,11 +2205,7 @@ export function createRenderer(store) {
     }
 
     floatingOutsidePointerState = null;
-    floatingFilterOpen = false;
-    floatingQueryFocused = false;
-    floatingQueryRestoreFocus = false;
-    syncQueryScrollLockState();
-    renderFloatingFilterShell();
+    closeFloatingFilter({ preserveScroll: true });
   });
 
   return {
@@ -2058,10 +2217,13 @@ export function createRenderer(store) {
       }
 
       renderSummary(nodes.summary, snapshot.summary, snapshot.filters);
+      nodes.summaryContent?.classList.toggle("is-collapsed", !summaryOpen);
+      nodes.summaryPanel?.classList.toggle("is-collapsed", !summaryOpen);
       latestFilterBounds = deriveFilterBounds(snapshot.songStates);
       latestVisibleCount = snapshot.visibleSongs.length;
       renderFilterDraftPanel();
       renderFloatingFilterShell();
+      syncFloatingDockClass();
       if (floatingQueryRestoreFocus && isTextAxisMode(snapshot.filters.axisMode) && floatingFilterOpen) {
         const queryInput = nodes.floatingAxisFilter.querySelector('input[data-axis-query]');
         if (queryInput instanceof HTMLInputElement) {
@@ -2105,21 +2267,58 @@ export function createRenderer(store) {
         : false;
 
       if (snapshot.selectedSong) {
-        nodes.selectedSong.dataset.title = encodeURIComponent(snapshot.selectedSong.title);
-      
-        if (!skipNextEntryLampSync) {
-          nodes.lampInput.value = snapshot.selectedSong.bestLamp;
+        const selectedTitle = encodeURIComponent(snapshot.selectedSong.title);
+        const nextBpPlaceholder = formatBpPlaceholder(snapshot.selectedSong);
+        const nextScorePlaceholder = formatScorePlaceholder(snapshot.selectedSong);
+        const nextMemoValue = snapshot.selectedSong.note ?? "";
+        const selectedSongChanged = nodes.selectedSong.dataset.title !== selectedTitle;
+
+        if (selectedSongChanged) {
+          nodes.selectedSong.dataset.title = selectedTitle;
         }
-      
-        nodes.bpInput.placeholder = formatBpPlaceholder(snapshot.selectedSong);
-        nodes.scoreInput.placeholder = formatScorePlaceholder(snapshot.selectedSong);
-        nodes.memoInput.value = snapshot.selectedSong.note ?? "";
+
+        if (nodes.lampInput.value !== LAMP_OPTIONS[0]) {
+          nodes.lampInput.value = LAMP_OPTIONS[0];
+        }
+
+        if (selectedSongChanged) {
+          if (nodes.bpInput.value !== "") {
+            nodes.bpInput.value = "";
+          }
+          if (nodes.scoreInput.value !== "") {
+            nodes.scoreInput.value = "";
+          }
+        }
+
+        if (nodes.bpInput.placeholder !== nextBpPlaceholder) {
+          nodes.bpInput.placeholder = nextBpPlaceholder;
+        }
+        if (nodes.scoreInput.placeholder !== nextScorePlaceholder) {
+          nodes.scoreInput.placeholder = nextScorePlaceholder;
+        }
+        if (nodes.memoInput.value !== nextMemoValue) {
+          nodes.memoInput.value = nextMemoValue;
+        }
       } else {
         delete nodes.selectedSong.dataset.title;
-        nodes.lampInput.value = LAMP_OPTIONS[0];
-        nodes.bpInput.placeholder = "BPを入力";
-        nodes.scoreInput.placeholder = "スコアを入力";
-        nodes.memoInput.value = "";
+        if (nodes.lampInput.value !== LAMP_OPTIONS[0]) {
+          nodes.lampInput.value = LAMP_OPTIONS[0];
+        }
+        if (nodes.bpInput.value !== "") {
+          nodes.bpInput.value = "";
+        }
+        if (nodes.scoreInput.value !== "") {
+          nodes.scoreInput.value = "";
+        }
+        if (nodes.bpInput.placeholder !== "BPを入力") {
+          nodes.bpInput.placeholder = "BPを入力";
+        }
+        if (nodes.scoreInput.placeholder !== "スコアを入力") {
+          nodes.scoreInput.placeholder = "スコアを入力";
+        }
+        if (nodes.memoInput.value !== "") {
+          nodes.memoInput.value = "";
+        }
       }
 
       nodes.deleteTodayButton.disabled = !snapshot.hasTodayRecord;
@@ -2129,8 +2328,6 @@ export function createRenderer(store) {
       if (nodes.catalogSortSelect) {
         nodes.catalogSortSelect.value = snapshot.sortMode;
       }
-      
-      skipNextEntryLampSync = false;
     },
   };
 }

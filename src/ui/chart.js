@@ -1,4 +1,4 @@
-import { formatIsoDate } from "../utils/date.js?v=20260430-4";
+import { formatIsoDate } from "../utils/date.js?v=20260507-1";
 
 function clampTickCount(length) {
   return Math.max(2, Math.min(length, 5));
@@ -6,6 +6,138 @@ function clampTickCount(length) {
 
 function buildPath(points) {
   return points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+}
+
+function parseIsoDateTimestamp(date) {
+  const timestamp = Date.parse(`${date}T00:00:00`);
+  return Number.isFinite(timestamp) ? timestamp : Number.NaN;
+}
+
+function scaleTimestamp(timestamp, minTimestamp, maxTimestamp, padding, innerWidth) {
+  if (maxTimestamp === minTimestamp) {
+    return padding.left + innerWidth / 2;
+  }
+
+  return padding.left + ((timestamp - minTimestamp) / (maxTimestamp - minTimestamp)) * innerWidth;
+}
+
+function findLastIndex(values, predicate) {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if (predicate(values[index], index)) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
+function getFirstTrendDirection(points, index) {
+  const current = points[index];
+  if (!current) {
+    return 0;
+  }
+
+  for (let offset = 1; index + offset < points.length; offset += 1) {
+    const next = points[index + offset];
+    if (!next) {
+      break;
+    }
+
+    const delta = next.value - current.value;
+    if (delta !== 0) {
+      return delta;
+    }
+  }
+
+  return 0;
+}
+
+function getLastTrendDirection(points, index) {
+  const current = points[index];
+  if (!current) {
+    return 0;
+  }
+
+  for (let offset = 1; index - offset >= 0; offset += 1) {
+    const prev = points[index - offset];
+    if (!prev) {
+      break;
+    }
+
+    const delta = current.value - prev.value;
+    if (delta !== 0) {
+      return delta;
+    }
+  }
+
+  return 0;
+}
+
+function chooseLabelPlacement(points, index, role, padding, innerHeight) {
+  const point = points[index];
+  let y = point.y - 16;
+
+  if (role === "maxValue") {
+    y = point.y - 16;
+  } else if (role === "minValue") {
+    y = point.y + 16;
+  } else if (role === "firstValue") {
+    const trend = getFirstTrendDirection(points, index);
+    if (trend > 0) {
+      y = point.y + 16;
+    } else if (trend < 0) {
+      y = point.y - 16;
+    } else {
+      y = point.y - 16;
+    }
+  } else if (role === "lastValue") {
+    const trend = getLastTrendDirection(points, index);
+    if (trend > 0) {
+      y = point.y - 16;
+    } else if (trend < 0) {
+      y = point.y + 16;
+    } else {
+      y = point.y - 16;
+    }
+  }
+
+  return {
+    x: point.x,
+    y,
+    dominantBaseline: "middle",
+  };
+}
+
+function buildYearMarkers(minTimestamp, maxTimestamp, padding, height, innerWidth) {
+  const markers = [];
+  const startYear = new Date(minTimestamp).getFullYear();
+  const endYear = new Date(maxTimestamp).getFullYear();
+
+  for (let year = startYear; year <= endYear; year += 1) {
+    const yearStart = new Date(year, 0, 1).getTime();
+    const nextYearStart = new Date(year + 1, 0, 1).getTime();
+    const segmentStart = Math.max(minTimestamp, yearStart);
+    const segmentEnd = Math.min(maxTimestamp, nextYearStart);
+
+    if (segmentEnd < segmentStart) {
+      continue;
+    }
+
+    const labelTimestamp = segmentStart + ((segmentEnd - segmentStart) / 2);
+    const boundaryTimestamp = yearStart >= minTimestamp && yearStart <= maxTimestamp ? yearStart : null;
+
+    markers.push({
+      year: String(year),
+      x: scaleTimestamp(labelTimestamp, minTimestamp, maxTimestamp, padding, innerWidth),
+      isBoundary: false,
+      boundaryX: boundaryTimestamp !== null ? scaleTimestamp(boundaryTimestamp, minTimestamp, maxTimestamp, padding, innerWidth) : null,
+      lineTop: padding.top,
+      lineBottom: height - padding.bottom,
+      labelY: height - 20,
+    });
+  }
+
+  return markers;
 }
 
 function renderTrendChart(container, history, options) {
@@ -16,25 +148,47 @@ function renderTrendChart(container, history, options) {
 
   const width = Math.max(Math.floor(container.clientWidth), 280);
   const height = width < 420 ? 260 : 300;
-  const padding = width < 420
-    ? { top: 24, right: 16, bottom: 48, left: 46 }
-    : { top: 24, right: 24, bottom: 48, left: 56 };
-  const innerWidth = width - padding.left - padding.right;
-  const innerHeight = height - padding.top - padding.bottom;
   const values = history.map((item) => options.getValue(item));
   const minValue = options.getMinValue(values);
   const maxValue = options.getMaxValue(values);
+  const labelMinValue = Math.min(...values);
+  const labelMaxValue = Math.max(...values);
   const valueRange = Math.max(maxValue - minValue, 1);
-
+  const guideValues = (options.getGuides?.({ minValue, maxValue }) ?? [])
+    .map((guide) => guide.value)
+    .filter((value) => Number.isFinite(value));
+  const widestLabelDigits = Math.max(...[minValue, maxValue, ...guideValues].map((value) => String(Math.abs(Math.round(value))).length));
+  const yAxisLabelGap = widestLabelDigits >= 5 ? 20 : widestLabelDigits >= 4 ? 16 : 12;
+  const padding = width < 420
+    ? { top: 24, right: 16, bottom: 72, left: 40 }
+    : { top: 24, right: 24, bottom: 72, left: 40 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+  const timestamps = history.map((entry) => parseIsoDateTimestamp(entry.date));
+  const minTimestamp = Math.min(...timestamps);
+  const maxTimestamp = Math.max(...timestamps);
   const points = history.map((entry, index) => {
-    const x = padding.left + (history.length === 1 ? innerWidth / 2 : (innerWidth * index) / (history.length - 1));
+    const timestamp = timestamps[index];
+    const x = scaleTimestamp(timestamp, minTimestamp, maxTimestamp, padding, innerWidth);
     const value = options.getValue(entry);
     const y = maxValue === minValue
       ? padding.top + innerHeight / 2
       : padding.top + ((maxValue - value) / valueRange) * innerHeight;
 
-    return { x, y, ...entry };
+    return { x, y, value, ...entry };
   });
+
+  const labelIndices = new Map();
+  const minValueIndex = findLastIndex(values, (value) => value === labelMinValue);
+  const maxValueIndex = findLastIndex(values, (value) => value === labelMaxValue);
+  if (minValueIndex >= 0) {
+    labelIndices.set(minValueIndex, "minValue");
+  }
+  if (maxValueIndex >= 0) {
+    labelIndices.set(maxValueIndex, "maxValue");
+  }
+  labelIndices.set(history.length - 1, "lastValue");
+  labelIndices.set(0, "firstValue");
 
   const linePath = buildPath(points);
   const areaPath = `${linePath} L ${points.at(-1).x} ${height - padding.bottom} L ${points[0].x} ${height - padding.bottom} Z`;
@@ -56,49 +210,66 @@ function renderTrendChart(container, history, options) {
         : padding.top + ((maxValue - guide.value) / valueRange) * innerHeight;
       return { ...guide, y };
     });
+  const yearMarkers = buildYearMarkers(minTimestamp, maxTimestamp, padding, height, innerWidth);
 
   const xLabels = points.map((point, index) => {
-    const shouldShow = history.length <= 6 || index === 0 || index === history.length - 1 || index % 2 === 0;
-    if (!shouldShow) {
+    if (index !== 0 && index !== history.length - 1) {
       return "";
     }
-    return `<text class="chart-axis-text" x="${point.x}" y="${height - 16}" text-anchor="middle">${formatIsoDate(point.date).slice(5)}</text>`;
+    return `<text class="chart-axis-text" x="${point.x}" y="${height - 44}" dominant-baseline="hanging" text-anchor="middle">${formatIsoDate(point.date).slice(5)}</text>`;
   }).join("");
 
   const yLabels = ticks.map((tick) => `
     <g>
       <line class="chart-grid-line" x1="${padding.left}" x2="${width - padding.right}" y1="${tick.y}" y2="${tick.y}" />
-      <text class="chart-axis-text" x="${padding.left - 12}" y="${tick.y + 4}" text-anchor="end">${tick.value}</text>
+      <text class="chart-axis-text" x="${padding.left - yAxisLabelGap}" y="${tick.y + 4}" text-anchor="end">${tick.value}</text>
     </g>
   `).join("");
   const guideMarkup = guides.map((guide) => `
     <g>
       <line class="chart-grid-line" x1="${padding.left}" x2="${width - padding.right}" y1="${guide.y}" y2="${guide.y}" />
-      <text class="chart-axis-text" x="${padding.left - 12}" y="${guide.y + 4}" text-anchor="end">${Math.round(guide.value)}</text>
+      <text class="chart-axis-text" x="${padding.left - yAxisLabelGap}" y="${guide.y + 4}" text-anchor="end">${Math.round(guide.value)}</text>
+    </g>
+  `).join("");
+  const yearMarkup = yearMarkers.map((marker) => `
+    <g>
+      ${marker.boundaryX !== null ? `<line class="chart-year-line" x1="${marker.boundaryX}" x2="${marker.boundaryX}" y1="${marker.lineTop}" y2="${marker.lineBottom}" />` : ""}
+      <text class="chart-year-label" x="${marker.x}" y="${marker.labelY}" dominant-baseline="hanging" text-anchor="middle">${marker.year}</text>
     </g>
   `).join("");
 
-  const pointMarkup = points.map((point) => `
+  const pointMarkup = points.map((point, index) => {
+    const labelRole = labelIndices.get(index);
+    const shouldShowLabel = Boolean(labelRole);
+    const placement = shouldShowLabel
+      ? chooseLabelPlacement(points, index, labelRole, padding, innerHeight)
+      : null;
+
+    return `
     <g>
       <circle class="chart-point" cx="${point.x}" cy="${point.y}" r="6" />
-      <text class="chart-point-label" x="${point.x}" y="${point.y - 12}" text-anchor="middle">${options.getValue(point)}</text>
+      ${shouldShowLabel ? `<text class="chart-point-label" x="${placement.x}" y="${placement.y}" dominant-baseline="${placement.dominantBaseline}" text-anchor="middle">${options.getValue(point)}</text>` : ""}
     </g>
-  `).join("");
+  `;
+  }).join("");
 
   container.innerHTML = `
     <svg class="chart" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${options.ariaLabel}">
       ${yLabels}
       ${guideMarkup}
       <path class="chart-area" d="${areaPath}" />
+      ${yearMarkup}
       <path class="chart-line" d="${linePath}" />
-      ${pointMarkup}
       ${xLabels}
+      ${pointMarkup}
     </svg>
   `;
 }
 
 export function renderBpChart(container, history) {
-  renderTrendChart(container, history, {
+  const finiteHistory = history.filter((entry) => Number.isFinite(entry.bp));
+
+  renderTrendChart(container, finiteHistory, {
     ariaLabel: "BP推移グラフ",
     emptyMessage: "この曲のBP履歴はまだありません。",
     getValue: (entry) => entry.bp,

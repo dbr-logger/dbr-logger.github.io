@@ -1,5 +1,8 @@
+import { formatIsoDate, todayIso } from "../utils/date.js";
+import { escapeHtml } from "../utils/html.js";
+
 const GAS_URL =
-  "https://script.google.com/macros/s/AKfycbwAqEgEmymWS0Ztge7CKinjSiEPW8gYvCnA_qk1qxjk-gLo1xjT4dBhrGkISHZeTKZR/exec";
+  "https://script.google.com/macros/s/AKfycbzO39jLddNn2o_kYLEg27ApKPZlRwTBaTsTbCo_PPKlwYs109tFPkxnGrEvO96j2L1ERg/exec";
 
 const RECOMMEND_OPTIONS = [
   { value: "", label: "（選択）" },
@@ -11,8 +14,7 @@ const RECOMMEND_OPTIONS = [
 ];
 
 function todayFormatted() {
-  const d = new Date();
-  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  return formatIsoDate(todayIso());
 }
 
 function findDifficultyEntry(difficultyTable, title) {
@@ -50,31 +52,27 @@ export function renderProposalButton(container, selectedSong, difficultyTable) {
 
   const area = document.createElement("div");
   area.id = "proposal-area";
-  area.style.marginTop = "1rem";
-  area.style.borderTop = "1px solid var(--color-border, #ddd)";
-  area.style.paddingTop = "0.75rem";
+  area.className = "proposal-area";
 
   if (isProposed) {
     area.innerHTML = `
-      <p style="font-size:0.875rem; color: var(--color-text-muted, #666);">
-        ⚠️ 現在新規提案中の譜面です。<br>
-        レベル・おすすめ度に違和感がある方は
-        <a href="https://docs.google.com/spreadsheets/d/1R-bgS7CZ1BBTzsk4KRKRSmBAZWNotZnQLfWtZFQr-Ek/edit?gid=1709558806#gid=1709558806"
-           target="_blank" rel="noopener" style="color:#0073e6;">
-          新規提案シートの「異議申し立て」列
-        </a>
-        に記載してください。
+      <p class="proposal-warning">
+        ⚠️ 現在、新規提案中の譜面です。<br>
+        レベル・おすすめ度に違和感がある場合は、<a class="proposal-link" href="https://docs.google.com/spreadsheets/d/1R-bgS7CZ1BBTzsk4KRKRSmBAZWNotZnQLfWtZFQr-Ek/edit?gid=1709558806#gid=1709558806" target="_blank" rel="noopener">新規提案シート</a>の「異議申し立て」列に記載することができます（外部スプレッドシートを開きます）。
       </p>`;
   } else if (isUnrated) {
-    area.innerHTML = `<button class="button button-secondary proposal-open-btn" type="button" data-type="new">新規提案</button>`;
+    area.innerHTML = `<div class="proposal-open-actions"><button class="button button-secondary proposal-open-btn proposal-action-btn" type="button" data-type="new">新規提案</button></div>`;
   } else {
     area.innerHTML = `
-      <button class="button button-secondary proposal-open-btn" type="button" data-type="change">変更提案</button>
-      <button class="button button-secondary proposal-open-btn" type="button" data-type="recommend" style="margin-left:0.5rem;">おすすめ提案</button>`;
+      <div class="action-group proposal-open-actions">
+        <button class="button button-secondary proposal-open-btn proposal-action-btn" type="button" data-type="change">変更提案</button>
+        <button class="button button-secondary proposal-open-btn proposal-action-btn" type="button" data-type="recommend">おすすめ提案</button>
+      </div>`;
   }
 
   const formContainer = document.createElement("div");
   formContainer.id = "proposal-form-container";
+  formContainer.className = "proposal-form-container";
   area.appendChild(formContainer);
   container.appendChild(area);
 
@@ -100,21 +98,19 @@ function renderProposalForm(container, type, entry) {
     type === "new" ? "新規提案" : type === "change" ? "変更提案" : "おすすめ提案";
 
   const formEl = document.createElement("form");
-  formEl.style.marginTop = "1rem";
-  formEl.style.padding = "0.75rem";
-  formEl.style.background = "var(--color-surface-raised, #f5f5f5)";
-  formEl.style.borderRadius = "0.375rem";
-  formEl.style.fontSize = "0.9rem";
+  formEl.className = "proposal-form";
 
   formEl.innerHTML = `
-    <b>【${typeLabel}フォーム】</b>
-    <hr style="margin: 0.5rem 0;">
-    ${buildFormFields(type, entry)}
-    <div style="margin-top:0.75rem;">
-      <button type="submit" class="button button-secondary">提案を送信</button>
-      <button type="button" class="button proposal-cancel-btn" style="margin-left:0.5rem;">キャンセル</button>
+    <div class="proposal-form-title">${typeLabel}フォーム</div>
+    <hr class="proposal-divider">
+    <div class="proposal-form-body">
+      ${buildFormFields(type, entry)}
     </div>
-    <div class="proposal-status" style="margin-top:0.5rem; font-size:0.875rem;"></div>
+    <div class="action-group proposal-form-actions">
+      <button type="button" class="button button-secondary proposal-submit-btn">提案を送信</button>
+      <button type="button" class="button button-tertiary proposal-cancel-btn">キャンセル</button>
+    </div>
+    <div class="proposal-status"></div>
   `;
 
   container.appendChild(formEl);
@@ -127,78 +123,143 @@ function renderProposalForm(container, type, entry) {
 
   formEl.addEventListener("submit", (e) => {
     e.preventDefault();
+  });
+
+  formEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target instanceof HTMLElement && e.target.tagName !== "TEXTAREA") {
+      e.preventDefault();
+    }
+  });
+
+  formEl.querySelector(".proposal-submit-btn").addEventListener("click", () => {
     handleProposalSubmit(formEl, type, entry, today);
+  });
+
+  formEl.querySelectorAll(".proposal-textarea").forEach((textarea) => {
+    if (!(textarea instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    const resizeTextarea = () => {
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    };
+
+    resizeTextarea();
+    textarea.addEventListener("input", resizeTextarea);
   });
 }
 
 function buildFormFields(type, entry) {
   const recommendOptions = RECOMMEND_OPTIONS.map(
-    (o) => `<option value="${o.value}">${o.label}</option>`
+    (o) => `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`
   ).join("");
 
   if (type === "new") {
     return `
-      <div style="margin-bottom:0.4rem;">
-        <label>レベル（必須）: ☆<input name="level_new" required
+      <div class="proposal-field">
+        <div class="proposal-stack-label field"><span>レベル（必須）</span>
+          <input class="proposal-input proposal-input-level" name="level_new" required aria-label="レベル（必須）"
           pattern="^[0-9]{1,2}\\.[0-9]{2}$" maxlength="5"
-          title="小数点以下2桁（例: 11.00）" style="width:5ch; margin-left:0.25rem;"></label>
+          title="小数点以下2桁（例: 11.00）">
+        </div>
       </div>
-      <div style="margin-bottom:0.4rem;">
-        <label>おすすめ度（任意）:
-          <select name="recommend_new" style="margin-left:0.25rem;">${recommendOptions}</select>
-        </label>
+      <div class="proposal-field">
+        <div class="proposal-stack-label field"><span>おすすめ度（任意）</span>
+          <div class="field-select proposal-select-wrap">
+            <select class="proposal-select" name="recommend_new" aria-label="おすすめ度（任意）">${recommendOptions}</select>
+          </div>
+        </div>
       </div>
-      <div style="margin-bottom:0.4rem;">
-        <label>コメント（任意）:<br>
-          <textarea name="comment_new" rows="3" style="width:100%; margin-top:0.25rem;"></textarea>
-        </label>
-        <small>※譜面傾向、攻略情報などなんでも（表に反映されます）</small>
+      <div class="proposal-field">
+        <div class="proposal-stack-label field"><span>コメント（任意）</span>
+          <textarea class="proposal-textarea" name="comment_new" rows="3" aria-label="コメント（任意）"></textarea>
+        </div>
+        <small class="proposal-note">※譜面傾向、攻略情報などなんでも（表に反映されます）</small>
       </div>
     `;
   }
 
   if (type === "change") {
-    const currentLevel = entry.level ? entry.level.replace(/^[☆†]*[☆†]/, "") : "";
+    const currentLevelRaw = entry.level ? entry.level.replace(/^[☆†]*[☆†]/, "") : "";
+    const currentLevel = escapeHtml(currentLevelRaw);
     return `
-      <div style="margin-bottom:0.4rem;">
-        現在のレベル: <b>☆${currentLevel}</b>
+      <div class="proposal-field proposal-current">
+        現在のレベル <strong>☆${currentLevel}</strong>
       </div>
-      <div style="margin-bottom:0.4rem;">
-        <label>変更後レベル（必須）: ☆<input name="level_change" required
+      <div class="proposal-field">
+        <div class="proposal-stack-label field"><span>変更後レベル（必須）</span>
+          <input class="proposal-input proposal-input-level" name="level_change" required aria-label="変更後レベル（必須）"
           pattern="^[0-9]{1,2}\\.[0-9]{2}$" maxlength="5"
-          title="小数点以下2桁（例: 11.00）" style="width:5ch; margin-left:0.25rem;"
-          data-current="${currentLevel}"></label>
+          title="小数点以下2桁（例: 11.00）"
+          data-current="${currentLevel}">
+        </div>
       </div>
-      <div style="margin-bottom:0.4rem;">
-        <label>提案理由（必須）:<br>
-          <textarea name="reason_change" rows="3" required style="width:100%; margin-top:0.25rem;"></textarea>
-        </label>
+      <div class="proposal-field">
+        <div class="proposal-stack-label field"><span>提案理由（必須）</span>
+          <textarea class="proposal-textarea" name="reason_change" rows="3" required aria-label="提案理由（必須）"></textarea>
+        </div>
       </div>
     `;
   }
 
   return `
-    <div style="margin-bottom:0.4rem;">
-      現在のおすすめ度: <b>${entry.recommend || "無記入"}</b>
+    <div class="proposal-field proposal-current">
+      現在のおすすめ度 <strong>${escapeHtml(entry.recommend || "無記入")}</strong>
     </div>
-    <div style="margin-bottom:0.4rem;">
-      <label>変更後おすすめ度（必須）:
-        <select name="recommend_change" required style="margin-left:0.25rem;">
-          ${recommendOptions}
-        </select>
-      </label>
+    <div class="proposal-field">
+      <div class="proposal-stack-label field"><span>変更後おすすめ度（必須）</span>
+        <div class="field-select proposal-select-wrap">
+          <select class="proposal-select" name="recommend_change" required aria-label="変更後おすすめ度（必須）">
+            ${recommendOptions}
+          </select>
+        </div>
+      </div>
     </div>
-    <div style="margin-bottom:0.4rem;">
-      <label>提案理由（必須）:<br>
-        <textarea name="reason_recommend" rows="3" required style="width:100%; margin-top:0.25rem;"></textarea>
-      </label>
+    <div class="proposal-field">
+      <div class="proposal-stack-label field"><span>提案理由（必須）</span>
+        <textarea class="proposal-textarea" name="reason_recommend" rows="3" required aria-label="提案理由（必須）"></textarea>
+      </div>
     </div>
   `;
 }
 
+function getProposalTypeLabel(type) {
+  if (type === "new") {
+    return "新規提案";
+  }
+
+  if (type === "change") {
+    return "変更提案";
+  }
+
+  return "おすすめ提案";
+}
+
+function renderProposalSuccess(container, type, sheetUrl) {
+  if (!container) {
+    return;
+  }
+
+  const typeLabel = getProposalTypeLabel(type);
+
+  container.innerHTML = `
+    <div class="proposal-success">
+      <p class="proposal-success-title">
+        ${escapeHtml(typeLabel)}を送信しました。
+      </p>
+      <p class="proposal-success-body">
+        送信内容を確認する場合は、<a href="${escapeHtml(sheetUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(typeLabel)}シート</a>を参照してください（外部スプレッドシートを開きます）。
+      </p>
+    </div>
+  `;
+
+  container.dataset.openType = "success";
+}
+
 async function handleProposalSubmit(formEl, type, entry, today) {
   const statusEl = formEl.querySelector(".proposal-status");
-  const submitBtn = formEl.querySelector("[type=submit]");
+  const submitBtn = formEl.querySelector(".proposal-submit-btn");
 
   if (type === "change") {
     const levelInput = formEl.querySelector("[name=level_change]");
@@ -275,13 +336,10 @@ async function handleProposalSubmit(formEl, type, entry, today) {
 
   try {
     const result = await postToGas(rowData);
+
     if (result.result === "success") {
-      const typeLabel = type === "new" ? "新規提案" : type === "change" ? "変更提案" : "おすすめ提案";
-      alert(`${typeLabel}シートに遷移します。\n反映された内容をご確認ください。`);
-      window.open(sheetUrl, "_blank", "noopener");
       const container = formEl.parentElement;
-      container.innerHTML = "";
-      container.dataset.openType = "";
+      renderProposalSuccess(container, type, sheetUrl);
     } else {
       statusEl.textContent = `送信に失敗しました: ${result.message ?? "不明なエラー"}`;
       submitBtn.disabled = false;

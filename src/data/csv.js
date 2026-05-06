@@ -51,6 +51,23 @@ function createSongId(title) {
   return title.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/(^-|-$)/g, "");
 }
 
+function buildDifficultyLookup(difficultyTable) {
+  const lookup = new Map();
+
+  difficultyTable?.entries?.forEach((entry) => {
+    if (!entry?.title || lookup.has(entry.title)) {
+      return;
+    }
+
+    lookup.set(entry.title, {
+      level: entry.level ?? "",
+      splv: entry.splv ?? "",
+    });
+  });
+
+  return lookup;
+}
+
 export function parseCsv(text) {
   const normalizedText = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").trim();
   const lines = normalizedText.split("\n").filter(Boolean);
@@ -76,8 +93,10 @@ export function importVerticalCsv(text) {
   const records = rows.map((row) => {
     const date = String(row.date ?? "").trim();
     const title = String(row.title ?? "").trim();
-    const level = parseNumber(row.level) ?? 0;
-    const lamp = String(row.lamp ?? "").trim() || "NO PLAY";
+    const level = parseNumber(row.level);
+    const splv = parseNumber(row.splv);
+    const rawLamp = String(row.lamp ?? "").trim();
+    const lamp = rawLamp || "NO PLAY";
     const bp = parseNumber(row.bp);
     const score = parseNumber(row.score);
     const memo = String(row.memo ?? "").trim();
@@ -86,7 +105,11 @@ export function importVerticalCsv(text) {
       songNotes[title] = memo;
     }
 
-    if (!date || !title || bp === null) {
+    if (!date || !title) {
+      return null;
+    }
+
+    if (rawLamp === "" && bp === null && score === null) {
       return null;
     }
 
@@ -95,6 +118,7 @@ export function importVerticalCsv(text) {
       date,
       title,
       level,
+      splv,
       lamp,
       bp,
       score,
@@ -106,14 +130,16 @@ export function importVerticalCsv(text) {
   return { records, songNotes };
 }
 
-export function exportVerticalCsv(records, songNotes = {}) {
-  const header = ["date", "title", "level", "lamp", "bp", "score", "memo"];
+export function exportVerticalCsv(records, songNotes = {}, difficultyTable = null) {
+  const difficultyLookup = buildDifficultyLookup(difficultyTable);
+  const header = ["date", "title", "level", "splv", "lamp", "bp", "score", "memo"];
   const rows = records.map((record) => [
     record.date,
     record.title,
-    record.level,
-    record.lamp,
-    record.bp,
+    difficultyLookup.get(record.title)?.level ?? record.level ?? "",
+    difficultyLookup.get(record.title)?.splv ?? record.splv ?? "",
+    record.lamp ?? "NO PLAY",
+    record.bp ?? "",
     record.score ?? "",
     songNotes[record.title] ?? "",
   ]);
@@ -127,6 +153,7 @@ export function exportVerticalCsv(records, songNotes = {}) {
     rows.push([
       "",
       title,
+      "",
       "",
       "",
       "",

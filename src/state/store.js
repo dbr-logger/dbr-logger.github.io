@@ -1,9 +1,10 @@
-import { LAMP_OPTIONS } from "../constants.js?v=20260430-4";
-import { exportVerticalCsv, importVerticalCsv } from "../data/csv.js?v=20260430-4";
-import { attachKatateToDifficultyTable, fetchDifficultyTable } from "../data/difficulty.js?v=20260430-4";
-import { exportDbrJson, importDbrJson } from "../data/export-json.js?v=20260430-4";
-import { loadStoredState, saveStoredState } from "../data/storage.js?v=20260430-4";
-import { compareIsoDates, todayIso } from "../utils/date.js?v=20260430-4";
+import { LAMP_OPTIONS } from "../constants.js?v=20260507-1";
+import { exportVerticalCsv, importVerticalCsv } from "../data/csv.js?v=20260507-1";
+import { attachKatateToDifficultyTable, fetchDifficultyTable } from "../data/difficulty.js?v=20260507-1";
+import { exportDbrJson, importDbrJson } from "../data/export-json.js?v=20260507-1";
+import { loadStoredState, saveStoredState } from "../data/storage.js?v=20260507-1";
+import { compareIsoDates, todayIso } from "../utils/date.js?v=20260507-1";
+import { isExactSearchTextMatch, matchesSearchText } from "../utils/search.js?v=20260507-1";
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const PAGE_SIZE = 100;
@@ -175,6 +176,21 @@ function buildDifficultyTextageIndex(difficultyTable) {
   return index;
 }
 
+function nowTimestamp() {
+  return Date.now();
+}
+
+function getLatestFiniteValue(history, key) {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const value = history[index]?.[key];
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 function normalizeStoredData(stored) {
   const normalizedFilters = normalizeStoredFilters(stored.filters);
   
@@ -205,9 +221,10 @@ function normalizeStoredData(stored) {
         id: record.id || createRecordId(record.title, record.date),
         date: record.date,
         title: record.title,
-        level: Number(record.level) || 0,
+        level: parseOptionalNumber(record.level),
+        splv: parseOptionalNumber(record.splv),
         lamp: LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY",
-        bp: Number(record.bp) || 0,
+        bp: parseOptionalNumber(record.bp),
         score: parseOptionalNumber(record.score),
         textageKey: typeof record.textageKey === "string" ? record.textageKey : "",
         source: record.source || "manual",
@@ -228,8 +245,11 @@ function normalizeStoredData(stored) {
 
 function deriveSongState(song, history = []) {
   const latest = history.at(-1) ?? null;
+  const latestBp = getLatestFiniteValue(history, "bp");
+  const latestScore = getLatestFiniteValue(history, "score");
   const bestLamp = history.reduce((best, record) => pickBetterLamp(best, record.lamp), song.initialLamp);
-  const historicalBest = history.reduce((best, record) => Math.min(best, record.bp), Number.POSITIVE_INFINITY);
+  const historicalBpValues = history.map((record) => record.bp).filter((value) => Number.isFinite(value));
+  const historicalBest = historicalBpValues.length > 0 ? Math.min(...historicalBpValues) : Number.POSITIVE_INFINITY;
   const historicalBestScore = history.reduce((best, record) => (
     record.score === null || record.score === undefined ? best : Math.max(best, record.score)
   ), Number.NEGATIVE_INFINITY);
@@ -242,9 +262,9 @@ function deriveSongState(song, history = []) {
     latestDate: latest?.date ?? null,
     latestLamp: latest?.lamp ?? song.initialLamp,
     bestLamp,
-    currentBp: latest?.bp ?? song.initialBestBp,
+    currentBp: latestBp ?? song.initialBestBp,
     bestBp: bestCandidates.length > 0 ? Math.min(...bestCandidates) : null,
-    currentScore: latest?.score ?? null,
+    currentScore: latestScore,
     bestScore: Number.isFinite(historicalBestScore) ? historicalBestScore : null,
   };
 }
@@ -450,6 +470,8 @@ export function createStore() {
     ready: false,
     error: "",
   };
+  let deleteAnchor = null;
+  let deleteAnchorTimer = null;
 
   function emit(snapshot = getSnapshot()) {
     listeners.forEach((listener) => listener(snapshot));
@@ -468,6 +490,39 @@ export function createStore() {
       filters: state.filters,
       sortMode: state.sortMode,
     });
+  }
+
+  function clearDeleteAnchor() {
+    deleteAnchor = null;
+    if (deleteAnchorTimer !== null) {
+      window.clearTimeout(deleteAnchorTimer);
+      deleteAnchorTimer = null;
+    }
+  }
+
+  function setDeleteAnchor(title, date) {
+    clearDeleteAnchor();
+
+    const expiresAt = nowTimestamp() + 60_000;
+    deleteAnchor = { title, date, expiresAt };
+    deleteAnchorTimer = window.setTimeout(() => {
+      deleteAnchor = null;
+      deleteAnchorTimer = null;
+      emit();
+    }, 60_000);
+  }
+
+  function getDeleteAnchorDate(title) {
+    if (!deleteAnchor || deleteAnchor.title !== title) {
+      return null;
+    }
+
+    if (nowTimestamp() >= deleteAnchor.expiresAt) {
+      clearDeleteAnchor();
+      return null;
+    }
+
+    return deleteAnchor.date;
   }
   
   function createCatalogVisibleSignature() {
@@ -547,8 +602,7 @@ export function createStore() {
 
   function matchesFiltersFor(entry, filters) {
     if (filters.axisMode === "title") {
-      const query = filters.titleQuery.trim().toLocaleLowerCase("ja");
-      return !query || entry.title.toLocaleLowerCase("ja").includes(query);
+      return matchesSearchText(entry.title, filters.titleQuery);
     }
     
     if (filters.axisMode === "memo") {
@@ -615,6 +669,21 @@ export function createStore() {
     }
 
     return true;
+  }
+
+  function compareVisibleSongPriority(a, b) {
+    if (state.filters.axisMode !== "title") {
+      return 0;
+    }
+
+    const query = state.filters.titleQuery.trim();
+    if (!query) {
+      return 0;
+    }
+
+    const aExact = isExactSearchTextMatch(a.title, query);
+    const bExact = isExactSearchTextMatch(b.title, query);
+    return Number(bExact) - Number(aExact);
   }
 
   async function initialize() {
@@ -810,27 +879,37 @@ export function createStore() {
       return { ok: false, message: "曲を選択してください。" };
     }
 
-    if (!LAMP_OPTIONS.includes(lamp)) {
-      return { ok: false, message: "ランプを選択してください。" };
-    }
-
-    const normalizedBp = Number(bp);
-    if (!Number.isInteger(normalizedBp) || normalizedBp < 0) {
-      return { ok: false, message: "BPは0以上の整数で入力してください。" };
-    }
-
-    const normalizedScore = Number(score);
-    if (!Number.isInteger(normalizedScore) || normalizedScore < 0) {
-      return { ok: false, message: "スコアは0以上の整数で入力してください。" };
-    }
-
     const selectedEntry = getCatalogEntries().find((item) => item.title === state.selectedTitle);
     if (!selectedEntry) {
       return { ok: false, message: "選択中の曲情報が見つかりません。" };
     }
 
     const normalizedMemo = String(memo ?? "").trim();
-    if (normalizedMemo) {
+    const normalizedBp = parseOptionalNumber(bp);
+    const normalizedScore = parseOptionalNumber(score);
+    const isValidLamp = LAMP_OPTIONS.includes(lamp);
+    const hasBp = normalizedBp !== null;
+    const hasScore = normalizedScore !== null;
+    const hasMemo = normalizedMemo !== "";
+    const canSaveRecord = lamp !== "NO PLAY" || hasBp || hasScore;
+
+    if (hasBp && (!Number.isInteger(normalizedBp) || normalizedBp < 0)) {
+      return { ok: false, message: "BPは0以上の整数で入力してください。" };
+    }
+
+    if (hasScore && (!Number.isInteger(normalizedScore) || normalizedScore < 0)) {
+      return { ok: false, message: "スコアは0以上の整数で入力してください。" };
+    }
+
+    if (!isValidLamp) {
+      return { ok: false, message: "ランプを選択してください。" };
+    }
+
+    if (!canSaveRecord) {
+      return saveSongNote(normalizedMemo);
+    }
+
+    if (hasMemo) {
       state.songNotes[selectedEntry.title] = normalizedMemo;
     } else {
       delete state.songNotes[selectedEntry.title];
@@ -845,6 +924,8 @@ export function createStore() {
         lamp,
         bp: normalizedBp,
         score: normalizedScore,
+        level: selectedEntry.levelValue ?? null,
+        splv: selectedEntry.splvValue ?? null,
         source: "manual",
       };
       state.statusMessage = `${selectedEntry.title} の ${date} の記録を更新しました。`;
@@ -854,7 +935,8 @@ export function createStore() {
         id: createRecordId(selectedEntry.title, date),
         date,
         title: selectedEntry.title,
-        level: selectedEntry.levelValue ?? 0,
+        level: selectedEntry.levelValue ?? null,
+        splv: selectedEntry.splvValue ?? null,
         lamp,
         bp: normalizedBp,
         score: normalizedScore,
@@ -864,6 +946,7 @@ export function createStore() {
       state.statusMessage = `${selectedEntry.title} の記録を保存しました。`;
     }
 
+    setDeleteAnchor(selectedEntry.title, date);
     state.records.sort(sortRecords);
     persist();
     emit();
@@ -880,7 +963,7 @@ export function createStore() {
       return { ok: false, message: "選択中の曲情報が見つかりません。" };
     }
 
-    const date = todayIso();
+    const date = getDeleteAnchorDate(selectedEntry.title) ?? todayIso();
     const beforeCount = state.records.length;
     state.records = state.records.filter((record) => !(record.title === selectedEntry.title && record.date === date));
 
@@ -923,7 +1006,8 @@ export function createStore() {
     const recordIndex = buildRecordIndex(state.records);
     const exportEntries = [...recordIndex.entries()].map(([title, history]) => {
       const bestLamp = history.reduce((best, record) => pickBetterLamp(best, record.lamp), "NO PLAY");
-      const bestBp = history.reduce((best, record) => Math.min(best, record.bp), Number.POSITIVE_INFINITY);
+      const bestBpValues = history.map((record) => record.bp).filter((value) => Number.isFinite(value));
+      const bestBp = bestBpValues.length > 0 ? Math.min(...bestBpValues) : Number.POSITIVE_INFINITY;
       const bestScore = history.reduce((best, record) => (
         record.score === null || record.score === undefined ? best : Math.max(best, record.score)
       ), Number.NEGATIVE_INFINITY);
@@ -947,18 +1031,22 @@ export function createStore() {
   }
 
   function getExportCsv() {
-    return exportVerticalCsv(state.records, state.songNotes);
+    return exportVerticalCsv(state.records, state.songNotes, state.difficultyTable);
   }
 
   function importJsonData(payload, referenceDate = todayIso()) {
+    const catalogEntryByTitle = new Map(getCatalogEntries().map((entry) => [entry.title, entry]));
     const importedRecords = importDbrJson(payload, referenceDate).map((record) => {
-      const selectedEntry = getCatalogEntries().find((entry) => entry.title === record.title);
+      const selectedEntry = catalogEntryByTitle.get(record.title);
+      const level = selectedEntry?.levelValue ?? record.level ?? null;
+      const splv = selectedEntry?.splvValue ?? record.splv ?? null;
 
       return {
         id: createRecordId(record.title, record.date),
         date: record.date,
         title: record.title,
-        level: selectedEntry?.levelValue ?? 0,
+        level,
+        splv,
         lamp: record.lamp,
         bp: record.bp,
         score: record.score,
@@ -982,17 +1070,25 @@ export function createStore() {
 
   function importCsvData(text) {
     const { records, songNotes } = importVerticalCsv(text);
-    const importedRecords = records.map((record) => ({
-      id: createRecordId(record.title, record.date),
-      date: record.date,
-      title: record.title,
-      level: record.level,
-      lamp: LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY",
-      bp: record.bp,
-      score: record.score ?? null,
-      textageKey: "",
-      source: record.source,
-    }));
+    const catalogEntryByTitle = new Map(getCatalogEntries().map((entry) => [entry.title, entry]));
+    const importedRecords = records.map((record) => {
+      const selectedEntry = catalogEntryByTitle.get(record.title);
+      const level = selectedEntry?.levelValue ?? record.level ?? null;
+      const splv = selectedEntry?.splvValue ?? record.splv ?? null;
+
+      return {
+        id: createRecordId(record.title, record.date),
+        date: record.date,
+        title: record.title,
+        level,
+        splv,
+        lamp: LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY",
+        bp: record.bp,
+        score: record.score ?? null,
+        textageKey: "",
+        source: record.source,
+      };
+    });
 
     const importedKeys = new Set(importedRecords.map((record) => `${record.title}::${record.date}`));
     const preservedRecords = state.records.filter((record) => !importedKeys.has(`${record.title}::${record.date}`));
@@ -1013,6 +1109,7 @@ export function createStore() {
 
   function clearAllRecords() {
     state.records = [];
+    state.songNotes = {};
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
     state.statusMessage = "プレー記録をすべて削除しました。";
@@ -1105,6 +1202,17 @@ export function createStore() {
       return compareLevelValue(a, b) || compareSplvValue(a, b) || compareTitleValue(a, b);
     });
     const filteredVisibleSongs = songStates.filter((entry) => matchesFiltersFor(entry, state.filters));
+    if (state.filters.axisMode === "title" && state.filters.titleQuery.trim()) {
+      const songOrder = new Map(songStates.map((song, index) => [song.title, index]));
+      filteredVisibleSongs.sort((a, b) => {
+        const priority = compareVisibleSongPriority(a, b);
+        if (priority !== 0) {
+          return priority;
+        }
+
+        return (songOrder.get(a.title) ?? 0) - (songOrder.get(b.title) ?? 0);
+      });
+    }
     const visibleSongs = applyStableVisibleOrder(filteredVisibleSongs);
     const summaryFilters = isTextAxisMode(state.filters.axisMode) && state.titleFilterBase
       ? state.titleFilterBase
@@ -1130,7 +1238,10 @@ export function createStore() {
       ?? visibleSongs[0]
       ?? null;
     const selectedHistory = selectedSong ? [...selectedSong.history].sort((a, b) => compareIsoDates(b.date, a.date)) : [];
-    const hasTodayRecord = selectedHistory.some((record) => record.date === todayIso());
+    const selectedDeleteDate = selectedSong ? getDeleteAnchorDate(selectedSong.title) : null;
+    const hasTodayRecord = selectedSong
+      ? selectedHistory.some((record) => record.date === (selectedDeleteDate ?? todayIso()))
+      : false;
 
     return {
       ...state,

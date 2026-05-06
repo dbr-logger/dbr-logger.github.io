@@ -1,5 +1,6 @@
-import { DIFFICULTY_HEADER_URL, KATATE_CSV_PATH } from "../constants.js?v=20260430-4";
-import { parseCsv } from "./csv.js?v=20260430-4";
+import { DIFFICULTY_HEADER_URL, KATATE_CSV_PATH } from "../constants.js?v=20260507-1";
+import { parseCsv } from "./csv.js?v=20260507-1";
+import { formatLocalDateTime } from "../utils/date.js?v=20260507-1";
 
 function normalizeString(value) {
   return String(value ?? "").trim();
@@ -190,7 +191,7 @@ export async function fetchDifficultyTable() {
 
   return {
     source,
-    importedAt: new Date().toISOString(),
+    importedAt: formatLocalDateTime(),
     totalEntries: rawEntries.length,
     entries,
     titleCount: new Set(entries.map((entry) => entry.title)).size,

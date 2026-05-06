@@ -1,4 +1,4 @@
-import { STORAGE_KEY } from "../constants.js?v=20260430-4";
+import { STORAGE_KEY } from "../constants.js?v=20260507-1";
 
 export function loadStoredState(storageKey = STORAGE_KEY) {
   try {
