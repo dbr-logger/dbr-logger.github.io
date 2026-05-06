@@ -1905,6 +1905,45 @@ html[data-theme="dark"] .proposal-success-body a {
     padding: 18px;
   }
 
+  .proposal-area,
+  .proposal-form-container,
+  .proposal-form,
+  .proposal-field {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .proposal-form {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .proposal-inline-label,
+  .proposal-stack-label {
+    width: 100%;
+  }
+
+  .proposal-input-level {
+    inline-size: 100%;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .proposal-select-wrap {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .proposal-select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .proposal-textarea {
+    box-sizing: border-box;
+  }
 
   .recommend-group {
     flex: 1 1 100%;
