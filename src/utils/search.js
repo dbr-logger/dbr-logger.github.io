@@ -211,3 +211,30 @@ export function isExactSearchTextMatch(value, query) {
 
   return buildTitleSearchVariants(value).some((variant) => variant === queryKey);
 }
+
+export function getSearchTextMatchRank(value, query) {
+  const queryKey = normalizeQueryText(query);
+  if (!queryKey) {
+    return -1;
+  }
+
+  let bestRank = -1;
+
+  buildTitleSearchVariants(value).forEach((variant) => {
+    if (variant === queryKey) {
+      bestRank = Math.max(bestRank, 2);
+      return;
+    }
+
+    if (variant.startsWith(queryKey)) {
+      bestRank = Math.max(bestRank, 1);
+      return;
+    }
+
+    if (variant.includes(queryKey)) {
+      bestRank = Math.max(bestRank, 0);
+    }
+  });
+
+  return bestRank;
+}

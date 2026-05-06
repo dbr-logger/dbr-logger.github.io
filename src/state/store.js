@@ -4,7 +4,7 @@ import { attachKatateToDifficultyTable, fetchDifficultyTable } from "../data/dif
 import { exportDbrJson, importDbrJson } from "../data/export-json.js?v=20260507-1";
 import { loadStoredState, saveStoredState } from "../data/storage.js?v=20260507-1";
 import { compareIsoDates, todayIso } from "../utils/date.js?v=20260507-1";
-import { isExactSearchTextMatch, matchesSearchText } from "../utils/search.js?v=20260507-1";
+import { getSearchTextMatchRank, matchesSearchText } from "../utils/search.js?v=20260507-1";
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const PAGE_SIZE = 100;
@@ -681,9 +681,9 @@ export function createStore() {
       return 0;
     }
 
-    const aExact = isExactSearchTextMatch(a.title, query);
-    const bExact = isExactSearchTextMatch(b.title, query);
-    return Number(bExact) - Number(aExact);
+    const aRank = getSearchTextMatchRank(a.title, query);
+    const bRank = getSearchTextMatchRank(b.title, query);
+    return bRank - aRank;
   }
 
   async function initialize() {
