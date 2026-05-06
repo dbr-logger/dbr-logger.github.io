@@ -1075,7 +1075,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 .proposal-area {
   border-top: 1px solid var(--border);
   display: grid;
-  gap: 10px;
+  gap: 14px;
   margin-top: 16px;
   padding-top: 12px;
 }
