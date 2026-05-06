@@ -1429,12 +1429,15 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   padding-inline: 18px;
 }
 
-.floating-axis-filter.is-at-bottom .floating-filter-toggle {
+.floating-axis-filter.is-at-bottom .floating-filter-toggle,
+.floating-axis-filter.is-at-bottom .floating-filter-clear {
   opacity: 0.5;
 }
 
 .floating-axis-filter.is-at-bottom .floating-filter-toggle:hover,
-.floating-axis-filter.is-at-bottom .floating-filter-toggle:focus-visible {
+.floating-axis-filter.is-at-bottom .floating-filter-toggle:focus-visible,
+.floating-axis-filter.is-at-bottom .floating-filter-clear:hover,
+.floating-axis-filter.is-at-bottom .floating-filter-clear:focus-visible {
   opacity: 1;
 }
 
@@ -1882,6 +1885,11 @@ html[data-theme="dark"] .proposal-success-body a {
   .floating-axis-filter.is-docked-bottom {
     bottom: 16px;
     top: auto;
+  }
+
+  .floating-axis-filter.is-at-bottom .floating-filter-toggle,
+  .floating-axis-filter.is-at-bottom .floating-filter-clear {
+    opacity: 1;
   }
 
   .floating-filter-toggle {

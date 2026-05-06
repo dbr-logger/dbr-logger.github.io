@@ -1033,7 +1033,7 @@ export function createRenderer(store) {
 
     nodes.floatingAxisFilter.classList.toggle("is-docked-top", floatingDockSide === "top");
     nodes.floatingAxisFilter.classList.toggle("is-docked-bottom", floatingDockSide === "bottom");
-    nodes.floatingAxisFilter.classList.toggle("is-at-bottom", isAtPageBottom());
+    nodes.floatingAxisFilter.classList.toggle("is-at-bottom", !floatingFilterOpen && isAtPageBottom());
   }
 
   function isDifficultyImportButtonTopVisible() {
