@@ -846,10 +846,12 @@ export function createRenderer(store) {
   let lastScrollY = window.scrollY;
   let lastUserScrollAt = 0;
   let floatingDockSide = "bottom";
+  let pendingCatalogBottomNextScroll = false;
   let scrollDirectionStreak = null;
   let scrollDirectionDistance = 0;
   let scrollDirectionTimestamp = 0;
   let isProgrammaticScroll = false;
+  let suppressBottomDockState = false;
 
   function easeInOutCubic(progress) {
     return progress < 0.5
@@ -873,11 +875,16 @@ export function createRenderer(store) {
     const distance = targetY - startY;
     const duration = 760;
     const startTime = performance.now();
+    suppressBottomDockState = true;
     isProgrammaticScroll = true;
 
     if (Math.abs(distance) < 1) {
       window.scrollTo(0, targetY);
       isProgrammaticScroll = false;
+      window.requestAnimationFrame(() => {
+        suppressBottomDockState = false;
+        syncFloatingDockClass();
+      });
       return;
     }
 
@@ -894,6 +901,10 @@ export function createRenderer(store) {
 
       activeScrollFrame = null;
       isProgrammaticScroll = false;
+      window.requestAnimationFrame(() => {
+        suppressBottomDockState = false;
+        syncFloatingDockClass();
+      });
     }
 
     activeScrollFrame = window.requestAnimationFrame(step);
@@ -1065,7 +1076,10 @@ export function createRenderer(store) {
 
     nodes.floatingAxisFilter.classList.toggle("is-docked-top", floatingDockSide === "top");
     nodes.floatingAxisFilter.classList.toggle("is-docked-bottom", floatingDockSide === "bottom");
-    nodes.floatingAxisFilter.classList.toggle("is-at-bottom", !floatingFilterOpen && isAtPageBottom());
+    nodes.floatingAxisFilter.classList.toggle(
+      "is-at-bottom",
+      !floatingFilterOpen && !suppressBottomDockState && isAtPageBottom(),
+    );
   }
 
   function isDifficultyImportButtonTopVisible() {
@@ -1984,7 +1998,9 @@ export function createRenderer(store) {
       return;
     }
 
-    if (anchorToBottom && nodes.catalogPanel) {
+    if (anchorToBottom && button.dataset.page === "next") {
+      pendingCatalogBottomNextScroll = true;
+    } else if (anchorToBottom && nodes.catalogPanel) {
       pendingCatalogBottomLock = nodes.catalogPanel.getBoundingClientRect().bottom;
     }
 
@@ -2311,6 +2327,11 @@ export function createRenderer(store) {
       nodes.scoreChart.dataset.maxScore = snapshot.selectedSong?.notes ? String(snapshot.selectedSong.notes * 4) : "";
       renderBpChart(nodes.chart, latestChartHistory);
       renderScoreChart(nodes.scoreChart, latestScoreChartHistory);
+
+      if (pendingCatalogBottomNextScroll) {
+        pendingCatalogBottomNextScroll = false;
+        window.requestAnimationFrame(scrollCatalogPanelIntoView);
+      }
 
       if (pendingCatalogBottomLock !== null && nodes.catalogPanel) {
         const newBottom = nodes.catalogPanel.getBoundingClientRect().bottom;
