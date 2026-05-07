@@ -824,6 +824,7 @@ export function createRenderer(store) {
   let floatingQueryFocused = false;
   let floatingQueryRestoreFocus = false;
   let pendingQueryBlurIntent = null;
+  let floatingClearPointerDown = false;
   let lastSummaryLampClick = { lamp: "", timestamp: 0 };
   let summaryLampPointerState = null;
   let floatingOutsidePointerState = null;
@@ -1429,6 +1430,10 @@ export function createRenderer(store) {
     }
 
     if (target.closest("[data-floating-clear]")) {
+      if (floatingClearPointerDown) {
+        return;
+      }
+
       pendingQueryBlurIntent = "clear";
       store.clearTitleFilter();
       closeFloatingFilter({
@@ -1456,7 +1461,16 @@ export function createRenderer(store) {
     }
 
     if (target.closest("[data-floating-clear]")) {
+      floatingClearPointerDown = true;
       pendingQueryBlurIntent = "clear";
+      event.preventDefault();
+      window.setTimeout(() => {
+        floatingClearPointerDown = false;
+      }, 0);
+      store.clearTitleFilter();
+      closeFloatingFilter({
+        preserveScroll: !canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog),
+      });
       return;
     }
 
@@ -1648,6 +1662,10 @@ export function createRenderer(store) {
       }
 
       if (floatingQueryRestoreFocus) {
+        return;
+      }
+
+      if (event.relatedTarget instanceof HTMLElement && event.relatedTarget.closest("[data-floating-clear]")) {
         return;
       }
 
