@@ -2,7 +2,7 @@ import { formatIsoDate, todayIso } from "../utils/date.js";
 import { escapeHtml } from "../utils/html.js";
 
 const GAS_URL =
-  "https://script.google.com/macros/s/AKfycbzO39jLddNn2o_kYLEg27ApKPZlRwTBaTsTbCo_PPKlwYs109tFPkxnGrEvO96j2L1ERg/exec";
+  "https://script.google.com/macros/s/AKfycbwAqEgEmymWS0Ztge7CKinjSiEPW8gYvCnA_qk1qxjk-gLo1xjT4dBhrGkISHZeTKZR/exec";
 
 const RECOMMEND_OPTIONS = [
   { value: "", label: "（選択）" },
