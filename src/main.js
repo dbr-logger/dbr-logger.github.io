@@ -1,4 +1,4 @@
-const FALLBACK_BUILD_VERSION = "20260507-1";
+const FALLBACK_BUILD_VERSION = "20260507-2";
 
 if ("scrollRestoration" in history) {
   history.scrollRestoration = "manual";
