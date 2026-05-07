@@ -97,6 +97,7 @@ function applyTitleCommonMappings(value) {
     .replaceAll("叉", "又")
     .replaceAll("ё", "e")
     .replaceAll("е", "e")
+    .replaceAll("ə", "e")
     .replaceAll("я", "r")
     .replaceAll("ς", "σ")
     .replace(/…|・・・|⋯/g, "...")
