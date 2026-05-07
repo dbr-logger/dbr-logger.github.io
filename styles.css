@@ -1721,6 +1721,10 @@ html[data-theme="dark"] .pill-splv {
   color: #a2edf1;
 }
 
+html[data-theme="dark"] .pill-neutral {
+  background: rgba(98, 138, 155, 0.08);
+}
+
 html[data-theme="dark"] .summary-lamp-item.is-active,
 html[data-theme="dark"] .song-card.is-selected {
   box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22);
