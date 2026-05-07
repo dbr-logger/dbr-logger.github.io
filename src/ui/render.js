@@ -707,7 +707,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs) {
     <div class="selected-song-meta">
       ${selectedSong.isProposed ? badge("新規提案中", "pill-proposed") : ""}
       ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
-      ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-neutral") : ""}
+      ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-splv") : ""}
       ${badge(selectedSong.bestLamp, "pill-lamp")}
       ${badge(`Best ${formatBp(selectedSong.bestBp)}`, "pill-neutral")}
       ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
@@ -732,7 +732,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
         <div class="song-card-meta">
           ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
           ${badge(formatDifficultyLabel(song), "pill-level")}
-          ${formatSplvLabel(song) ? badge(formatSplvLabel(song), "pill-neutral") : ""}
+          ${formatSplvLabel(song) ? badge(formatSplvLabel(song), "pill-splv") : ""}
           ${badge(song.bestLamp, "pill-lamp")}
         </div>
         <p class="song-card-title">${escapeHtml(song.title)}</p>
