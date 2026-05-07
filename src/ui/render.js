@@ -145,6 +145,22 @@ function formatSplvLabel(song) {
   return song.splv ? `SP☆${song.splv}` : null;
 }
 
+function formatRecommendDisplay(recommend) {
+  const normalized = String(recommend ?? "").trim();
+  return normalized || "－";
+}
+
+function formatSongMemoDisplay(song) {
+  const recommend = formatRecommendDisplay(song?.recommend);
+  const memo = String(song?.note ?? "").replace(/\s+/g, " ").trim();
+
+  if (!memo) {
+    return recommend;
+  }
+
+  return `${recommend}：${memo}`;
+}
+
 function formatBp(value) {
   return value === null || value === undefined ? "-" : String(value);
 }
@@ -703,7 +719,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs) {
   selectedSongContainer.innerHTML = `
     <p class="eyebrow">Selected Song</p>
     <h3>${escapeHtml(selectedSong.title)}</h3>
-    ${selectedSong.note ? `<p class="selected-song-note">${escapeHtml(selectedSong.note.replace(/\s+/g, " ").trim())}</p>` : ""}
+    <p class="selected-song-note">${escapeHtml(formatSongMemoDisplay(selectedSong))}</p>
     <div class="selected-song-meta">
       ${selectedSong.isProposed ? badge("新規提案中", "pill-proposed") : ""}
       ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
@@ -736,7 +752,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
           ${badge(song.bestLamp, "pill-lamp")}
         </div>
         <p class="song-card-title">${escapeHtml(song.title)}</p>
-        ${song.note ? `<p class="song-card-note">${escapeHtml(song.note.replace(/\s+/g, " ").trim())}</p>` : ""}
+        <p class="song-card-note">${escapeHtml(formatSongMemoDisplay(song))}</p>
         <div class="song-card-meta">
           ${badge(`Best ${formatBp(song.bestBp)}`, "pill-neutral")}
           ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")}
