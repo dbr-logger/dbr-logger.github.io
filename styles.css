@@ -18,7 +18,7 @@
   --lamp-failed: #e06767;
   --lamp-assist: #ccb9f4;
   --lamp-easy: #addfb4;
-  --lamp-clear: #90cdf1;
+  --lamp-clear: #b0e2ff;
   --lamp-hard: #f0a29c;
   --lamp-exh: #f0df8d;
   --lamp-fc: #2f3236;
@@ -48,14 +48,14 @@ html[data-theme="dark"] {
   --accent-soft: rgba(83, 199, 207, 0.14);
   --warm: #ffb15a;
   --danger: #ff8d7d;
-  --lamp-no-play: #7e8790;
-  --lamp-failed: #e9877f;
-  --lamp-assist: #bcaee9;
-  --lamp-easy: #8ec89a;
-  --lamp-clear: #7dbbe0;
-  --lamp-hard: #e49f98;
-  --lamp-exh: #ddc974;
-  --lamp-fc: #d8dde1;
+  --lamp-no-play: #3f4449;
+  --lamp-failed: #742f2b;
+  --lamp-assist: #584c83;
+  --lamp-easy: #4f7559;
+  --lamp-clear: #6296be;
+  --lamp-hard: #b2544f;
+  --lamp-exh: #e1cb68;
+  --lamp-fc: #eef2f5;
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
 }
 
