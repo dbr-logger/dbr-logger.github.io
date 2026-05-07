@@ -1000,7 +1000,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 }
 
 .song-card-title {
-  margin: 10px 0 12px;
+  margin: 14px 0 12px;
   color: var(--text);
   font-family: var(--font-song);
   font-size: 1rem;
