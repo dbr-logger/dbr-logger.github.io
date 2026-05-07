@@ -33,6 +33,10 @@ const AXIS_OPTIONS = [
   { value: "memo", label: "メモ" },
 ];
 
+function getExportDateStamp() {
+  return todayIso().replaceAll("-", "");
+}
+
 function isTextAxisMode(axisMode) {
   return axisMode === "title" || axisMode === "memo";
 }
@@ -2185,9 +2189,10 @@ export function createRenderer(store) {
       const blob = new Blob([json], { type: "application/json;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
+      const dateStamp = getExportDateStamp();
 
       anchor.href = url;
-      anchor.download = "dbr_data.json";
+      anchor.download = `dbr_data_${dateStamp}.json`;
       anchor.click();
 
       URL.revokeObjectURL(url);
@@ -2201,8 +2206,9 @@ export function createRenderer(store) {
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
+    const dateStamp = getExportDateStamp();
     anchor.href = url;
-    anchor.download = "dbr_records.csv";
+    anchor.download = `dbr_records_${dateStamp}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   });
