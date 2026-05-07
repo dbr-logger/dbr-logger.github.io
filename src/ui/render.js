@@ -684,7 +684,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
       <div class="floating-filter-panel-header">
         <div>
           <p class="eyebrow">Quick Filter</p>
-          <h3>絞り込み軸</h3>
+          <h3>絞り込み</h3>
         </div>
       </div>
       <div class="field floating-filter-axis-select">
