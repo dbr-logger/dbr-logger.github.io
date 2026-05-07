@@ -48,14 +48,14 @@ html[data-theme="dark"] {
   --accent-soft: rgba(83, 199, 207, 0.14);
   --warm: #ffb15a;
   --danger: #ff8d7d;
-  --lamp-no-play: #3f4449;
-  --lamp-failed: #703330;
-  --lamp-assist: #584c83;
-  --lamp-easy: #43694d;
-  --lamp-clear: #6296be;
-  --lamp-hard: #a3524e;
-  --lamp-exh: #d4c063;
-  --lamp-fc: #dfe4e7;
+  --lamp-no-play: #4f575d;
+  --lamp-failed: #80423d;
+  --lamp-assist: #5f547d;
+  --lamp-easy: #56725f;
+  --lamp-clear: #5d84a4;
+  --lamp-hard: #ac605a;
+  --lamp-exh: #cbbb6b;
+  --lamp-fc: #e0e5e8;
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
 }
 
