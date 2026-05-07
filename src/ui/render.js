@@ -1429,7 +1429,7 @@ export function createRenderer(store) {
     }
 
     if (target.closest("[data-floating-clear]")) {
-      pendingQueryBlurIntent = null;
+      pendingQueryBlurIntent = "clear";
       store.clearTitleFilter();
       closeFloatingFilter({
         preserveScroll: !canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog),
@@ -1648,6 +1648,11 @@ export function createRenderer(store) {
       }
 
       if (floatingQueryRestoreFocus) {
+        return;
+      }
+
+      if (pendingQueryBlurIntent === "clear") {
+        pendingQueryBlurIntent = null;
         return;
       }
 
