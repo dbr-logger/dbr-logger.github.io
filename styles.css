@@ -49,13 +49,13 @@ html[data-theme="dark"] {
   --warm: #ffb15a;
   --danger: #ff8d7d;
   --lamp-no-play: #3f4449;
-  --lamp-failed: #742f2b;
+  --lamp-failed: #703330;
   --lamp-assist: #584c83;
-  --lamp-easy: #4f7559;
+  --lamp-easy: #43694d;
   --lamp-clear: #6296be;
-  --lamp-hard: #b2544f;
-  --lamp-exh: #e1cb68;
-  --lamp-fc: #eef2f5;
+  --lamp-hard: #a3524e;
+  --lamp-exh: #d4c063;
+  --lamp-fc: #dfe4e7;
   --shadow: 0 24px 60px rgba(0, 0, 0, 0.38);
 }
 
