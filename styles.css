@@ -404,6 +404,12 @@ td {
   color: white;
 }
 
+#difficulty-import-button.button-primary {
+  background: linear-gradient(135deg, #eb6d5c, #d65b4d);
+  box-shadow: 0 12px 24px rgba(214, 91, 77, 0.22);
+  color: white;
+}
+
 .button-secondary {
   background: white;
   border: 1px solid rgba(217, 91, 77, 0.24);
@@ -426,6 +432,44 @@ html[data-theme="dark"] .proposal-submit-btn.button-primary {
   background: linear-gradient(135deg, #d98a3d, #b56424);
   box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
   color: #fff8ef;
+}
+
+html[data-theme="dark"] #difficulty-import-button.button-primary {
+  background: linear-gradient(135deg, #d98a3d, #b56424);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+  color: #fff8ef;
+}
+
+html[data-theme="light"] .hero-actions .button.button-primary.is-busy::after,
+html[data-theme="light"] .proposal-submit-btn.button-primary.is-busy::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 206, 146, 0.98),
+    transparent
+  );
+  box-shadow: 0 0 12px rgba(255, 206, 146, 0.88);
+}
+
+html[data-theme="dark"] .hero-actions .button.is-busy::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 220, 166, 0.98),
+    transparent
+  );
+  box-shadow: 0 0 12px rgba(255, 220, 166, 0.7);
+}
+
+html[data-theme="dark"] .hero-actions .button.button-primary.is-busy::after,
+html[data-theme="dark"] .proposal-submit-btn.button-primary.is-busy::after {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 220, 166, 0.98),
+    transparent
+  );
+  box-shadow: 0 0 12px rgba(255, 220, 166, 0.7);
 }
 
 html[data-theme="dark"] .summary-filters-toggle {

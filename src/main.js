@@ -1,5 +1,14 @@
 const FALLBACK_BUILD_VERSION = "20260507-1";
 
+if ("scrollRestoration" in history) {
+  history.scrollRestoration = "manual";
+}
+
+window.scrollTo(0, 0);
+window.addEventListener("pageshow", () => {
+  window.scrollTo(0, 0);
+});
+
 async function resolveBuildVersion() {
   try {
     const response = await fetch(`./version.json?ts=${Date.now()}`, { cache: "no-store" });

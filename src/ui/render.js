@@ -23,6 +23,7 @@ const RECOMMEND_OPTIONS = [
 ];
 const SUMMARY_LAMP_DOUBLE_CLICK_MS = 220;
 const SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD = 40;
+const DIFFICULTY_TABLE_STALE_MS = 12 * 60 * 60 * 1000;
 const THEME_STORAGE_KEY = "dbr-theme";
 const AXIS_OPTIONS = [
   { value: "level", label: "Lv." },
@@ -34,6 +35,20 @@ const AXIS_OPTIONS = [
 
 function isTextAxisMode(axisMode) {
   return axisMode === "title" || axisMode === "memo";
+}
+
+function isDifficultyTableStale(updatedAt) {
+  return Number.isFinite(updatedAt) && Date.now() - updatedAt >= DIFFICULTY_TABLE_STALE_MS;
+}
+
+function syncDifficultyImportButton(button, shouldHighlight) {
+  if (!(button instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  button.classList.toggle("button-primary", shouldHighlight);
+  button.classList.toggle("button-secondary", !shouldHighlight);
+  button.classList.toggle("is-difficulty-stale", shouldHighlight);
 }
 
 function getCurrentTheme() {
@@ -2282,6 +2297,10 @@ export function createRenderer(store) {
         nodes.selectedSong,
         snapshot.selectedSong,
         snapshot.difficultyTable
+      );
+      syncDifficultyImportButton(
+        nodes.difficultyImportButton,
+        !snapshot.difficultyTable || isDifficultyTableStale(snapshot.difficultyTableUpdatedAt)
       );
       renderHistory(nodes.history, snapshot.selectedHistory);
       latestChartHistory = snapshot.selectedHistory.slice().reverse();

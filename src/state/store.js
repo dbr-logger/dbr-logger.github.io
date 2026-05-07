@@ -150,6 +150,22 @@ function normalizeSortMode(sortMode) {
   return SORT_OPTIONS.includes(sortMode) ? sortMode : "level";
 }
 
+function normalizeDifficultyTableUpdatedAt(stored) {
+  if (Number.isFinite(stored?.difficultyTableUpdatedAt)) {
+    return stored.difficultyTableUpdatedAt;
+  }
+
+  const importedAt = stored?.difficultyTable?.importedAt;
+  if (typeof importedAt === "string") {
+    const parsed = Date.parse(importedAt);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return 0;
+}
+
 function buildRecordIndex(records) {
   const index = new Map();
 
@@ -231,6 +247,7 @@ function normalizeStoredData(stored) {
       }))
       .sort(sortRecords),
     difficultyTable: stored.difficultyTable ?? null,
+    difficultyTableUpdatedAt: normalizeDifficultyTableUpdatedAt(stored),
     songNotes: typeof stored.songNotes === "object" && stored.songNotes !== null ? { ...stored.songNotes } : {},
     filters: restoredFilters,
     titleFilterBase: null,
@@ -438,6 +455,7 @@ export function createStore() {
     songs: [],
     records: [],
     difficultyTable: null,
+    difficultyTableUpdatedAt: 0,
     songNotes: {},
     catalogVisibleSignature: "",
     catalogVisibleTitleOrder: [],
@@ -482,6 +500,7 @@ export function createStore() {
       songs: state.songs,
       records: state.records,
       difficultyTable: state.difficultyTable,
+      difficultyTableUpdatedAt: state.difficultyTableUpdatedAt,
       songNotes: state.songNotes,
       titleFilterBase: state.titleFilterBase,
       titleSortBase: state.titleSortBase,
@@ -696,6 +715,7 @@ export function createStore() {
         state.songs = normalized.songs;
         state.records = normalized.records;
         state.difficultyTable = normalized.difficultyTable;
+        state.difficultyTableUpdatedAt = normalized.difficultyTableUpdatedAt;
         state.songNotes = normalized.songNotes;
         state.titleFilterBase = normalized.titleFilterBase;
         state.titleSortBase = normalized.titleSortBase;
@@ -728,6 +748,7 @@ export function createStore() {
         state.songs = [];
         state.records = [];
         state.difficultyTable = null;
+        state.difficultyTableUpdatedAt = 0;
         state.sourceLabel = "";
         state.statusMessage = "難易度表を読み込むと曲一覧を表示できます。";
         persist();
@@ -1121,6 +1142,7 @@ export function createStore() {
   async function importDifficultyTable() {
     const result = await fetchDifficultyTable();
     state.difficultyTable = result;
+    state.difficultyTableUpdatedAt = nowTimestamp();
     migrateRecordTitlesByTextageKey(result);
     updateTextageKeyFromDifficultyTable(result);
     invalidateCatalogVisibleOrder();
