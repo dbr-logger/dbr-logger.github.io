@@ -12,6 +12,10 @@ const RECOMMEND_OPTIONS = [
   { value: "△", label: "△：やるのもよい" },
   { value: "", label: "無記入：そうでもない" },
 ];
+const NEW_PROPOSAL_DUPLICATE_ERROR =
+  "Error: 既に同曲、同譜面に対しての提案が存在します。管理用スプレッドシートをご確認ください。提案内容に対して異議がある場合、異議申し立て列に記載してください。";
+const NEW_PROPOSAL_SHEET_URL =
+  "https://docs.google.com/spreadsheets/d/1R-bgS7CZ1BBTzsk4KRKRSmBAZWNotZnQLfWtZFQr-Ek/edit?gid=1709558806#gid=1709558806";
 
 function todayFormatted() {
   return formatIsoDate(todayIso());
@@ -257,6 +261,20 @@ function renderProposalSuccess(container, type, sheetUrl) {
   container.dataset.openType = "success";
 }
 
+function renderProposalError(statusEl, type, message) {
+  if (type === "new" && String(message ?? "").trim() === NEW_PROPOSAL_DUPLICATE_ERROR) {
+    statusEl.innerHTML = `
+      <div class="proposal-status-error">
+        <p>この譜面はすでに提案されています。</p>
+        <p>提案内容を確認する場合は、<a class="proposal-link" href="${escapeHtml(NEW_PROPOSAL_SHEET_URL)}" target="_blank" rel="noopener">新規提案シート</a>を参照してください（外部スプレッドシートを開きます）。</p>
+      </div>
+    `;
+    return;
+  }
+
+  statusEl.textContent = `送信に失敗しました: ${message ?? "不明なエラー"}`;
+}
+
 async function handleProposalSubmit(formEl, type, entry, today) {
   const statusEl = formEl.querySelector(".proposal-status");
   const submitBtn = formEl.querySelector(".proposal-submit-btn");
@@ -341,7 +359,7 @@ async function handleProposalSubmit(formEl, type, entry, today) {
       const container = formEl.parentElement;
       renderProposalSuccess(container, type, sheetUrl);
     } else {
-      statusEl.textContent = `送信に失敗しました: ${result.message ?? "不明なエラー"}`;
+      renderProposalError(statusEl, type, result.message);
       submitBtn.disabled = false;
     }
   } catch (err) {
