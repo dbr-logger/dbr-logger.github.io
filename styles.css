@@ -1275,6 +1275,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   color: var(--muted);
   font-size: 0.875rem;
   line-height: 1.5;
+  margin-top: 4px;
   min-height: 0;
 }
 
