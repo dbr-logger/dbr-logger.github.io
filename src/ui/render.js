@@ -635,29 +635,35 @@ function renderDifficultyFilters(container, filters) {
   container.innerHTML = `
     <div class="filters-grid">
       <div class="field-stack">
-        <div class="field field-select">
+        <div class="field">
           <span>INFINITAS</span>
-          <select data-filter="inf">
-            <option value="all" ${filters.inf === "all" ? "selected" : ""}>すべて</option>
-            <option value="yes" ${filters.inf === "yes" ? "selected" : ""}>収録あり</option>
-            <option value="no" ${filters.inf === "no" ? "selected" : ""}>収録なし</option>
-          </select>
+          <div class="field-select overview-select-wrap">
+            <select data-filter="inf">
+              <option value="all" ${filters.inf === "all" ? "selected" : ""}>すべて</option>
+              <option value="yes" ${filters.inf === "yes" ? "selected" : ""}>収録あり</option>
+              <option value="no" ${filters.inf === "no" ? "selected" : ""}>収録なし</option>
+            </select>
+          </div>
         </div>
-        <div class="field field-select">
+        <div class="field">
           <span>AC収録</span>
-          <select data-filter="acdelete">
-            <option value="all" ${filters.acdelete === "all" ? "selected" : ""}>すべて</option>
-            <option value="no" ${filters.acdelete === "no" ? "selected" : ""}>収録あり</option>
-            <option value="yes" ${filters.acdelete === "yes" ? "selected" : ""}>収録なし</option>
-          </select>
+          <div class="field-select overview-select-wrap">
+            <select data-filter="acdelete">
+              <option value="all" ${filters.acdelete === "all" ? "selected" : ""}>すべて</option>
+              <option value="no" ${filters.acdelete === "no" ? "selected" : ""}>収録あり</option>
+              <option value="yes" ${filters.acdelete === "yes" ? "selected" : ""}>収録なし</option>
+            </select>
+          </div>
         </div>
-        <div class="field field-select">
+        <div class="field">
           <span>未査定曲</span>
-          <select data-filter="includeUnrated">
-            <option value="all" ${filters.includeUnrated === "all" ? "selected" : ""}>すべて</option>
-            <option value="rated" ${filters.includeUnrated === "rated" ? "selected" : ""}>査定済み</option>
-            <option value="unrated" ${filters.includeUnrated === "unrated" ? "selected" : ""}>未査定のみ</option>
-          </select>
+          <div class="field-select overview-select-wrap">
+            <select data-filter="includeUnrated">
+              <option value="all" ${filters.includeUnrated === "all" ? "selected" : ""}>すべて</option>
+              <option value="rated" ${filters.includeUnrated === "rated" ? "selected" : ""}>査定済み</option>
+              <option value="unrated" ${filters.includeUnrated === "unrated" ? "selected" : ""}>未査定のみ</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>

@@ -1304,16 +1304,19 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   transform: translateY(-50%);
 }
 
+.overview-select-wrap,
 .entry-select-wrap,
 .quickfilter-select-wrap {
   width: 100%;
 }
 
+.overview-select-wrap select,
 .entry-select-wrap select,
 .quickfilter-select-wrap select {
   width: 100%;
 }
 
+.overview-select-wrap.field-select::after,
 .entry-select-wrap.field-select::after,
 .quickfilter-select-wrap.field-select::after {
   top: 50%;
