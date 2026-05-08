@@ -897,13 +897,13 @@ export function createStore() {
 
   function matchesFiltersFor(entry, filters) {
     if (filters.axisMode === "title") {
-      return matchesSearchText(entry.title, filters.titleQuery);
+      return matchesSearchText(entry.title, filters.titleQuery) && matchesTextAxisFixedFilters(entry, filters);
     }
     
     if (filters.axisMode === "memo") {
       const query = filters.titleQuery.trim().toLocaleLowerCase("ja");
       const note = String(entry.note ?? "").toLocaleLowerCase("ja");
-      return !query || note.includes(query);
+      return (!query || note.includes(query)) && matchesTextAxisFixedFilters(entry, filters);
     }
 
     if (filters.axisMode === "date") {
@@ -965,6 +965,26 @@ export function createStore() {
       return false;
     }
 
+    if (filters.inf === "yes" && !entry.infAvailable) {
+      return false;
+    }
+
+    if (filters.inf === "no" && entry.infAvailable) {
+      return false;
+    }
+
+    if (filters.acdelete === "yes" && !entry.acdelete) {
+      return false;
+    }
+
+    if (filters.acdelete === "no" && entry.acdelete) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function matchesTextAxisFixedFilters(entry, filters) {
     if (filters.inf === "yes" && !entry.infAvailable) {
       return false;
     }
