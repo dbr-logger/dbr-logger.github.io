@@ -16,6 +16,7 @@ const LAMP_COLORS = {
   EXH: "var(--lamp-exh)",
   FC: "var(--lamp-fc)",
 };
+const getLampColor = (lamp) => LAMP_COLORS[lamp] ?? LAMP_COLORS["NO PLAY"];
 const RECOMMEND_OPTIONS = [
   { value: "", label: "－" },
   { value: "△", label: "△" },
@@ -778,6 +779,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
 
 function renderSelectedSong(selectedSongContainer, selectedSong, songs) {
   selectedSongContainer.classList.remove("is-proposed");
+  selectedSongContainer.style.removeProperty("--card-lamp-color");
 
   if (!selectedSong || songs.length === 0) {
     selectedSongContainer.innerHTML = '<div class="empty-state">表示できる曲がありません。</div>';
@@ -785,6 +787,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs) {
   }
 
   selectedSongContainer.classList.toggle("is-proposed", Boolean(selectedSong.isProposed));
+  selectedSongContainer.style.setProperty("--card-lamp-color", getLampColor(selectedSong.bestLamp));
 
   const historyCountBadge = selectedSong.entryCount > 0
     ? badge(`履歴 ${selectedSong.entryCount} 件`, "pill-neutral")
@@ -817,8 +820,9 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
     const selectedClass = song.title === selectedTitle ? "is-selected" : "";
     const proposedClass = song.isProposed ? "is-proposed" : "";
     const encodedTitle = encodeURIComponent(song.title);
+    const lampColor = getLampColor(song.bestLamp);
     return `
-      <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}">
+      <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}" style="--card-lamp-color:${escapeHtml(lampColor)}">
         <div class="song-card-meta">
           ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
           ${badge(formatDifficultyLabel(song), "pill-level")}
