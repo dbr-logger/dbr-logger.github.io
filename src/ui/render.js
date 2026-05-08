@@ -853,7 +853,7 @@ function renderHistory(historyContainer, records) {
   `).join("");
 }
 
-function renderPagination(container, pagination) {
+function renderPagination(container, pagination, options = {}) {
   if (pagination.totalItems === 0) {
     container.innerHTML = "";
     return;
@@ -861,9 +861,13 @@ function renderPagination(container, pagination) {
 
   const prevDisabled = pagination.currentPage <= 1 ? "disabled" : "";
   const nextDisabled = pagination.currentPage >= pagination.totalPages ? "disabled" : "";
+  const sortDirectionButton = options.showSortDirectionToggle
+    ? `<button class="button button-tertiary" type="button" data-sort-direction-toggle aria-label="並び順の昇順降順を切り替え">${options.sortDirection === "desc" ? "▼" : "▲"}</button>`
+    : "";
 
   container.innerHTML = `
     <div class="pagination-controls">
+      ${sortDirectionButton}
       <button class="button button-tertiary" type="button" data-page="prev" ${prevDisabled}>前へ</button>
       <span class="pagination-label">${pagination.startIndex}-${pagination.endIndex} / ${pagination.totalItems}</span>
       <button class="button button-tertiary" type="button" data-page="next" ${nextDisabled}>次へ</button>
@@ -2133,6 +2137,12 @@ export function createRenderer(store) {
   });
 
   function handlePaginationClick(event, anchorToBottom = false) {
+    const sortDirectionButton = event.target.closest("[data-sort-direction-toggle]");
+    if (sortDirectionButton) {
+      store.toggleSortDirection();
+      return;
+    }
+
     const button = event.target.closest("[data-page]");
     if (!button) {
       return;
@@ -2446,7 +2456,10 @@ export function createRenderer(store) {
       }
       floatingQuerySelection = null;
       renderCatalog(nodes.catalog, snapshot.pagedSongs, snapshot.selectedSong?.title ?? null);
-      renderPagination(nodes.catalogPaginationTop, snapshot.pagination);
+      renderPagination(nodes.catalogPaginationTop, snapshot.pagination, {
+        showSortDirectionToggle: true,
+        sortDirection: snapshot.sortDirection,
+      });
       renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
       renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs);
       renderProposalButton(

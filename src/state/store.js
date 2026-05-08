@@ -187,6 +187,10 @@ function normalizeSortMode(sortMode) {
   return SORT_OPTIONS.includes(sortMode) ? sortMode : "level";
 }
 
+function normalizeSortDirection(sortDirection) {
+  return sortDirection === "desc" ? "desc" : "asc";
+}
+
 function normalizeDifficultyTableUpdatedAt(stored) {
   if (Number.isFinite(stored?.difficultyTableUpdatedAt)) {
     return stored.difficultyTableUpdatedAt;
@@ -294,6 +298,7 @@ function normalizeStoredData(stored) {
     sortMode: normalizedFilters.axisMode === "title"
       ? normalizeSortMode(stored.titleSortBase ?? stored.sortMode)
       : normalizeSortMode(stored.sortMode),
+    sortDirection: normalizeSortDirection(stored.sortDirection),
     titleSortBase: normalizeSortMode(stored.titleSortBase),
   };
 }
@@ -601,6 +606,121 @@ function compareLatestDateValue(a, b) {
   return compareIsoDates(a.latestDate, b.latestDate);
 }
 
+function compareNullablePrimaryValues(aValue, bValue, compareValues, sortDirection) {
+  const aNull = aValue === null || aValue === undefined || aValue === "";
+  const bNull = bValue === null || bValue === undefined || bValue === "";
+
+  if (aNull && bNull) {
+    return 0;
+  }
+
+  if (aNull) {
+    return 1;
+  }
+
+  if (bNull) {
+    return -1;
+  }
+
+  const compared = compareValues(aValue, bValue);
+  return sortDirection === "desc" ? -compared : compared;
+}
+
+function comparePrimarySortValue(a, b, sortMode, sortDirection) {
+  if (sortMode === "title") {
+    return compareTitlePrimaryValue(a.title, b.title, sortDirection);
+  }
+
+  if (sortMode === "level") {
+    return compareNullablePrimaryValues(a.levelValue, b.levelValue, (aValue, bValue) => aValue - bValue, sortDirection);
+  }
+
+  if (sortMode === "splv") {
+    return compareNullablePrimaryValues(a.splvValue, b.splvValue, (aValue, bValue) => aValue - bValue, sortDirection);
+  }
+
+  if (sortMode === "katate") {
+    return compareNullablePrimaryValues(a.katateValue, b.katateValue, (aValue, bValue) => aValue - bValue, sortDirection);
+  }
+
+  if (sortMode === "latest") {
+    const compared = compareLatestDateValue(a, b);
+    return sortDirection === "desc" ? -compared : compared;
+  }
+
+  if (sortMode === "clear") {
+    const compared = getLampRank(a.bestLamp) - getLampRank(b.bestLamp);
+    return sortDirection === "desc" ? -compared : compared;
+  }
+
+  return compareNullablePrimaryValues(a.levelValue, b.levelValue, (aValue, bValue) => aValue - bValue, sortDirection);
+}
+
+function compareTitlePrimaryValue(aTitle, bTitle, sortDirection) {
+  const aNull = aTitle === null || aTitle === undefined || aTitle === "";
+  const bNull = bTitle === null || bTitle === undefined || bTitle === "";
+
+  if (aNull && bNull) {
+    return 0;
+  }
+
+  if (aNull) {
+    return 1;
+  }
+
+  if (bNull) {
+    return -1;
+  }
+
+  const a = splitTitleAndSuffix(aTitle);
+  const b = splitTitleAndSuffix(bTitle);
+  const baseCompare = a.baseTitle.localeCompare(b.baseTitle, "ja");
+  if (baseCompare !== 0) {
+    return sortDirection === "desc" ? -baseCompare : baseCompare;
+  }
+
+  if (a.suffixRank !== b.suffixRank) {
+    return a.suffixRank - b.suffixRank;
+  }
+
+  return String(aTitle).localeCompare(String(bTitle), "ja");
+}
+
+function compareFilterAxisTieBreak(a, b, axisMode) {
+  if (axisMode === "level") {
+    return compareLevelValue(a, b);
+  }
+
+  if (axisMode === "splv") {
+    return compareSplvValue(a, b);
+  }
+
+  if (axisMode === "katate") {
+    return compareKatateValue(a, b);
+  }
+
+  if (axisMode === "title") {
+    return compareTitleValue(a, b);
+  }
+
+  if (axisMode === "memo") {
+    return compareNullablePrimaryValues(a.note, b.note, (aValue, bValue) => String(aValue).localeCompare(String(bValue), "ja"), "asc");
+  }
+
+  if (axisMode === "date") {
+    return compareNullablePrimaryValues(a.latestDate, b.latestDate, (aValue, bValue) => compareIsoDates(aValue, bValue), "asc");
+  }
+
+  return 0;
+}
+
+function compareCatalogSongs(a, b, sortMode, sortDirection, axisMode) {
+  return comparePrimarySortValue(a, b, sortMode, sortDirection)
+    || compareFilterAxisTieBreak(a, b, axisMode)
+    || compareSplvValue(a, b)
+    || compareTitleValue(a, b);
+}
+
 export function createStore() {
   const listeners = new Set();
   const state = {
@@ -635,6 +755,7 @@ export function createStore() {
       includeUnrated: "all",
     },
     sortMode: "level",
+    sortDirection: "asc",
     currentPage: 1,
     selectedTitle: null,
     statusMessage: "",
@@ -662,6 +783,7 @@ export function createStore() {
       axisMemory: state.axisMemory,
       filters: state.filters,
       sortMode: state.sortMode,
+      sortDirection: state.sortDirection,
     });
   }
 
@@ -896,6 +1018,7 @@ export function createStore() {
         state.axisMemory = normalized.axisMemory;
         state.filters = normalized.filters;
         state.sortMode = normalized.sortMode;
+        state.sortDirection = normalized.sortDirection;
 
         if (state.difficultyTable?.entries?.length) {
           try {
@@ -1065,6 +1188,15 @@ export function createStore() {
     }
 
     state.sortMode = normalized;
+    invalidateCatalogVisibleOrder();
+    state.currentPage = 1;
+    persist();
+    ensureSelectedSong();
+    emit();
+  }
+
+  function toggleSortDirection() {
+    state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
     persist();
@@ -1379,37 +1511,7 @@ export function createStore() {
     const songStates = catalogEntries.map((entry) => ({
       ...deriveSongState(entry, recordIndex.get(entry.title) ?? []),
       note: state.songNotes[entry.title] ?? "",
-    })).sort((a, b) => {
-      const allowUnrated = state.filters.includeUnrated !== "rated";
-      const tieBreak = allowUnrated
-        ? () => compareSplvValue(a, b) || compareTitleValue(a, b)
-        : () => compareLevelValue(a, b) || compareSplvValue(a, b) || compareTitleValue(a, b);
-
-      if (state.sortMode === "title") {
-        return compareTitleValue(a, b)
-          || (allowUnrated ? compareSplvValue(a, b) : compareLevelValue(a, b) || compareSplvValue(a, b));
-      }
-
-      if (state.sortMode === "splv") {
-        return compareSplvValue(a, b) || (allowUnrated ? compareTitleValue(a, b) : compareLevelValue(a, b) || compareTitleValue(a, b));
-      }
-
-      if (state.sortMode === "katate") {
-        return compareKatateValue(a, b) || (allowUnrated ? compareSplvValue(a, b) || compareTitleValue(a, b) : compareLevelValue(a, b) || compareSplvValue(a, b) || compareTitleValue(a, b));
-      }
-
-      if (state.sortMode === "latest") {
-        return compareLatestDateValue(a, b) || tieBreak();
-      }
-
-      if (state.sortMode === "clear") {
-        const lampA = getLampRank(a.bestLamp);
-        const lampB = getLampRank(b.bestLamp);
-        return lampA - lampB || tieBreak();
-      }
-
-      return compareLevelValue(a, b) || compareSplvValue(a, b) || compareTitleValue(a, b);
-    });
+    })).sort((a, b) => compareCatalogSongs(a, b, state.sortMode, state.sortDirection, state.filters.axisMode));
     const filteredVisibleSongs = songStates.filter((entry) => matchesFiltersFor(entry, state.filters));
     if (state.filters.axisMode === "title" && state.filters.titleQuery.trim()) {
       const songOrder = new Map(songStates.map((song, index) => [song.title, index]));
@@ -1483,6 +1585,7 @@ export function createStore() {
     setDifficultyFilters,
     clearTitleFilter,
     setSortMode,
+    toggleSortDirection,
     setPage,
     selectSong,
     saveRecord,
