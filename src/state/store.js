@@ -11,7 +11,7 @@ const { getSearchTextMatchRank, matchesSearchText } = await import(`../utils/sea
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const PAGE_SIZE = 100;
 const SORT_OPTIONS = ["title", "level", "splv", "katate", "latest", "clear"];
-const AXIS_MODES = ["level", "splv", "katate", "title", "memo"];
+const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
 const CHART_SUFFIX_ORDER = new Map([
   ["B", 0],
@@ -139,6 +139,22 @@ function normalizeAxisMemory(axisMemory) {
   };
 }
 
+function normalizeDateValue(value) {
+  const normalized = String(value ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : "";
+}
+
+function normalizeDateRange(startValue, endValue) {
+  const start = normalizeDateValue(startValue);
+  const end = normalizeDateValue(endValue);
+
+  if (start && end && start > end) {
+    return { dateStart: end, dateEnd: start };
+  }
+
+  return { dateStart: start, dateEnd: end };
+}
+
 function normalizeRangePair(minValue, maxValue) {
   const minNumber = parseOptionalNumber(minValue);
   const maxNumber = parseOptionalNumber(maxValue);
@@ -151,10 +167,14 @@ function normalizeRangePair(minValue, maxValue) {
 }
 
 function normalizeStoredFilters(filters) {
+  const dateRange = normalizeDateRange(filters?.dateStart, filters?.dateEnd);
+
   return {
     axisMode: normalizeAxisMode(filters?.axisMode),
     axisValue: typeof filters?.axisValue === "string" ? filters.axisValue : "",
     titleQuery: typeof filters?.titleQuery === "string" ? filters.titleQuery : "",
+    dateStart: dateRange.dateStart,
+    dateEnd: dateRange.dateEnd,
     recommend: normalizeRecommendSelection(filters?.recommend),
     lamps: normalizeLampSelection(filters?.lamps),
     inf: normalizeBooleanFilter(filters?.inf),
@@ -392,7 +412,7 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode)
       return "☆-";
     }
 
-    if (axisMode === "level") {
+    if (axisMode === "level" || axisMode === "date") {
       return `☆${Number(value).toFixed(2)}`;
     }
 
@@ -504,6 +524,8 @@ export function createStore() {
       axisMode: "level",
       axisValue: "",
       titleQuery: "",
+      dateStart: "",
+      dateEnd: "",
       recommend: [...RECOMMEND_OPTIONS],
       lamps: [...LAMP_OPTIONS],
       inf: "all",
@@ -658,6 +680,26 @@ export function createStore() {
       const query = filters.titleQuery.trim().toLocaleLowerCase("ja");
       const note = String(entry.note ?? "").toLocaleLowerCase("ja");
       return !query || note.includes(query);
+    }
+
+    if (filters.axisMode === "date") {
+      const { dateStart, dateEnd } = normalizeDateRange(filters.dateStart, filters.dateEnd);
+
+      if (!dateStart && !dateEnd) {
+        return true;
+      }
+
+      return entry.history.some((record) => {
+        if (dateStart && record.date < dateStart) {
+          return false;
+        }
+
+        if (dateEnd && record.date > dateEnd) {
+          return false;
+        }
+
+        return true;
+      });
     }
 
     if (filters.axisMode === "katate" && entry.katateValue === null) {
@@ -836,12 +878,19 @@ export function createStore() {
         }
     
         state.titleFilterBase = null;
-        nextAxisValue = typeof nextFilters.axisValue === "string"
-          ? nextFilters.axisValue
-          : nextAxisMemory[nextAxisMode] ?? "";
+        nextAxisValue = nextAxisMode === "date"
+          ? ""
+          : (typeof nextFilters.axisValue === "string"
+            ? nextFilters.axisValue
+            : nextAxisMemory[nextAxisMode] ?? "");
         nextTitleQuery = "";
       }
     }
+
+    const nextDateRange = normalizeDateRange(
+      nextFilters.dateStart ?? state.filters.dateStart,
+      nextFilters.dateEnd ?? state.filters.dateEnd,
+    );
 
     const nextStateFilters = {
       ...state.filters,
@@ -849,6 +898,8 @@ export function createStore() {
       axisMode: nextAxisMode,
       axisValue: typeof nextAxisValue === "string" ? nextAxisValue : "",
       titleQuery: typeof nextTitleQuery === "string" ? nextTitleQuery : "",
+      dateStart: nextDateRange.dateStart,
+      dateEnd: nextDateRange.dateEnd,
       recommend: nextFilters.recommend ? normalizeRecommendSelection(nextFilters.recommend) : state.filters.recommend,
       lamps: nextFilters.lamps ? normalizeLampSelection(nextFilters.lamps) : state.filters.lamps,
       inf: nextFilters.inf ? normalizeBooleanFilter(nextFilters.inf) : state.filters.inf,

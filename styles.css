@@ -1545,13 +1545,17 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 }
 
 .floating-filter-slider-block,
-.floating-filter-search {
+.floating-filter-search,
+.floating-filter-date-block,
+.floating-filter-date-grid {
   display: grid;
   gap: 10px;
+  min-width: 0;
 }
 
 .floating-filter-search span,
-.floating-filter-value {
+.floating-filter-value,
+.floating-filter-date-summary {
   color: var(--muted);
   font-size: 0.92rem;
   font-weight: 700;
@@ -1572,6 +1576,52 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   color: var(--text);
   line-height: 1.4;
   padding: 0 14px;
+}
+
+.floating-filter-date-summary {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: flex-start;
+  line-height: 1;
+  min-width: 0;
+}
+
+.floating-filter-date-summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.floating-filter-date-clear {
+  align-self: center;
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  flex: 0 0 auto;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.floating-filter-date-field {
+  min-width: 0;
+}
+
+.floating-filter-date-field .input-field {
+  display: flex;
+  min-width: 0;
+}
+
+.floating-filter-date-field .form-date {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
 }
 
 .field input:focus,

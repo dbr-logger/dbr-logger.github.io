@@ -33,10 +33,15 @@ const AXIS_OPTIONS = [
   { value: "katate", label: "片手Lv." },
   { value: "title", label: "曲名" },
   { value: "memo", label: "メモ" },
+  { value: "date", label: "日付" },
 ];
 
 function isTextAxisMode(axisMode) {
   return axisMode === "title" || axisMode === "memo";
+}
+
+function isDateAxisMode(axisMode) {
+  return axisMode === "date";
 }
 
 function isDifficultyTableStale(updatedAt) {
@@ -472,11 +477,31 @@ function formatAxisValue(axisMode, value) {
   return String(value);
 }
 
+function formatDateRangeValue(filters) {
+  if (!filters.dateStart && !filters.dateEnd) {
+    return "ALL";
+  }
+
+  if (filters.dateStart && filters.dateEnd) {
+    return `${formatIsoDate(filters.dateStart)} ～ ${formatIsoDate(filters.dateEnd)}`;
+  }
+
+  if (filters.dateStart) {
+    return `${formatIsoDate(filters.dateStart)} ～`;
+  }
+
+  return `～ ${formatIsoDate(filters.dateEnd)}`;
+}
+
 function summarizeAxisFilter(filters) {
   if (isTextAxisMode(filters.axisMode)) {
     return filters.titleQuery.trim()
       ? `${getAxisLabel(filters.axisMode)} ${filters.titleQuery.trim()}`
       : `${getAxisLabel(filters.axisMode)} ALL`;
+  }
+
+  if (isDateAxisMode(filters.axisMode)) {
+    return `${getAxisLabel(filters.axisMode)} ${formatDateRangeValue(filters)}`;
   }
 
   return `${getAxisLabel(filters.axisMode)} ${formatAxisValue(filters.axisMode, filters.axisValue)}`;
@@ -662,8 +687,34 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
 
   const searchLabel = filters.axisMode === "memo" ? "メモ検索" : "曲名検索";
   const searchPlaceholder = filters.axisMode === "memo" ? "メモの一部を入力" : "曲名の一部を入力";
+  const dateRangeClearMarkup = filters.dateStart || filters.dateEnd
+    ? '<button class="floating-filter-date-clear" type="button" data-date-clear>解除</button>'
+    : "";
   
-  const controlMarkup = isTextAxisMode(filters.axisMode)
+  const controlMarkup = isDateAxisMode(filters.axisMode)
+    ? `
+      <div class="floating-filter-date-block">
+        <div class="floating-filter-date-summary">
+          <span>${escapeHtml(formatDateRangeValue(filters))}</span>
+          ${dateRangeClearMarkup}
+        </div>
+        <div class="floating-filter-date-grid">
+          <div class="field floating-filter-date-field">
+            <span>開始日</span>
+            <span class="input-field">
+              <input class="form-date" type="date" data-date-start value="${escapeHtml(filters.dateStart ?? "")}" />
+            </span>
+          </div>
+          <div class="field floating-filter-date-field">
+            <span>終了日</span>
+            <span class="input-field">
+              <input class="form-date" type="date" data-date-end value="${escapeHtml(filters.dateEnd ?? "")}" />
+            </span>
+          </div>
+        </div>
+      </div>
+    `
+    : isTextAxisMode(filters.axisMode)
     ? `
       <div class="field floating-filter-search">
         <span>${escapeHtml(searchLabel)}</span>
@@ -831,6 +882,8 @@ export function createRenderer(store) {
   let deferredFilterRevision = 0;
   let pendingCatalogBottomLock = null;
   let floatingAxisModeCommitTimer = null;
+  let dateFilterCommitTimer = null;
+  let dateFilterKeyboardEditUntil = 0;
   let summaryOpen = true;
   let summaryFiltersOpen = false;
   let floatingFilterOpen = false;
@@ -1348,6 +1401,8 @@ export function createRenderer(store) {
       axisMode: filterDraft?.axisMode ?? "level",
       axisValue: filterDraft?.axisValue ?? "",
       titleQuery: filterDraft?.titleQuery ?? "",
+      dateStart: filterDraft?.dateStart ?? "",
+      dateEnd: filterDraft?.dateEnd ?? "",
       inf: panel.querySelector('select[data-filter="inf"]')?.value ?? "all",
       acdelete: panel.querySelector('select[data-filter="acdelete"]')?.value ?? "all",
       recommend: selectedRecommend,
@@ -1379,6 +1434,37 @@ export function createRenderer(store) {
       { titleQuery: input.value, axisValue: "" },
       { scrollToCatalog: options.scrollToCatalog ?? false },
     );
+  }
+
+  function isDateFilterInput(element) {
+    return element instanceof HTMLInputElement
+      && (element.hasAttribute("data-date-start") || element.hasAttribute("data-date-end"));
+  }
+
+  function applyDateFilter() {
+    applyDifficultyFilters({
+      axisMode: "date",
+      axisValue: "",
+      dateStart: nodes.floatingAxisFilter.querySelector("[data-date-start]")?.value ?? "",
+      dateEnd: nodes.floatingAxisFilter.querySelector("[data-date-end]")?.value ?? "",
+    }, { scrollToCatalog: false });
+  }
+
+  function scheduleDateFilterCommitIfBlurred() {
+    if (dateFilterCommitTimer !== null) {
+      window.clearTimeout(dateFilterCommitTimer);
+      dateFilterCommitTimer = null;
+    }
+
+    dateFilterCommitTimer = window.setTimeout(() => {
+      dateFilterCommitTimer = null;
+
+      if (isDateFilterInput(document.activeElement) && performance.now() < dateFilterKeyboardEditUntil) {
+        return;
+      }
+
+      applyDateFilter();
+    }, 150);
   }
 
   function renderFilterDraftPanel() {
@@ -1435,6 +1521,8 @@ export function createRenderer(store) {
       axisMode: filterDraft?.axisMode ?? "level",
       axisValue: filterDraft?.axisValue ?? "",
       titleQuery: filterDraft?.titleQuery ?? "",
+      dateStart: filterDraft?.dateStart ?? "",
+      dateEnd: filterDraft?.dateEnd ?? "",
       inf: "all",
       acdelete: "all",
       recommend: ["", "△", "○", "◎", "☆"],
@@ -1472,6 +1560,12 @@ export function createRenderer(store) {
       });
       return;
     }
+
+    if (target.closest("[data-date-clear]")) {
+      pendingQueryBlurIntent = "clear";
+      applyDifficultyFilters({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
+      return;
+    }
   });
 
   nodes.floatingAxisFilter.addEventListener("pointerdown", (event) => {
@@ -1502,6 +1596,13 @@ export function createRenderer(store) {
       closeFloatingFilter({
         preserveScroll: !canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog),
       });
+      return;
+    }
+
+    if (target.closest("[data-date-clear]")) {
+      pendingQueryBlurIntent = "clear";
+      event.preventDefault();
+      applyDifficultyFilters({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
       return;
     }
 
@@ -1568,6 +1669,11 @@ export function createRenderer(store) {
         start: target.selectionStart ?? target.value.length,
         end: target.selectionEnd ?? target.value.length,
       };
+      return;
+    }
+
+    if (isDateFilterInput(target)) {
+      scheduleDateFilterCommitIfBlurred();
       return;
     }
 
@@ -1643,6 +1749,11 @@ export function createRenderer(store) {
 
   nodes.floatingAxisFilter.addEventListener("keydown", (event) => {
     const target = event.target;
+    if (isDateFilterInput(target)) {
+      dateFilterKeyboardEditUntil = performance.now() + 900;
+      return;
+    }
+
     if (!(target instanceof HTMLInputElement) || !target.hasAttribute("data-axis-query")) {
       return;
     }
@@ -1707,6 +1818,27 @@ export function createRenderer(store) {
 
       applyTitleQueryFilter(target, { keepFocus: false, scrollToCatalog: false });
       closeFloatingFilter({ preserveScroll: false });
+    });
+  });
+
+  nodes.floatingAxisFilter.addEventListener("focusout", (event) => {
+    const target = event.target;
+    if (!isDateFilterInput(target)) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const activeElement = document.activeElement;
+      if (isDateFilterInput(activeElement)) {
+        return;
+      }
+
+      if (dateFilterCommitTimer !== null) {
+        window.clearTimeout(dateFilterCommitTimer);
+        dateFilterCommitTimer = null;
+      }
+
+      applyDateFilter();
     });
   });
 
