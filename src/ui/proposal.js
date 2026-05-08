@@ -1,6 +1,6 @@
 const MODULE_VERSION = new URL(import.meta.url).search;
 
-const { formatIsoDate, todayIso } = await import(`../utils/date.js${MODULE_VERSION}`);
+const { todayIso } = await import(`../utils/date.js${MODULE_VERSION}`);
 const { escapeHtml } = await import(`../utils/html.js${MODULE_VERSION}`);
 
 const GAS_URL =
@@ -18,7 +18,8 @@ const NEW_PROPOSAL_DUPLICATE_ERROR =
   "Error: 既に同曲、同譜面に対しての提案が存在します。管理用スプレッドシートをご確認ください。提案内容に対して異議がある場合、異議申し立て列に記載してください。";
 
 function todayFormatted() {
-  return formatIsoDate(todayIso());
+  const [year, month, day] = todayIso().split("-").map(Number);
+  return `${year}/${month}/${day}`;
 }
 
 function findDifficultyEntry(difficultyTable, title) {
