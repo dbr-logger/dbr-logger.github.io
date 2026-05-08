@@ -10,7 +10,7 @@ const { getSearchTextMatchRank, matchesSearchText } = await import(`../utils/sea
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const PAGE_SIZE = 100;
-const SORT_OPTIONS = ["title", "level", "splv", "katate", "latest", "clear"];
+const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "latest", "recommend", "memo"];
 const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
 const CHART_SUFFIX_ORDER = new Map([
@@ -19,6 +19,13 @@ const CHART_SUFFIX_ORDER = new Map([
   ["H", 2],
   ["A", 3],
   ["L", 4],
+]);
+const RECOMMEND_SORT_RANK = new Map([
+  ["☆", 0],
+  ["◎", 1],
+  ["○", 2],
+  ["△", 3],
+  ["", 4],
 ]);
 function createRecordId(title, date) {
   const seed = Math.random().toString(16).slice(2, 8);
@@ -653,7 +660,30 @@ function comparePrimarySortValue(a, b, sortMode, sortDirection) {
     return sortDirection === "desc" ? -compared : compared;
   }
 
+  if (sortMode === "bestBp") {
+    return compareNullablePrimaryValues(a.bestBp, b.bestBp, (aValue, bValue) => aValue - bValue, sortDirection);
+  }
+
+  if (sortMode === "latestBp") {
+    return compareNullablePrimaryValues(a.currentBp, b.currentBp, (aValue, bValue) => aValue - bValue, sortDirection);
+  }
+
+  if (sortMode === "recommend") {
+    return compareRecommendPrimaryValue(a.recommend, b.recommend, sortDirection);
+  }
+
+  if (sortMode === "memo") {
+    return compareNullablePrimaryValues(a.note, b.note, (aValue, bValue) => String(aValue).localeCompare(String(bValue), "ja"), sortDirection);
+  }
+
   return compareNullablePrimaryValues(a.levelValue, b.levelValue, (aValue, bValue) => aValue - bValue, sortDirection);
+}
+
+function compareRecommendPrimaryValue(aRecommend, bRecommend, sortDirection) {
+  const aRank = RECOMMEND_SORT_RANK.get(String(aRecommend ?? "")) ?? RECOMMEND_SORT_RANK.get("");
+  const bRank = RECOMMEND_SORT_RANK.get(String(bRecommend ?? "")) ?? RECOMMEND_SORT_RANK.get("");
+  const compared = aRank - bRank;
+  return sortDirection === "desc" ? -compared : compared;
 }
 
 function compareTitlePrimaryValue(aTitle, bTitle, sortDirection) {
