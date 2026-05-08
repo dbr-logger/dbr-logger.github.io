@@ -488,40 +488,27 @@ function formatDateBandLabel(date) {
   return `${month}/${day}`;
 }
 
-function addDaysIso(date, amount) {
-  const parsed = new Date(`${date}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    return "";
-  }
-
-  parsed.setDate(parsed.getDate() + amount);
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
-  const day = String(parsed.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
 function getDateSummaryRange(filters) {
   const { dateStart, dateEnd } = normalizeDateRange(filters.dateStart, filters.dateEnd);
 
   if (dateStart && dateEnd) {
-    return { start: dateStart, end: dateEnd, limit: null };
+    return { start: dateStart, end: dateEnd, sliceMode: "all", limit: null };
   }
 
   if (dateStart) {
-    return { start: dateStart, end: addDaysIso(dateStart, 30), limit: null };
+    return { start: dateStart, end: "", sliceMode: "first", limit: 31 };
   }
 
   if (dateEnd) {
-    return { start: addDaysIso(dateEnd, -30), end: dateEnd, limit: null };
+    return { start: "", end: dateEnd, sliceMode: "last", limit: 31 };
   }
 
-  return { start: "", end: "", limit: 14 };
+  return { start: "", end: "", sliceMode: "last", limit: 14 };
 }
 
 function buildDateSummary(records, baseSongs, filters) {
   const visibleTitles = new Set(baseSongs.map((song) => song.title));
-  const { start, end, limit } = getDateSummaryRange(filters);
+  const { start, end, sliceMode, limit } = getDateSummaryRange(filters);
   const bandMap = new Map();
 
   records.forEach((record) => {
@@ -562,7 +549,7 @@ function buildDateSummary(records, baseSongs, filters) {
 
   let bands = [...bandMap.values()].sort((a, b) => String(a.value).localeCompare(String(b.value)));
   if (limit !== null) {
-    bands = bands.slice(-limit);
+    bands = sliceMode === "first" ? bands.slice(0, limit) : bands.slice(-limit);
   }
 
   const baseLampCounts = createLampCounts();

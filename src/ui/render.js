@@ -33,7 +33,7 @@ const AXIS_OPTIONS = [
   { value: "katate", label: "片手Lv." },
   { value: "title", label: "曲名" },
   { value: "memo", label: "メモ" },
-  { value: "date", label: "日付" },
+  { value: "date", label: "プレー日" },
 ];
 
 function isTextAxisMode(axisMode) {
