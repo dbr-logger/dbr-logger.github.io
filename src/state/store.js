@@ -13,6 +13,14 @@ const PAGE_SIZE = 100;
 const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "latest", "recommend", "memo"];
 const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
+const DEFAULT_SORT_MODE_BY_AXIS = {
+  level: "level",
+  splv: "splv",
+  katate: "katate",
+  title: "title",
+  memo: "memo",
+  date: "latest",
+};
 const CHART_SUFFIX_ORDER = new Map([
   ["B", 0],
   ["N", 1],
@@ -146,6 +154,20 @@ function normalizeAxisMemory(axisMemory) {
   };
 }
 
+function normalizeSortModeMemory(sortModeMemory) {
+  const normalized = {};
+  AXIS_MODES.forEach((axisMode) => {
+    if (SORT_OPTIONS.includes(sortModeMemory?.[axisMode])) {
+      normalized[axisMode] = sortModeMemory[axisMode];
+    }
+  });
+  return normalized;
+}
+
+function getDefaultSortModeForAxis(axisMode) {
+  return DEFAULT_SORT_MODE_BY_AXIS[axisMode] ?? "level";
+}
+
 function normalizeDateValue(value) {
   const normalized = String(value ?? "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : "";
@@ -268,6 +290,7 @@ function normalizeStoredData(stored) {
   }
   
   const normalizedTitleFilterBase = stored.titleFilterBase ? normalizeStoredFilters(stored.titleFilterBase) : null;
+  const normalizedSortModeMemory = normalizeSortModeMemory(stored.sortModeMemory);
   const restoredFilters = isTextAxisMode(normalizedFilters.axisMode)
     ? (normalizedTitleFilterBase ? { ...normalizedTitleFilterBase } : {
       ...normalizedFilters,
@@ -276,6 +299,9 @@ function normalizeStoredData(stored) {
       titleQuery: "",
     })
     : normalizedFilters;
+  const normalizedSortMode = normalizedFilters.axisMode === "title"
+    ? normalizeSortMode(stored.titleSortBase ?? stored.sortMode)
+    : normalizeSortMode(stored.sortMode);
 
   return {
     songs: [...stored.songs].sort(sortSongs),
@@ -302,9 +328,12 @@ function normalizeStoredData(stored) {
     titleFilterBase: null,
     textQueryMemory: normalizedTextQueryMemory,
     axisMemory: normalizeAxisMemory(stored.axisMemory),
-    sortMode: normalizedFilters.axisMode === "title"
-      ? normalizeSortMode(stored.titleSortBase ?? stored.sortMode)
-      : normalizeSortMode(stored.sortMode),
+    sortMode: normalizedSortMode,
+    sortModeMemory: {
+      ...normalizedSortModeMemory,
+      [normalizedFilters.axisMode]: normalizeSortMode(stored.sortMode),
+      [restoredFilters.axisMode]: normalizedSortMode,
+    },
     sortDirection: normalizeSortDirection(stored.sortDirection),
     titleSortBase: normalizeSortMode(stored.titleSortBase),
   };
@@ -755,6 +784,7 @@ export function createStore() {
       splv: "",
       katate: "",
     },
+    sortModeMemory: {},
     textQueryMemory: {
       title: "",
       memo: "",
@@ -798,6 +828,7 @@ export function createStore() {
       titleSortBase: state.titleSortBase,
       textQueryMemory: state.textQueryMemory,
       axisMemory: state.axisMemory,
+      sortModeMemory: state.sortModeMemory,
       filters: state.filters,
       sortMode: state.sortMode,
       sortDirection: state.sortDirection,
@@ -1053,6 +1084,7 @@ export function createStore() {
         state.titleSortBase = normalized.titleSortBase;
         state.textQueryMemory = normalized.textQueryMemory;
         state.axisMemory = normalized.axisMemory;
+        state.sortModeMemory = normalized.sortModeMemory;
         state.filters = normalized.filters;
         state.sortMode = normalized.sortMode;
         state.sortDirection = normalized.sortDirection;
@@ -1103,6 +1135,7 @@ export function createStore() {
     const nextAxisMode = normalizeAxisMode(nextFilters.axisMode ?? state.filters.axisMode);
     const axisModeChanged = nextAxisMode !== previousFilters.axisMode;
     const nextAxisMemory = { ...state.axisMemory };
+    const nextSortModeMemory = { ...state.sortModeMemory };
 
     if (AXIS_MEMORY_MODES.includes(previousFilters.axisMode)) {
       nextAxisMemory[previousFilters.axisMode] = previousFilters.axisValue;
@@ -1118,6 +1151,7 @@ export function createStore() {
     if (axisModeChanged) {
       const wasTextAxisMode = isTextAxisMode(previousFilters.axisMode);
       const nextIsTextAxisMode = isTextAxisMode(nextAxisMode);
+      nextSortModeMemory[previousFilters.axisMode] = state.sortMode;
     
       if (wasTextAxisMode) {
         rememberTextQuery(previousFilters.axisMode, previousFilters.titleQuery);
@@ -1129,14 +1163,9 @@ export function createStore() {
           state.titleSortBase = state.sortMode;
         }
     
-        state.sortMode = "title";
         nextAxisValue = "";
         nextTitleQuery = getRememberedTextQuery(nextAxisMode);
       } else {
-        if (wasTextAxisMode) {
-          state.sortMode = state.titleSortBase;
-        }
-    
         state.titleFilterBase = null;
         nextAxisValue = nextAxisMode === "date"
           ? ""
@@ -1145,6 +1174,10 @@ export function createStore() {
             : nextAxisMemory[nextAxisMode] ?? "");
         nextTitleQuery = "";
       }
+
+      state.sortMode = normalizeSortMode(nextSortModeMemory[nextAxisMode] ?? getDefaultSortModeForAxis(nextAxisMode));
+      state.sortDirection = "asc";
+      nextSortModeMemory[nextAxisMode] = state.sortMode;
     }
 
     const nextDateRange = normalizeDateRange(
@@ -1178,6 +1211,7 @@ export function createStore() {
     }
 
     state.axisMemory = nextAxisMemory;
+    state.sortModeMemory = nextSortModeMemory;
     state.filters = nextStateFilters;
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
@@ -1194,9 +1228,17 @@ export function createStore() {
     }
 
     rememberTextQuery(state.filters.axisMode, state.filters.titleQuery);
+    state.sortModeMemory = {
+      ...state.sortModeMemory,
+      [state.filters.axisMode]: state.sortMode,
+    };
     state.filters = { ...state.titleFilterBase };
     state.titleFilterBase = null;
     state.sortMode = state.titleSortBase;
+    state.sortModeMemory = {
+      ...state.sortModeMemory,
+      [state.filters.axisMode]: state.sortMode,
+    };
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
     persist();
@@ -1225,6 +1267,10 @@ export function createStore() {
     }
 
     state.sortMode = normalized;
+    state.sortModeMemory = {
+      ...state.sortModeMemory,
+      [state.filters.axisMode]: normalized,
+    };
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
     persist();
