@@ -491,6 +491,10 @@ function formatAxisValue(axisMode, value) {
   return String(value);
 }
 
+function formatExportDateStamp() {
+  return todayIso().replaceAll("-", "");
+}
+
 function formatDateRangeValue(filters) {
   if (!filters.dateStart && !filters.dateEnd) {
     return "ALL";
@@ -2354,7 +2358,7 @@ export function createRenderer(store) {
       const anchor = document.createElement("a");
 
       anchor.href = url;
-      anchor.download = "dbr_data.json";
+      anchor.download = `dbr_data_${formatExportDateStamp()}.json`;
       anchor.click();
 
       URL.revokeObjectURL(url);
@@ -2369,7 +2373,7 @@ export function createRenderer(store) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "dbr_records.csv";
+    anchor.download = `dbr_records_${formatExportDateStamp()}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   });
