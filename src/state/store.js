@@ -368,6 +368,7 @@ function deriveSongState(song, history = []) {
     history,
     entryCount: history.length,
     latestDate: latest?.date ?? null,
+    latestTimestamp: latest ? normalizeRecordTimestamp(latest.timestamp, latest.date) : null,
     latestLamp: latest?.lamp ?? song.initialLamp,
     bestLamp,
     currentBp: latestBp ?? song.initialBestBp,
@@ -616,17 +617,17 @@ function compareKatateValue(a, b) {
   return (a.katateValue ?? Number.POSITIVE_INFINITY) - (b.katateValue ?? Number.POSITIVE_INFINITY);
 }
 
-function compareLatestDateValue(a, b) {
-  if (a.latestDate === null && b.latestDate === null) {
+function compareLatestTimestampValue(a, b) {
+  if (a.latestTimestamp === null && b.latestTimestamp === null) {
     return 0;
   }
-  if (a.latestDate === null) {
+  if (a.latestTimestamp === null) {
     return -1;
   }
-  if (b.latestDate === null) {
+  if (b.latestTimestamp === null) {
     return 1;
   }
-  return compareIsoDates(a.latestDate, b.latestDate);
+  return String(a.latestTimestamp).localeCompare(String(b.latestTimestamp));
 }
 
 function compareNullablePrimaryValues(aValue, bValue, compareValues, sortDirection) {
@@ -667,7 +668,7 @@ function comparePrimarySortValue(a, b, sortMode, sortDirection) {
   }
 
   if (sortMode === "latest") {
-    const compared = compareLatestDateValue(a, b);
+    const compared = compareLatestTimestampValue(a, b);
     return sortDirection === "desc" ? -compared : compared;
   }
 

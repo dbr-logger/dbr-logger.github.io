@@ -511,6 +511,18 @@ function formatDateRangeValue(filters) {
   return `～ ${formatIsoDate(filters.dateEnd)}`;
 }
 
+function shouldShowFloatingClear(filters) {
+  if (isTextAxisMode(filters.axisMode)) {
+    return true;
+  }
+
+  if (isDateAxisMode(filters.axisMode)) {
+    return Boolean(filters.dateStart || filters.dateEnd);
+  }
+
+  return filters.axisValue !== "";
+}
+
 function summarizeAxisFilter(filters) {
   if (isTextAxisMode(filters.axisMode)) {
     return filters.titleQuery.trim()
@@ -761,7 +773,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
       </div>
     `;
 
-  const clearButtonMarkup = isTextAxisMode(filters.axisMode)
+  const clearButtonMarkup = shouldShowFloatingClear(filters)
     ? '<button class="floating-filter-clear button button-tertiary" type="button" data-floating-clear>解除</button>'
     : "";
 
@@ -1584,11 +1596,7 @@ export function createRenderer(store) {
         return;
       }
 
-      pendingQueryBlurIntent = "clear";
-      store.clearTitleFilter();
-      closeFloatingFilter({
-        preserveScroll: !canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog),
-      });
+      clearFloatingAxisFilter();
       return;
     }
 
@@ -1623,10 +1631,7 @@ export function createRenderer(store) {
       window.setTimeout(() => {
         floatingClearPointerDown = false;
       }, 0);
-      store.clearTitleFilter();
-      closeFloatingFilter({
-        preserveScroll: !canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog),
-      });
+      clearFloatingAxisFilter();
       return;
     }
 
@@ -1914,6 +1919,28 @@ export function createRenderer(store) {
       applyDifficultyFilters(nextFilters, options);
     }, 300);
   }  
+
+  function clearFloatingAxisFilter() {
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+    pendingQueryBlurIntent = "clear";
+
+    if (isTextAxisMode(activeFilters.axisMode)) {
+      store.clearTitleFilter();
+      closeFloatingFilter({
+        preserveScroll: !canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog),
+      });
+      return;
+    }
+
+    if (isDateAxisMode(activeFilters.axisMode)) {
+      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
+      return;
+    }
+
+    floatingAxisPreviewMode = null;
+    floatingAxisPreviewValue = null;
+    applyFiltersPreservingOverviewPosition({ axisValue: "" }, { scrollToCatalog: false });
+  }
 
   function toggleSummaryLampFilter(lamp) {
     const currentLamps = filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS];
