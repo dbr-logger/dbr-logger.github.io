@@ -543,7 +543,7 @@ function findValueIndex(values, rawValue, fallbackIndex = 0) {
 
 function renderSummaryBands(summary) {
   if (!summary.bands.length) {
-    return '<div class="summary-chart-empty empty-state">難易度表が未読み込みです。</div>';
+    return `<div class="summary-chart-empty empty-state">${escapeHtml(summary.emptyMessage ?? "難易度表が未読み込みです。")}</div>`;
   }
 
   const rows = summary.bands.map((band) => {
@@ -579,8 +579,8 @@ function renderSummaryBands(summary) {
   return `
     <div class="summary-chart-wrap">
       <div class="summary-chart-heading">
-        <span>総曲数</span>
-        <strong>${summary.bandTotalSongs ?? summary.totalSongs} 曲</strong>
+        <span>${escapeHtml(summary.totalLabel ?? "総曲数")}</span>
+        <strong>${summary.bandTotalSongs ?? summary.totalSongs} ${escapeHtml(summary.totalUnit ?? "曲")}</strong>
       </div>
       <div class="summary-band-chart">
         ${rows}

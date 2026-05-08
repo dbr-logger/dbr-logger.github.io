@@ -384,10 +384,7 @@ function createDifficultyCatalogEntries(difficultyTable) {
 }
 
 function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode) {
-  const lampCounts = LAMP_OPTIONS.reduce((counts, lamp) => {
-    counts[lamp] = 0;
-    return counts;
-  }, {});
+  const lampCounts = createLampCounts();
 
   targetSongStates.forEach((song) => {
     lampCounts[song.bestLamp] += 1;
@@ -432,10 +429,7 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode)
         value,
         label: formatBandLabel(value),
         total: 0,
-        lampCounts: LAMP_OPTIONS.reduce((counts, lamp) => {
-          counts[lamp] = 0;
-          return counts;
-        }, {}),
+        lampCounts: createLampCounts(),
       });
     }
   });
@@ -466,6 +460,114 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode)
     bandTotalSongs: bandSongStates.length,
     totalSongs: targetSongStates.length,
     lampCounts,
+    bands,
+  };
+}
+
+function createLampCounts() {
+  return LAMP_OPTIONS.reduce((counts, lamp) => {
+    counts[lamp] = 0;
+    return counts;
+  }, {});
+}
+
+function formatDateBandLabel(date) {
+  const [, month, day] = String(date ?? "").split("-").map(Number);
+  return `${month}/${day}`;
+}
+
+function addDaysIso(date, amount) {
+  const parsed = new Date(`${date}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+
+  parsed.setDate(parsed.getDate() + amount);
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getDateSummaryRange(filters) {
+  const { dateStart, dateEnd } = normalizeDateRange(filters.dateStart, filters.dateEnd);
+
+  if (dateStart && dateEnd) {
+    return { start: dateStart, end: dateEnd, limit: null };
+  }
+
+  if (dateStart) {
+    return { start: dateStart, end: addDaysIso(dateStart, 30), limit: null };
+  }
+
+  if (dateEnd) {
+    return { start: addDaysIso(dateEnd, -30), end: dateEnd, limit: null };
+  }
+
+  return { start: "", end: "", limit: 14 };
+}
+
+function buildDateSummary(records, baseSongs, filters) {
+  const visibleTitles = new Set(baseSongs.map((song) => song.title));
+  const { start, end, limit } = getDateSummaryRange(filters);
+  const bandMap = new Map();
+
+  records.forEach((record) => {
+    if (!visibleTitles.has(record.title)) {
+      return;
+    }
+
+    if (start && record.date < start) {
+      return;
+    }
+
+    if (end && record.date > end) {
+      return;
+    }
+
+    const lamp = LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY";
+    if (!bandMap.has(record.date)) {
+      bandMap.set(record.date, {
+        key: record.date,
+        value: record.date,
+        label: formatDateBandLabel(record.date),
+        total: 0,
+        lampCounts: createLampCounts(),
+        baseTotal: 0,
+        baseLampCounts: createLampCounts(),
+      });
+    }
+
+    const band = bandMap.get(record.date);
+    band.baseTotal += 1;
+    band.baseLampCounts[lamp] += 1;
+
+    if (filters.lamps.includes(lamp)) {
+      band.total += 1;
+      band.lampCounts[lamp] += 1;
+    }
+  });
+
+  let bands = [...bandMap.values()].sort((a, b) => String(a.value).localeCompare(String(b.value)));
+  if (limit !== null) {
+    bands = bands.slice(-limit);
+  }
+
+  const baseLampCounts = createLampCounts();
+  bands.forEach((band) => {
+    LAMP_OPTIONS.forEach((lamp) => {
+      baseLampCounts[lamp] += band.baseLampCounts[lamp] ?? 0;
+    });
+  });
+
+  return {
+    axisMode: "date",
+    bandTotalSongs: bands.reduce((total, band) => total + band.total, 0),
+    totalSongs: bands.reduce((total, band) => total + band.baseTotal, 0),
+    totalLabel: "総記録数",
+    totalUnit: "件",
+    emptyMessage: "該当する履歴がありません。",
+    lampCounts: baseLampCounts,
     bands,
   };
 }
@@ -685,11 +787,7 @@ export function createStore() {
     if (filters.axisMode === "date") {
       const { dateStart, dateEnd } = normalizeDateRange(filters.dateStart, filters.dateEnd);
 
-      if (!dateStart && !dateEnd) {
-        return true;
-      }
-
-      return entry.history.some((record) => {
+      if ((dateStart || dateEnd) && !entry.history.some((record) => {
         if (dateStart && record.date < dateStart) {
           return false;
         }
@@ -699,7 +797,9 @@ export function createStore() {
         }
 
         return true;
-      });
+      })) {
+        return false;
+      }
     }
 
     if (filters.axisMode === "katate" && entry.katateValue === null) {
@@ -1338,6 +1438,9 @@ export function createStore() {
       lamps: [...LAMP_OPTIONS],
     };
     const summaryCountSongs = songStates.filter((entry) => matchesFiltersFor(entry, summaryCountFilters));
+    const summary = summaryFilters.axisMode === "date"
+      ? buildDateSummary(state.records, summaryCountSongs, state.filters)
+      : buildSummary(summaryBandBaseSongs, summarySongs, summaryCountSongs, summaryFilters.axisMode);
     const totalPages = Math.max(1, Math.ceil(visibleSongs.length / PAGE_SIZE));
     const currentPage = Math.max(1, Math.min(state.currentPage, totalPages));
     const pageStart = (currentPage - 1) * PAGE_SIZE;
@@ -1370,7 +1473,7 @@ export function createStore() {
         startIndex: visibleSongs.length === 0 ? 0 : pageStart + 1,
         endIndex: Math.min(pageStart + PAGE_SIZE, visibleSongs.length),
       },
-      summary: buildSummary(summaryBandBaseSongs, summarySongs, summaryCountSongs, summaryFilters.axisMode),
+      summary,
       summaryFilters,
     };
   }
