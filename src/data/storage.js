@@ -1,4 +1,6 @@
-import { STORAGE_KEY } from "../constants.js?v=20260507-1";
+const MODULE_VERSION = new URL(import.meta.url).search;
+
+const { STORAGE_KEY } = await import(`../constants.js${MODULE_VERSION}`);
 
 export function loadStoredState(storageKey = STORAGE_KEY) {
   try {

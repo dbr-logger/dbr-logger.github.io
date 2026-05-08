@@ -1,5 +1,7 @@
-import { formatIsoDate, todayIso } from "../utils/date.js";
-import { escapeHtml } from "../utils/html.js";
+const MODULE_VERSION = new URL(import.meta.url).search;
+
+const { formatIsoDate, todayIso } = await import(`../utils/date.js${MODULE_VERSION}`);
+const { escapeHtml } = await import(`../utils/html.js${MODULE_VERSION}`);
 
 const GAS_URL =
   "https://script.google.com/macros/s/AKfycbwAqEgEmymWS0Ztge7CKinjSiEPW8gYvCnA_qk1qxjk-gLo1xjT4dBhrGkISHZeTKZR/exec";

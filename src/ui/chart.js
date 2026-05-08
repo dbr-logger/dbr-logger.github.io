@@ -1,4 +1,6 @@
-import { formatIsoDate } from "../utils/date.js?v=20260507-1";
+const MODULE_VERSION = new URL(import.meta.url).search;
+
+const { formatIsoDate } = await import(`../utils/date.js${MODULE_VERSION}`);
 
 function clampTickCount(length) {
   return Math.max(2, Math.min(length, 5));

@@ -1,6 +1,8 @@
-import { DIFFICULTY_HEADER_URL, KATATE_CSV_PATH } from "../constants.js?v=20260507-1";
-import { parseCsv } from "./csv.js?v=20260507-1";
-import { formatLocalDateTime } from "../utils/date.js?v=20260507-1";
+const MODULE_VERSION = new URL(import.meta.url).search;
+
+const { DIFFICULTY_HEADER_URL, KATATE_CSV_PATH } = await import(`../constants.js${MODULE_VERSION}`);
+const { parseCsv } = await import(`./csv.js${MODULE_VERSION}`);
+const { formatLocalDateTime } = await import(`../utils/date.js${MODULE_VERSION}`);
 
 function normalizeString(value) {
   return String(value ?? "").trim();

@@ -1,10 +1,12 @@
-import { LAMP_OPTIONS } from "../constants.js?v=20260507-1";
-import { exportVerticalCsv, importVerticalCsv } from "../data/csv.js?v=20260507-1";
-import { attachKatateToDifficultyTable, fetchDifficultyTable } from "../data/difficulty.js?v=20260507-1";
-import { exportDbrJson, importDbrJson } from "../data/export-json.js?v=20260507-1";
-import { loadStoredState, saveStoredState } from "../data/storage.js?v=20260507-1";
-import { compareIsoDates, todayIso } from "../utils/date.js?v=20260507-1";
-import { getSearchTextMatchRank, matchesSearchText } from "../utils/search.js?v=20260507-1";
+const MODULE_VERSION = new URL(import.meta.url).search;
+
+const { LAMP_OPTIONS } = await import(`../constants.js${MODULE_VERSION}`);
+const { exportVerticalCsv, importVerticalCsv } = await import(`../data/csv.js${MODULE_VERSION}`);
+const { attachKatateToDifficultyTable, fetchDifficultyTable } = await import(`../data/difficulty.js${MODULE_VERSION}`);
+const { exportDbrJson, importDbrJson } = await import(`../data/export-json.js${MODULE_VERSION}`);
+const { loadStoredState, saveStoredState } = await import(`../data/storage.js${MODULE_VERSION}`);
+const { compareIsoDates, todayIso } = await import(`../utils/date.js${MODULE_VERSION}`);
+const { getSearchTextMatchRank, matchesSearchText } = await import(`../utils/search.js${MODULE_VERSION}`);
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const PAGE_SIZE = 100;

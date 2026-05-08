@@ -1,8 +1,10 @@
-import { LAMP_OPTIONS } from "../constants.js?v=20260507-1";
-import { renderBpChart, renderScoreChart } from "./chart.js?v=20260507-1";
-import { formatIsoDate, todayIso } from "../utils/date.js?v=20260507-1";
-import { renderProposalButton } from "./proposal.js";
-import { escapeHtml } from "../utils/html.js";
+const MODULE_VERSION = new URL(import.meta.url).search;
+
+const { LAMP_OPTIONS } = await import(`../constants.js${MODULE_VERSION}`);
+const { renderBpChart, renderScoreChart } = await import(`./chart.js${MODULE_VERSION}`);
+const { formatIsoDate, todayIso } = await import(`../utils/date.js${MODULE_VERSION}`);
+const { renderProposalButton } = await import(`./proposal.js${MODULE_VERSION}`);
+const { escapeHtml } = await import(`../utils/html.js${MODULE_VERSION}`);
 
 const LAMP_COLORS = {
   "NO PLAY": "var(--lamp-no-play)",
