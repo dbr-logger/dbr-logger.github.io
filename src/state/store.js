@@ -5,7 +5,7 @@ const { exportVerticalCsv, importVerticalCsv } = await import(`../data/csv.js${M
 const { attachKatateToDifficultyTable, fetchDifficultyTable } = await import(`../data/difficulty.js${MODULE_VERSION}`);
 const { exportDbrJson, importDbrJson } = await import(`../data/export-json.js${MODULE_VERSION}`);
 const { loadStoredState, saveStoredState } = await import(`../data/storage.js${MODULE_VERSION}`);
-const { compareIsoDates, todayIso } = await import(`../utils/date.js${MODULE_VERSION}`);
+const { compareIsoDates, formatLocalDateTime, todayIso } = await import(`../utils/date.js${MODULE_VERSION}`);
 const { getSearchTextMatchRank, matchesSearchText } = await import(`../utils/search.js${MODULE_VERSION}`);
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
@@ -63,7 +63,22 @@ function sortSongs(a, b) {
 }
 
 function sortRecords(a, b) {
-  return compareIsoDates(a.date, b.date) || compareTitlesWithSuffixOrder(a.title, b.title);
+  return compareRecordTimestamps(a, b) || compareIsoDates(a.date, b.date) || compareTitlesWithSuffixOrder(a.title, b.title);
+}
+
+function normalizeRecordTimestamp(timestamp, date) {
+  const normalized = String(timestamp ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized)) {
+    return normalized;
+  }
+
+  return date ? `${date}T00:00:00` : "";
+}
+
+function compareRecordTimestamps(a, b) {
+  const aTimestamp = normalizeRecordTimestamp(a?.timestamp, a?.date);
+  const bTimestamp = normalizeRecordTimestamp(b?.timestamp, b?.date);
+  return aTimestamp.localeCompare(bTimestamp);
 }
 
 function getLampRank(lamp) {
@@ -237,6 +252,7 @@ function normalizeStoredData(stored) {
       .filter((record) => record?.date && record?.title)
       .map((record) => ({
         id: record.id || createRecordId(record.title, record.date),
+        timestamp: normalizeRecordTimestamp(record.timestamp, record.date),
         date: record.date,
         title: record.title,
         level: parseOptionalNumber(record.level),
@@ -260,6 +276,18 @@ function normalizeStoredData(stored) {
       : normalizeSortMode(stored.sortMode),
     titleSortBase: normalizeSortMode(stored.titleSortBase),
   };
+}
+
+function needsRecordTimestampMigration(records) {
+  if (!Array.isArray(records)) {
+    return false;
+  }
+
+  return records.some((record) => (
+    record?.date
+    && record?.title
+    && normalizeRecordTimestamp(record.timestamp, record.date) !== String(record.timestamp ?? "").trim()
+  ));
 }
 
 function deriveSongState(song, history = []) {
@@ -712,8 +740,9 @@ export function createStore() {
       const stored = loadStoredState();
 
       if (stored) {
+        const needsTimestampMigration = needsRecordTimestampMigration(stored.records);
         const normalized = normalizeStoredData(stored);
-        let didMutateStoredData = false;
+        let didMutateStoredData = needsTimestampMigration;
         state.songs = normalized.songs;
         state.records = normalized.records;
         state.difficultyTable = normalized.difficultyTable;
@@ -939,11 +968,13 @@ export function createStore() {
     }
 
     const date = todayIso();
+    const timestamp = formatLocalDateTime();
     const existingIndex = state.records.findIndex((record) => record.title === selectedEntry.title && record.date === date);
 
     if (existingIndex >= 0) {
       state.records[existingIndex] = {
         ...state.records[existingIndex],
+        timestamp,
         lamp,
         bp: normalizedBp,
         score: normalizedScore,
@@ -956,6 +987,7 @@ export function createStore() {
       const chartSuffix = selectedEntry.title.match(/\(([BNHAL])\)$/)?.[0] ?? "";
       state.records.push({
         id: createRecordId(selectedEntry.title, date),
+        timestamp,
         date,
         title: selectedEntry.title,
         level: selectedEntry.levelValue ?? null,
@@ -1066,6 +1098,7 @@ export function createStore() {
 
       return {
         id: createRecordId(record.title, record.date),
+        timestamp: normalizeRecordTimestamp(record.timestamp, record.date),
         date: record.date,
         title: record.title,
         level,
@@ -1101,6 +1134,7 @@ export function createStore() {
 
       return {
         id: createRecordId(record.title, record.date),
+        timestamp: normalizeRecordTimestamp(record.timestamp, record.date),
         date: record.date,
         title: record.title,
         level,
@@ -1261,7 +1295,7 @@ export function createStore() {
       ?? pagedSongs[0]
       ?? visibleSongs[0]
       ?? null;
-    const selectedHistory = selectedSong ? [...selectedSong.history].sort((a, b) => compareIsoDates(b.date, a.date)) : [];
+    const selectedHistory = selectedSong ? [...selectedSong.history].sort((a, b) => sortRecords(b, a)) : [];
     const selectedDeleteDate = selectedSong ? getDeleteAnchorDate(selectedSong.title) : null;
     const hasTodayRecord = selectedSong
       ? selectedHistory.some((record) => record.date === (selectedDeleteDate ?? todayIso()))

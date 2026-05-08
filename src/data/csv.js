@@ -39,6 +39,16 @@ function parseNumber(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function normalizeTimestamp(value, date) {
+  const normalized = String(value ?? "").trim();
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized)) {
+    return normalized;
+  }
+
+  const normalizedDate = String(date ?? "").trim();
+  return normalizedDate ? `${normalizedDate}T00:00:00` : "";
+}
+
 function escapeCsvValue(value) {
   const stringValue = String(value ?? "");
   if (/[",\n]/.test(stringValue)) {
@@ -92,6 +102,7 @@ export function importVerticalCsv(text) {
 
   const records = rows.map((row) => {
     const date = String(row.date ?? "").trim();
+    const timestamp = normalizeTimestamp(row.timestamp, date);
     const title = String(row.title ?? "").trim();
     const level = parseNumber(row.level);
     const splv = parseNumber(row.splv);
@@ -115,6 +126,7 @@ export function importVerticalCsv(text) {
 
     return {
       id: `${createSongId(title) || "song"}--${date}`,
+      timestamp,
       date,
       title,
       level,
@@ -126,14 +138,15 @@ export function importVerticalCsv(text) {
     };
   }).filter(Boolean);
 
-  records.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title, "ja"));
+  records.sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.date.localeCompare(b.date) || a.title.localeCompare(b.title, "ja"));
   return { records, songNotes };
 }
 
 export function exportVerticalCsv(records, songNotes = {}, difficultyTable = null) {
   const difficultyLookup = buildDifficultyLookup(difficultyTable);
-  const header = ["date", "title", "level", "splv", "lamp", "bp", "score", "memo"];
+  const header = ["timestamp", "date", "title", "level", "splv", "lamp", "bp", "score", "memo"];
   const rows = records.map((record) => [
+    normalizeTimestamp(record.timestamp, record.date),
     record.date,
     record.title,
     difficultyLookup.get(record.title)?.level ?? record.level ?? "",
@@ -151,6 +164,7 @@ export function exportVerticalCsv(records, songNotes = {}, difficultyTable = nul
     }
 
     rows.push([
+      "",
       "",
       title,
       "",
