@@ -1043,10 +1043,10 @@ export function createRenderer(store) {
     return Math.abs(targetY - startY) >= 1;
   }
 
-  function applyFiltersPreservingOverviewPosition(nextFilters) {
+  function applyFiltersPreservingOverviewPosition(nextFilters, options = {}) {
     const overviewPanel = nodes.summaryPanel;
     const catalogTarget = nodes.catalogPanel ?? nodes.catalog;
-    const shouldScroll = canAutoScrollElementUpward(catalogTarget);
+    const shouldScroll = options.scrollToCatalog ?? canAutoScrollElementUpward(catalogTarget);
 
     if (!overviewPanel) {
       applyDifficultyFilters(nextFilters, { scrollToCatalog: shouldScroll });
@@ -1452,7 +1452,7 @@ export function createRenderer(store) {
   }
 
   function applyDateFilter() {
-    applyDifficultyFilters({
+    applyFiltersPreservingOverviewPosition({
       axisMode: "date",
       axisValue: "",
       dateStart: nodes.floatingAxisFilter.querySelector("[data-date-start]")?.value ?? "",
@@ -1573,7 +1573,7 @@ export function createRenderer(store) {
 
     if (target.closest("[data-date-clear]")) {
       pendingQueryBlurIntent = "clear";
-      applyDifficultyFilters({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
+      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
       return;
     }
   });
@@ -1612,7 +1612,7 @@ export function createRenderer(store) {
     if (target.closest("[data-date-clear]")) {
       pendingQueryBlurIntent = "clear";
       event.preventDefault();
-      applyDifficultyFilters({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
+      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
       return;
     }
 
