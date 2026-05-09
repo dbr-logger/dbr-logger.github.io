@@ -606,15 +606,15 @@ function buildDateSummary(records, baseSongs, filters) {
 function getDefaultDateRangeFromRecords(records) {
   const dates = [...new Set(records.map((record) => record.date).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const recentDates = dates.slice(-14);
+  const today = todayIso();
 
   if (recentDates.length === 0) {
-    const today = todayIso();
     return { dateStart: today, dateEnd: today };
   }
 
   return {
     dateStart: recentDates[0],
-    dateEnd: recentDates[recentDates.length - 1],
+    dateEnd: today,
   };
 }
 
