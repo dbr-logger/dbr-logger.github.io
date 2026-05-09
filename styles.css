@@ -1644,6 +1644,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 
 .floating-filter-range-slider {
   grid-area: 1 / 1;
+  pointer-events: none;
   position: relative;
   z-index: 2;
 }
