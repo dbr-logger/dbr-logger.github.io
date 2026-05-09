@@ -290,6 +290,7 @@ function normalizeStoredData(stored) {
   }
   
   const normalizedTitleFilterBase = stored.titleFilterBase ? normalizeStoredFilters(stored.titleFilterBase) : null;
+  const normalizedDateFilterBase = stored.dateFilterBase ? normalizeStoredFilters(stored.dateFilterBase) : null;
   const normalizedSortModeMemory = normalizeSortModeMemory(stored.sortModeMemory);
   const restoredFilters = isTextAxisMode(normalizedFilters.axisMode)
     ? (normalizedTitleFilterBase ? { ...normalizedTitleFilterBase } : {
@@ -326,6 +327,7 @@ function normalizeStoredData(stored) {
     songNotes: typeof stored.songNotes === "object" && stored.songNotes !== null ? { ...stored.songNotes } : {},
     filters: restoredFilters,
     titleFilterBase: null,
+    dateFilterBase: normalizedDateFilterBase,
     textQueryMemory: normalizedTextQueryMemory,
     axisMemory: normalizeAxisMemory(stored.axisMemory),
     sortMode: normalizedSortMode,
@@ -601,6 +603,21 @@ function buildDateSummary(records, baseSongs, filters) {
   };
 }
 
+function getDefaultDateRangeFromRecords(records) {
+  const dates = [...new Set(records.map((record) => record.date).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const recentDates = dates.slice(-14);
+
+  if (recentDates.length === 0) {
+    const today = todayIso();
+    return { dateStart: today, dateEnd: today };
+  }
+
+  return {
+    dateStart: recentDates[0],
+    dateEnd: recentDates[recentDates.length - 1],
+  };
+}
+
 function compareLevelValue(a, b) {
   return (a.levelValue ?? Number.POSITIVE_INFINITY) - (b.levelValue ?? Number.POSITIVE_INFINITY);
 }
@@ -779,6 +796,7 @@ export function createStore() {
     catalogVisibleSignature: "",
     catalogVisibleTitleOrder: [],
     titleFilterBase: null,
+    dateFilterBase: null,
     titleSortBase: "level",
     axisMemory: {
       level: "",
@@ -826,6 +844,7 @@ export function createStore() {
       difficultyTableUpdatedAt: state.difficultyTableUpdatedAt,
       songNotes: state.songNotes,
       titleFilterBase: state.titleFilterBase,
+      dateFilterBase: state.dateFilterBase,
       titleSortBase: state.titleSortBase,
       textQueryMemory: state.textQueryMemory,
       axisMemory: state.axisMemory,
@@ -1082,6 +1101,7 @@ export function createStore() {
         state.difficultyTableUpdatedAt = normalized.difficultyTableUpdatedAt;
         state.songNotes = normalized.songNotes;
         state.titleFilterBase = normalized.titleFilterBase;
+        state.dateFilterBase = normalized.dateFilterBase;
         state.titleSortBase = normalized.titleSortBase;
         state.textQueryMemory = normalized.textQueryMemory;
         state.axisMemory = normalized.axisMemory;
@@ -1089,6 +1109,15 @@ export function createStore() {
         state.filters = normalized.filters;
         state.sortMode = normalized.sortMode;
         state.sortDirection = normalized.sortDirection;
+
+        if (state.filters.axisMode === "date" && (!state.filters.dateStart || !state.filters.dateEnd)) {
+          const defaultDateRange = getDefaultDateRangeFromRecords(state.records);
+          state.filters = {
+            ...state.filters,
+            ...defaultDateRange,
+          };
+          didMutateStoredData = true;
+        }
 
         if (state.difficultyTable?.entries?.length) {
           try {
@@ -1148,6 +1177,8 @@ export function createStore() {
     let nextTitleQuery = typeof nextFilters.titleQuery === "string"
       ? nextFilters.titleQuery
       : state.filters.titleQuery;
+    let nextDateStart = nextFilters.dateStart ?? state.filters.dateStart;
+    let nextDateEnd = nextFilters.dateEnd ?? state.filters.dateEnd;
 
     if (axisModeChanged) {
       const wasTextAxisMode = isTextAxisMode(previousFilters.axisMode);
@@ -1166,8 +1197,18 @@ export function createStore() {
     
         nextAxisValue = "";
         nextTitleQuery = getRememberedTextQuery(nextAxisMode);
+        state.dateFilterBase = null;
+      } else if (nextAxisMode === "date") {
+        const defaultDateRange = getDefaultDateRangeFromRecords(state.records);
+        state.dateFilterBase = { ...previousFilters };
+        state.titleFilterBase = null;
+        nextAxisValue = "";
+        nextTitleQuery = "";
+        nextDateStart = typeof nextFilters.dateStart === "string" ? nextFilters.dateStart : defaultDateRange.dateStart;
+        nextDateEnd = typeof nextFilters.dateEnd === "string" ? nextFilters.dateEnd : defaultDateRange.dateEnd;
       } else {
         state.titleFilterBase = null;
+        state.dateFilterBase = null;
         nextAxisValue = nextAxisMode === "date"
           ? ""
           : (typeof nextFilters.axisValue === "string"
@@ -1182,8 +1223,8 @@ export function createStore() {
     }
 
     const nextDateRange = normalizeDateRange(
-      nextFilters.dateStart ?? state.filters.dateStart,
-      nextFilters.dateEnd ?? state.filters.dateEnd,
+      nextDateStart,
+      nextDateEnd,
     );
 
     const nextStateFilters = {
@@ -1236,6 +1277,34 @@ export function createStore() {
     state.filters = { ...state.titleFilterBase };
     state.titleFilterBase = null;
     state.sortMode = state.titleSortBase;
+    state.sortModeMemory = {
+      ...state.sortModeMemory,
+      [state.filters.axisMode]: state.sortMode,
+    };
+    invalidateCatalogVisibleOrder();
+    state.currentPage = 1;
+    persist();
+    ensureSelectedSong();
+    emit();
+  }
+
+  function clearDateFilter() {
+    state.sortModeMemory = {
+      ...state.sortModeMemory,
+      [state.filters.axisMode]: state.sortMode,
+    };
+    state.filters = state.dateFilterBase
+      ? { ...state.dateFilterBase }
+      : {
+        ...state.filters,
+        axisMode: "level",
+        axisValue: "",
+        titleQuery: "",
+        dateStart: "",
+        dateEnd: "",
+      };
+    state.dateFilterBase = null;
+    state.sortMode = normalizeSortMode(state.sortModeMemory[state.filters.axisMode] ?? getDefaultSortModeForAxis(state.filters.axisMode));
     state.sortModeMemory = {
       ...state.sortModeMemory,
       [state.filters.axisMode]: state.sortMode,
@@ -1592,6 +1661,7 @@ export function createStore() {
   function getSnapshot() {
     const catalogEntries = getCatalogEntries();
     const recordIndex = buildRecordIndex(state.records);
+    const dateDefaultRange = getDefaultDateRangeFromRecords(state.records);
     const songStates = catalogEntries.map((entry) => ({
       ...deriveSongState(entry, recordIndex.get(entry.title) ?? []),
       note: state.songNotes[entry.title] ?? "",
@@ -1661,6 +1731,7 @@ export function createStore() {
       },
       summary,
       summaryFilters,
+      dateDefaultRange,
     };
   }
 
@@ -1668,6 +1739,7 @@ export function createStore() {
     initialize,
     setDifficultyFilters,
     clearTitleFilter,
+    clearDateFilter,
     setSortMode,
     toggleSortDirection,
     setPage,

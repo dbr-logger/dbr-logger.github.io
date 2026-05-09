@@ -537,6 +537,18 @@ function summarizeAxisFilter(filters) {
   return `${getAxisLabel(filters.axisMode)} ${formatAxisValue(filters.axisMode, filters.axisValue)}`;
 }
 
+function renderFloatingToggleLabel(filters) {
+  if (isDateAxisMode(filters.axisMode)) {
+    return `絞り込み: ${escapeHtml(getAxisLabel(filters.axisMode))}<br>${escapeHtml(formatDateRangeValue(filters))}`;
+  }
+
+  return `絞り込み: ${escapeHtml(summarizeAxisFilter(filters))}`;
+}
+
+function isDefaultDateRange(filters, dateDefaultRange) {
+  return filters.dateStart === dateDefaultRange?.dateStart && filters.dateEnd === dateDefaultRange?.dateEnd;
+}
+
 function findClosestValue(values, rawValue, fallbackValue) {
   if (!values.length) {
     return fallbackValue;
@@ -711,7 +723,7 @@ function renderDifficultyFilters(container, filters) {
   `;
 }
 
-function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewState = null) {
+function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewState = null, dateDefaultRange = null) {
   const axisValues = getAxisValues(bounds, filters.axisMode);
   const sliderStops = ["", ...axisValues];
   const previewValue = previewState?.mode === filters.axisMode ? previewState.value : null;
@@ -723,8 +735,8 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
 
   const searchLabel = filters.axisMode === "memo" ? "メモ検索" : "曲名検索";
   const searchPlaceholder = filters.axisMode === "memo" ? "メモの一部を入力" : "曲名の一部を入力";
-  const dateRangeClearMarkup = filters.dateStart || filters.dateEnd
-    ? '<button class="floating-filter-date-clear" type="button" data-date-clear>解除</button>'
+  const dateRangeResetMarkup = !isDefaultDateRange(filters, dateDefaultRange)
+    ? '<button class="floating-filter-date-clear" type="button" data-date-reset>戻す</button>'
     : "";
   
   const controlMarkup = isDateAxisMode(filters.axisMode)
@@ -732,7 +744,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
       <div class="floating-filter-date-block">
         <div class="floating-filter-date-summary">
           <span>${escapeHtml(formatDateRangeValue(filters))}</span>
-          ${dateRangeClearMarkup}
+          ${dateRangeResetMarkup}
         </div>
         <div class="floating-filter-date-grid">
           <div class="field floating-filter-date-field">
@@ -780,7 +792,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
   container.innerHTML = `
     <div class="floating-filter-actions">
       <button class="floating-filter-toggle button button-primary" type="button" data-floating-toggle>
-        絞り込み: ${escapeHtml(summarizeAxisFilter(filters))}
+        ${renderFloatingToggleLabel(filters)}
       </button>
       ${clearButtonMarkup}
     </div>
@@ -1114,12 +1126,14 @@ export function createRenderer(store) {
   }
 
   function renderFloatingFilterShell() {
+    const snapshot = store.getSnapshot();
     renderFloatingAxisFilter(
       nodes.floatingAxisFilter,
-      filterDraft ?? store.getSnapshot().filters,
+      filterDraft ?? snapshot.filters,
       latestFilterBounds,
       floatingFilterOpen,
       { mode: floatingAxisPreviewMode, value: floatingAxisPreviewValue },
+      snapshot.dateDefaultRange,
     );
     syncFloatingDockClass();
     if (floatingFilterOpen) {
@@ -1604,9 +1618,10 @@ export function createRenderer(store) {
       return;
     }
 
-    if (target.closest("[data-date-clear]")) {
+    if (target.closest("[data-date-reset]")) {
       pendingQueryBlurIntent = "clear";
-      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
+      const { dateDefaultRange } = store.getSnapshot();
+      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...dateDefaultRange }, { scrollToCatalog: false });
       return;
     }
   });
@@ -1639,10 +1654,11 @@ export function createRenderer(store) {
       return;
     }
 
-    if (target.closest("[data-date-clear]")) {
+    if (target.closest("[data-date-reset]")) {
       pendingQueryBlurIntent = "clear";
       event.preventDefault();
-      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
+      const { dateDefaultRange } = store.getSnapshot();
+      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...dateDefaultRange }, { scrollToCatalog: false });
       return;
     }
 
@@ -1937,7 +1953,10 @@ export function createRenderer(store) {
     }
 
     if (isDateAxisMode(activeFilters.axisMode)) {
-      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", dateStart: "", dateEnd: "" }, { scrollToCatalog: false });
+      store.clearDateFilter();
+      closeFloatingFilter({
+        preserveScroll: !canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog),
+      });
       return;
     }
 
