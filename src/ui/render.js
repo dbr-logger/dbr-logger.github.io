@@ -1460,7 +1460,9 @@ export function createRenderer(store) {
       : getActiveAxisRange({ ...activeFilters, axisMode });
     const nextRange = { ...baseRange };
     const nextIndex = Math.max(0, Math.min(targetIndex, axisValues.length - 1));
-    const activeHandle = handle === "end" ? "end" : "start";
+    const activeHandle = handle === "auto" && nextRange.startIndex === nextRange.endIndex && nextIndex !== nextRange.startIndex
+      ? (nextIndex > nextRange.startIndex ? "end" : "start")
+      : (handle === "end" ? "end" : "start");
 
     if (activeHandle === "start") {
       nextRange.startIndex = Math.min(nextIndex, nextRange.endIndex);
@@ -1475,7 +1477,7 @@ export function createRenderer(store) {
     floatingAxisRangePreviewValue = nextRange;
     floatingAxisRangeShortcutPending = true;
     updateFloatingRangeDisplay(axisMode, nextRange);
-    return true;
+    return activeHandle;
   }
 
   function getFloatingAxisRangePointerIndex(event, rangeWrap) {
@@ -2277,7 +2279,9 @@ export function createRenderer(store) {
         ? floatingAxisRangePreviewValue
         : getActiveAxisRange(activeFilters);
       const pointerIndex = getFloatingAxisRangePointerIndex(event, rangeWrap);
-      const handle = Math.abs(pointerIndex - range.startIndex) <= Math.abs(pointerIndex - range.endIndex) ? "start" : "end";
+      const handle = range.startIndex === range.endIndex
+        ? "auto"
+        : Math.abs(pointerIndex - range.startIndex) <= Math.abs(pointerIndex - range.endIndex) ? "start" : "end";
       floatingAxisRangeDragState = {
         axisMode: activeFilters.axisMode,
         handle,
@@ -2285,7 +2289,10 @@ export function createRenderer(store) {
         pointerId: event.pointerId,
       };
       rangeWrap.setPointerCapture?.(event.pointerId);
-      previewFloatingAxisRangeToIndex(activeFilters.axisMode, pointerIndex, handle);
+      const activeHandle = previewFloatingAxisRangeToIndex(activeFilters.axisMode, pointerIndex, handle);
+      if (activeHandle && !(handle === "auto" && pointerIndex === range.startIndex)) {
+        floatingAxisRangeDragState.handle = activeHandle;
+      }
       return;
     }
 
@@ -2364,7 +2371,14 @@ export function createRenderer(store) {
 
     event.preventDefault();
     const { axisMode, handle, rangeWrap } = floatingAxisRangeDragState;
-    previewFloatingAxisRangeToIndex(axisMode, getFloatingAxisRangePointerIndex(event, rangeWrap), handle);
+    const pointerIndex = getFloatingAxisRangePointerIndex(event, rangeWrap);
+    const range = floatingAxisRangePreviewMode === axisMode && floatingAxisRangePreviewValue
+      ? floatingAxisRangePreviewValue
+      : getActiveAxisRange({ ...(filterDraft ?? store.getSnapshot().filters), axisMode });
+    const activeHandle = previewFloatingAxisRangeToIndex(axisMode, pointerIndex, handle);
+    if (handle === "auto" && activeHandle && pointerIndex !== range.startIndex) {
+      floatingAxisRangeDragState.handle = activeHandle;
+    }
   });
 
   nodes.floatingAxisFilter.addEventListener("pointerup", (event) => {
