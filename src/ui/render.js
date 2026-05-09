@@ -949,6 +949,7 @@ export function createRenderer(store) {
   let floatingFilterOpen = false;
   let floatingAxisPreviewMode = null;
   let floatingAxisPreviewValue = null;
+  let floatingAxisShortcutPending = false;
   let floatingQuerySelection = null;
   let floatingQueryComposing = false;
   let floatingQueryFocused = false;
@@ -1194,7 +1195,7 @@ export function createRenderer(store) {
     return element instanceof HTMLInputElement
       || element instanceof HTMLTextAreaElement
       || element instanceof HTMLSelectElement
-      || element instanceof HTMLButtonElement
+      // || element instanceof HTMLButtonElement
       || Boolean(element instanceof HTMLElement && element.isContentEditable);
   }
 
@@ -1521,6 +1522,129 @@ export function createRenderer(store) {
       window.requestAnimationFrame(scrollCatalogPanelIntoView);
     }
   }
+
+  function previewFloatingAxisSliderBy(delta) {
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+
+    if (!floatingFilterOpen || isTextAxisMode(activeFilters.axisMode) || isDateAxisMode(activeFilters.axisMode)) {
+      return false;
+    }
+
+    const slider = nodes.floatingAxisFilter.querySelector('input[data-axis-slider]');
+    if (!(slider instanceof HTMLInputElement) || slider.disabled) {
+      return false;
+    }
+
+    const axisValues = getAxisValues(latestFilterBounds, activeFilters.axisMode);
+    const sliderStops = ["", ...axisValues];
+
+    if (sliderStops.length <= 1) {
+      return false;
+    }
+
+    const currentIndex = Number(slider.value);
+    if (!Number.isFinite(currentIndex)) {
+      return false;
+    }
+
+    const nextIndex = Math.max(0, Math.min(currentIndex + delta, sliderStops.length - 1));
+    if (nextIndex === currentIndex) {
+      return true;
+    }
+
+    const nextValue = sliderStops[nextIndex] ?? "";
+    const previewValue = nextValue === "" ? "" : String(nextValue);
+
+    slider.value = String(nextIndex);
+
+    floatingAxisPreviewMode = activeFilters.axisMode;
+    floatingAxisPreviewValue = previewValue;
+    floatingAxisShortcutPending = true;
+
+    const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value");
+    if (valueNode) {
+      valueNode.textContent = formatAxisValue(activeFilters.axisMode, previewValue);
+    }
+
+    updateSliderFill(slider);
+
+    return true;
+  } 
+  
+  function commitFloatingAxisSliderShortcut() {
+    if (!floatingAxisShortcutPending) {
+      return false;
+    }
+
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+
+    if (floatingAxisPreviewMode !== activeFilters.axisMode) {
+      floatingAxisShortcutPending = false;
+      floatingAxisPreviewMode = null;
+      floatingAxisPreviewValue = null;
+      return false;
+    }
+
+    const committedValue = floatingAxisPreviewValue === "" ? "" : String(floatingAxisPreviewValue);
+
+    floatingAxisShortcutPending = false;
+    floatingAxisPreviewMode = null;
+    floatingAxisPreviewValue = null;
+
+    applyDifficultyFilters({ axisValue: committedValue }, { scrollToCatalog: false });
+    return true;
+  }  
+
+  function moveFloatingAxisSliderBy(delta) {
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+
+    if (!floatingFilterOpen || isTextAxisMode(activeFilters.axisMode) || isDateAxisMode(activeFilters.axisMode)) {
+      return false;
+    }
+
+    const slider = nodes.floatingAxisFilter.querySelector('input[data-axis-slider]');
+    if (!(slider instanceof HTMLInputElement) || slider.disabled) {
+      return false;
+    }
+
+    const axisValues = getAxisValues(latestFilterBounds, activeFilters.axisMode);
+    const sliderStops = ["", ...axisValues];
+
+    if (sliderStops.length <= 1) {
+      return false;
+    }
+
+    const currentIndex = Number(slider.value);
+    if (!Number.isFinite(currentIndex)) {
+      return false;
+    }
+
+    const nextIndex = Math.max(0, Math.min(currentIndex + delta, sliderStops.length - 1));
+    if (nextIndex === currentIndex) {
+      return true;
+    }
+
+    const nextValue = sliderStops[nextIndex] ?? "";
+    const committedValue = nextValue === "" ? "" : String(nextValue);
+
+    slider.value = String(nextIndex);
+
+    floatingAxisPreviewMode = activeFilters.axisMode;
+    floatingAxisPreviewValue = committedValue;
+
+    const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value");
+    if (valueNode) {
+      valueNode.textContent = formatAxisValue(activeFilters.axisMode, committedValue);
+    }
+
+    updateSliderFill(slider);
+
+    floatingAxisPreviewMode = null;
+    floatingAxisPreviewValue = null;
+    applyDifficultyFilters({ axisValue: committedValue }, { scrollToCatalog: false });
+
+    return true;
+  }  
 
   function applyTitleQueryFilter(input, options = {}) {
     floatingQuerySelection = {
@@ -2373,6 +2497,27 @@ export function createRenderer(store) {
     }
 
     const shortcutKey = event.key.toLowerCase();
+
+    if ((shortcutKey === "a" || shortcutKey === "d")
+      && !event.isComposing
+      && !event.ctrlKey
+      && !event.altKey
+      && !event.metaKey
+    ) {
+      const target = event.target;
+      if (target instanceof HTMLElement && isShortcutEditableTarget(target)) {
+        return;
+      }
+
+      const moved = previewFloatingAxisSliderBy(shortcutKey === "a" ? -1 : 1);
+      if (!moved) {
+        return;
+      }
+
+      event.preventDefault();
+      return;
+    }
+
     if (event.repeat
       || event.isComposing
       || event.ctrlKey
@@ -2414,6 +2559,23 @@ export function createRenderer(store) {
     pendingQueryBlurIntent = null;
     applyFiltersPreservingOverviewPosition({ axisMode: "title" }, { scrollToCatalog: false });
   });
+
+  document.addEventListener("keyup", (event) => {
+    const shortcutKey = event.key.toLowerCase();
+    if (shortcutKey !== "a" && shortcutKey !== "d") {
+      return;
+    }
+
+    if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    if (!commitFloatingAxisSliderShortcut()) {
+      return;
+    }
+
+    event.preventDefault();
+  });  
 
   [nodes.bpInput, nodes.scoreInput].forEach((input) => input?.addEventListener("wheel", (event) => {
     if (document.activeElement === input) {
