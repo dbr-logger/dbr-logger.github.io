@@ -164,6 +164,10 @@ function normalizeSortModeMemory(sortModeMemory) {
   return normalized;
 }
 
+function normalizeDateRangeMemory(dateRangeMemory) {
+  return normalizeDateRange(dateRangeMemory?.dateStart, dateRangeMemory?.dateEnd);
+}
+
 function getDefaultSortModeForAxis(axisMode) {
   return DEFAULT_SORT_MODE_BY_AXIS[axisMode] ?? "level";
 }
@@ -291,6 +295,7 @@ function normalizeStoredData(stored) {
   
   const normalizedTitleFilterBase = stored.titleFilterBase ? normalizeStoredFilters(stored.titleFilterBase) : null;
   const normalizedDateFilterBase = stored.dateFilterBase ? normalizeStoredFilters(stored.dateFilterBase) : null;
+  const normalizedDateRangeMemory = normalizeDateRangeMemory(stored.dateRangeMemory);
   const normalizedSortModeMemory = normalizeSortModeMemory(stored.sortModeMemory);
   const restoredFilters = isTextAxisMode(normalizedFilters.axisMode)
     ? (normalizedTitleFilterBase ? { ...normalizedTitleFilterBase } : {
@@ -328,6 +333,7 @@ function normalizeStoredData(stored) {
     filters: restoredFilters,
     titleFilterBase: null,
     dateFilterBase: normalizedDateFilterBase,
+    dateRangeMemory: normalizedDateRangeMemory,
     textQueryMemory: normalizedTextQueryMemory,
     axisMemory: normalizeAxisMemory(stored.axisMemory),
     sortMode: normalizedSortMode,
@@ -618,6 +624,27 @@ function getDefaultDateRangeFromRecords(records) {
   };
 }
 
+function getDateFilterReturnBase(previousFilters, titleFilterBase) {
+  const isValidReturnAxis = (axisMode) => !isTextAxisMode(axisMode) && axisMode !== "date";
+
+  if (isTextAxisMode(previousFilters.axisMode) && titleFilterBase && isValidReturnAxis(titleFilterBase.axisMode)) {
+    return { ...titleFilterBase };
+  }
+
+  if (!isValidReturnAxis(previousFilters.axisMode)) {
+    return {
+      ...previousFilters,
+      axisMode: "level",
+      axisValue: "",
+      titleQuery: "",
+      dateStart: "",
+      dateEnd: "",
+    };
+  }
+
+  return { ...previousFilters };
+}
+
 function compareLevelValue(a, b) {
   return (a.levelValue ?? Number.POSITIVE_INFINITY) - (b.levelValue ?? Number.POSITIVE_INFINITY);
 }
@@ -797,6 +824,10 @@ export function createStore() {
     catalogVisibleTitleOrder: [],
     titleFilterBase: null,
     dateFilterBase: null,
+    dateRangeMemory: {
+      dateStart: "",
+      dateEnd: "",
+    },
     titleSortBase: "level",
     axisMemory: {
       level: "",
@@ -845,6 +876,7 @@ export function createStore() {
       songNotes: state.songNotes,
       titleFilterBase: state.titleFilterBase,
       dateFilterBase: state.dateFilterBase,
+      dateRangeMemory: state.dateRangeMemory,
       titleSortBase: state.titleSortBase,
       textQueryMemory: state.textQueryMemory,
       axisMemory: state.axisMemory,
@@ -1102,6 +1134,7 @@ export function createStore() {
         state.songNotes = normalized.songNotes;
         state.titleFilterBase = normalized.titleFilterBase;
         state.dateFilterBase = normalized.dateFilterBase;
+        state.dateRangeMemory = normalized.dateRangeMemory;
         state.titleSortBase = normalized.titleSortBase;
         state.textQueryMemory = normalized.textQueryMemory;
         state.axisMemory = normalized.axisMemory;
@@ -1171,6 +1204,10 @@ export function createStore() {
       nextAxisMemory[previousFilters.axisMode] = previousFilters.axisValue;
     }
 
+    if (previousFilters.axisMode === "date") {
+      state.dateRangeMemory = normalizeDateRange(previousFilters.dateStart, previousFilters.dateEnd);
+    }
+
     let nextAxisValue = typeof nextFilters.axisValue === "string"
       ? nextFilters.axisValue
       : state.filters.axisValue;
@@ -1200,12 +1237,17 @@ export function createStore() {
         state.dateFilterBase = null;
       } else if (nextAxisMode === "date") {
         const defaultDateRange = getDefaultDateRangeFromRecords(state.records);
-        state.dateFilterBase = { ...previousFilters };
+        const rememberedDateRange = normalizeDateRangeMemory(state.dateRangeMemory);
+        state.dateFilterBase = getDateFilterReturnBase(previousFilters, state.titleFilterBase);
         state.titleFilterBase = null;
         nextAxisValue = "";
         nextTitleQuery = "";
-        nextDateStart = typeof nextFilters.dateStart === "string" ? nextFilters.dateStart : defaultDateRange.dateStart;
-        nextDateEnd = typeof nextFilters.dateEnd === "string" ? nextFilters.dateEnd : defaultDateRange.dateEnd;
+        nextDateStart = typeof nextFilters.dateStart === "string"
+          ? nextFilters.dateStart
+          : rememberedDateRange.dateStart || defaultDateRange.dateStart;
+        nextDateEnd = typeof nextFilters.dateEnd === "string"
+          ? nextFilters.dateEnd
+          : rememberedDateRange.dateEnd || defaultDateRange.dateEnd;
       } else {
         state.titleFilterBase = null;
         state.dateFilterBase = null;
@@ -1252,6 +1294,13 @@ export function createStore() {
       nextAxisMemory[nextStateFilters.axisMode] = nextStateFilters.axisValue;
     }
 
+    if (nextStateFilters.axisMode === "date") {
+      state.dateRangeMemory = {
+        dateStart: nextStateFilters.dateStart,
+        dateEnd: nextStateFilters.dateEnd,
+      };
+    }
+
     state.axisMemory = nextAxisMemory;
     state.sortModeMemory = nextSortModeMemory;
     state.filters = nextStateFilters;
@@ -1293,6 +1342,7 @@ export function createStore() {
       ...state.sortModeMemory,
       [state.filters.axisMode]: state.sortMode,
     };
+    state.dateRangeMemory = normalizeDateRange(state.filters.dateStart, state.filters.dateEnd);
     state.filters = state.dateFilterBase
       ? { ...state.dateFilterBase }
       : {

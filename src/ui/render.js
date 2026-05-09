@@ -950,6 +950,8 @@ export function createRenderer(store) {
   let floatingQueryRestoreFocus = false;
   let pendingQueryBlurIntent = null;
   let floatingClearPointerDown = false;
+  let floatingTogglePointerDown = false;
+  let suppressNextFloatingToggleClick = false;
   let lastSummaryLampClick = { lamp: "", timestamp: 0 };
   let summaryLampPointerState = null;
   let floatingOutsidePointerState = null;
@@ -1149,6 +1151,12 @@ export function createRenderer(store) {
     releaseFloatingFilterPosition();
   }
 
+  function toggleFloatingFilter() {
+    floatingFilterOpen = !floatingFilterOpen;
+    renderFloatingFilterShell();
+    syncQueryScrollLockState();
+  }
+
   function isMobileViewport() {
     return window.matchMedia("(max-width: 720px)").matches;
   }
@@ -1156,6 +1164,10 @@ export function createRenderer(store) {
   function isSmartphoneDevice() {
     const userAgent = navigator.userAgent || "";
     return /iPhone|iPod|Android.+Mobile/i.test(userAgent);
+  }
+
+  function isFineHoverDevice() {
+    return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
   }
 
   function setQueryScrollLock(locked) {
@@ -1174,6 +1186,10 @@ export function createRenderer(store) {
   }
 
   function shouldCloseFloatingFilterAfterSliderCommit() {
+    if (isFineHoverDevice()) {
+      return false;
+    }
+
     if (isMobileViewport()) {
       return true;
     }
@@ -1596,29 +1612,45 @@ export function createRenderer(store) {
   });
 
   nodes.floatingAxisFilter.addEventListener("click", (event) => {
+    event.stopPropagation();
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
       return;
     }
 
     if (target.closest("[data-floating-toggle]")) {
-      const willOpen = !floatingFilterOpen;
-      floatingFilterOpen = !floatingFilterOpen;
-      renderFloatingFilterShell();
-      syncQueryScrollLockState();
+      event.stopPropagation();
+      if (suppressNextFloatingToggleClick) {
+        suppressNextFloatingToggleClick = false;
+        return;
+      }
+
+      if (floatingTogglePointerDown) {
+        return;
+      }
+
+      toggleFloatingFilter();
       return;
     }
 
     if (target.closest("[data-floating-clear]")) {
+      event.preventDefault();
+      event.stopPropagation();
       if (floatingClearPointerDown) {
         return;
       }
 
+      const activeFilters = filterDraft ?? store.getSnapshot().filters;
       clearFloatingAxisFilter();
+      if (!isTextAxisMode(activeFilters.axisMode) && !isDateAxisMode(activeFilters.axisMode)) {
+        closeFloatingFilter({ preserveScroll: false });
+      }
       return;
     }
 
     if (target.closest("[data-date-reset]")) {
+      event.preventDefault();
+      event.stopPropagation();
       pendingQueryBlurIntent = "clear";
       const { dateDefaultRange } = store.getSnapshot();
       applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...dateDefaultRange }, { scrollToCatalog: false });
@@ -1627,8 +1659,22 @@ export function createRenderer(store) {
   });
 
   nodes.floatingAxisFilter.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target.closest("[data-floating-toggle]")) {
+      floatingTogglePointerDown = true;
+      pendingQueryBlurIntent = "toggle";
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextFloatingToggleClick = true;
+      window.setTimeout(() => {
+        floatingTogglePointerDown = false;
+      }, 0);
+      toggleFloatingFilter();
       return;
     }
 
@@ -1647,23 +1693,24 @@ export function createRenderer(store) {
       floatingClearPointerDown = true;
       pendingQueryBlurIntent = "clear";
       event.preventDefault();
+      event.stopPropagation();
       window.setTimeout(() => {
         floatingClearPointerDown = false;
       }, 0);
+      const activeFilters = filterDraft ?? store.getSnapshot().filters;
       clearFloatingAxisFilter();
+      if (!isTextAxisMode(activeFilters.axisMode) && !isDateAxisMode(activeFilters.axisMode)) {
+        closeFloatingFilter({ preserveScroll: false });
+      }
       return;
     }
 
     if (target.closest("[data-date-reset]")) {
       pendingQueryBlurIntent = "clear";
       event.preventDefault();
+      event.stopPropagation();
       const { dateDefaultRange } = store.getSnapshot();
       applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...dateDefaultRange }, { scrollToCatalog: false });
-      return;
-    }
-
-    if (target.closest("[data-floating-toggle]")) {
-      pendingQueryBlurIntent = "toggle";
       return;
     }
 
@@ -1873,7 +1920,9 @@ export function createRenderer(store) {
       }
 
       applyTitleQueryFilter(target, { keepFocus: false, scrollToCatalog: false });
-      closeFloatingFilter({ preserveScroll: false });
+      if (!isFineHoverDevice()) {
+        closeFloatingFilter({ preserveScroll: false });
+      }
     });
   });
 
@@ -2438,6 +2487,10 @@ export function createRenderer(store) {
   });
 
   document.addEventListener("pointerdown", (event) => {
+    if (isFineHoverDevice()) {
+      return;
+    }
+
     if (!floatingFilterOpen) {
       return;
     }
@@ -2461,6 +2514,10 @@ export function createRenderer(store) {
   });
 
   document.addEventListener("pointermove", (event) => {
+    if (isFineHoverDevice()) {
+      return;
+    }
+
     if (!floatingOutsidePointerState || event.pointerId !== floatingOutsidePointerState.pointerId) {
       return;
     }
@@ -2477,6 +2534,10 @@ export function createRenderer(store) {
   });
 
   document.addEventListener("pointerup", (event) => {
+    if (isFineHoverDevice()) {
+      return;
+    }
+
     if (!floatingOutsidePointerState || event.pointerId !== floatingOutsidePointerState.pointerId) {
       return;
     }
