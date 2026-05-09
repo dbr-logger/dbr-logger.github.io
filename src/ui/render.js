@@ -1162,6 +1162,16 @@ export function createRenderer(store) {
     syncQueryScrollLockState();
   }
 
+  function focusFloatingTitleQuery() {
+    const queryInput = nodes.floatingAxisFilter.querySelector('input[data-axis-query]');
+    if (!(queryInput instanceof HTMLInputElement)) {
+      return;
+    }
+
+    queryInput.focus();
+    queryInput.select?.();
+  }
+
   function isMobileViewport() {
     return window.matchMedia("(max-width: 720px)").matches;
   }
@@ -1178,6 +1188,20 @@ export function createRenderer(store) {
 
   function isTitleQueryElement(element) {
     return element instanceof HTMLInputElement && element.hasAttribute("data-axis-query");
+  }
+
+  function isShortcutEditableTarget(element) {
+    return element instanceof HTMLInputElement
+      || element instanceof HTMLTextAreaElement
+      || element instanceof HTMLSelectElement
+      || element instanceof HTMLButtonElement
+      || Boolean(element instanceof HTMLElement && element.isContentEditable);
+  }
+
+  function isEscapeBlurTarget(element) {
+    return element instanceof HTMLInputElement
+      || element instanceof HTMLTextAreaElement
+      || element instanceof HTMLSelectElement;
   }
 
   function syncQueryScrollLockState() {
@@ -1920,6 +1944,11 @@ export function createRenderer(store) {
         return;
       }
 
+      if (pendingQueryBlurIntent === "escape") {
+        pendingQueryBlurIntent = null;
+        return;
+      }
+
       applyTitleQueryFilter(target, { keepFocus: false, scrollToCatalog: false });
       closeFloatingFilter({ preserveScroll: false });
     });
@@ -1940,6 +1969,11 @@ export function createRenderer(store) {
       if (dateFilterCommitTimer !== null) {
         window.clearTimeout(dateFilterCommitTimer);
         dateFilterCommitTimer = null;
+      }
+
+      if (pendingQueryBlurIntent === "escape") {
+        pendingQueryBlurIntent = null;
+        return;
       }
 
       applyDateFilter();
@@ -2293,6 +2327,89 @@ export function createRenderer(store) {
     }
 
     store.setSortMode(target.value);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !event.isComposing) {
+      const target = event.target;
+      if (isEscapeBlurTarget(target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        pendingQueryBlurIntent = "escape";
+        target.blur();
+      }
+      return;
+    }
+
+    if (event.key === "Delete"
+      && !event.repeat
+      && !event.isComposing
+      && !event.ctrlKey
+      && !event.altKey
+      && !event.metaKey
+    ) {
+      const target = event.target;
+      if (target instanceof HTMLElement && isShortcutEditableTarget(target)) {
+        return;
+      }
+
+      const { filters } = store.getSnapshot();
+      if (!floatingFilterOpen || !isTextAxisMode(filters.axisMode)) {
+        return;
+      }
+
+      const queryInput = nodes.floatingAxisFilter.querySelector('input[data-axis-query]');
+      if (!(queryInput instanceof HTMLInputElement)) {
+        return;
+      }
+
+      event.preventDefault();
+      queryInput.value = "";
+      applyTitleQueryFilter(queryInput, { keepFocus: true, scrollToCatalog: false });
+      return;
+    }
+
+    const shortcutKey = event.key.toLowerCase();
+    if (event.repeat
+      || event.isComposing
+      || event.ctrlKey
+      || event.altKey
+      || event.metaKey
+      || (shortcutKey !== "q" && shortcutKey !== "s")
+    ) {
+      return;
+    }
+
+    const target = event.target;
+    if (target instanceof HTMLElement && isShortcutEditableTarget(target)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (shortcutKey === "q") {
+      toggleFloatingFilter();
+      return;
+    }
+
+    if (!floatingFilterOpen) {
+      floatingFilterOpen = true;
+      renderFloatingFilterShell();
+      syncQueryScrollLockState();
+    }
+
+    const { filters } = store.getSnapshot();
+    if (filters.axisMode === "title") {
+      focusFloatingTitleQuery();
+      syncQueryScrollLockState();
+      return;
+    }
+
+    floatingFilterOpen = true;
+    floatingQueryRestoreFocus = true;
+    floatingQuerySelection = null;
+    pendingQueryBlurIntent = null;
+    applyFiltersPreservingOverviewPosition({ axisMode: "title" }, { scrollToCatalog: false });
   });
 
   [nodes.bpInput, nodes.scoreInput].forEach((input) => input?.addEventListener("wheel", (event) => {
