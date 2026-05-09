@@ -45,10 +45,11 @@ const AXIS_OPTIONS = [
   { value: "level", label: "Lv." },
   { value: "splv", label: "SPLv." },
   { value: "katate", label: "片手Lv." },
+  { value: "date", label: "プレー日" },
   { value: "title", label: "曲名" },
   { value: "memo", label: "メモ" },
-  { value: "date", label: "プレー日" },
 ];
+const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "date"]);
 
 function isTextAxisMode(axisMode) {
   return axisMode === "title" || axisMode === "memo";
@@ -512,6 +513,10 @@ function formatDateRangeValue(filters) {
 }
 
 function shouldShowFloatingClear(filters) {
+  if (HIDDEN_FLOATING_CLEAR_AXES.has(filters.axisMode)) {
+    return false;
+  }
+
   if (isTextAxisMode(filters.axisMode)) {
     return true;
   }
@@ -1166,10 +1171,6 @@ export function createRenderer(store) {
     return /iPhone|iPod|Android.+Mobile/i.test(userAgent);
   }
 
-  function isFineHoverDevice() {
-    return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-  }
-
   function setQueryScrollLock(locked) {
     document.documentElement.classList.toggle("search-focus-scroll-lock", locked);
     document.body.classList.toggle("search-focus-scroll-lock", locked);
@@ -1186,10 +1187,6 @@ export function createRenderer(store) {
   }
 
   function shouldCloseFloatingFilterAfterSliderCommit() {
-    if (isFineHoverDevice()) {
-      return false;
-    }
-
     if (isMobileViewport()) {
       return true;
     }
@@ -1848,6 +1845,10 @@ export function createRenderer(store) {
       start: target.selectionStart ?? target.value.length,
       end: target.selectionEnd ?? target.value.length,
     };
+
+    if (target.value === "") {
+      applyTitleQueryFilter(target, { keepFocus: true, scrollToCatalog: false });
+    }
   });
 
   nodes.floatingAxisFilter.addEventListener("keydown", (event) => {
@@ -1920,9 +1921,7 @@ export function createRenderer(store) {
       }
 
       applyTitleQueryFilter(target, { keepFocus: false, scrollToCatalog: false });
-      if (!isFineHoverDevice()) {
-        closeFloatingFilter({ preserveScroll: false });
-      }
+      closeFloatingFilter({ preserveScroll: false });
     });
   });
 
@@ -2487,10 +2486,6 @@ export function createRenderer(store) {
   });
 
   document.addEventListener("pointerdown", (event) => {
-    if (isFineHoverDevice()) {
-      return;
-    }
-
     if (!floatingFilterOpen) {
       return;
     }
@@ -2514,10 +2509,6 @@ export function createRenderer(store) {
   });
 
   document.addEventListener("pointermove", (event) => {
-    if (isFineHoverDevice()) {
-      return;
-    }
-
     if (!floatingOutsidePointerState || event.pointerId !== floatingOutsidePointerState.pointerId) {
       return;
     }
@@ -2534,10 +2525,6 @@ export function createRenderer(store) {
   });
 
   document.addEventListener("pointerup", (event) => {
-    if (isFineHoverDevice()) {
-      return;
-    }
-
     if (!floatingOutsidePointerState || event.pointerId !== floatingOutsidePointerState.pointerId) {
       return;
     }

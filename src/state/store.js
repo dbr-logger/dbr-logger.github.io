@@ -1740,12 +1740,12 @@ export function createStore() {
       : songStates;
     const summarySongs = summaryBandBaseSongs.filter((entry) => matchesFiltersFor(entry, summaryScopeFilters));
     const summaryCountFilters = {
-      ...state.filters,
+      ...summaryFilters,
       lamps: [...LAMP_OPTIONS],
     };
     const summaryCountSongs = songStates.filter((entry) => matchesFiltersFor(entry, summaryCountFilters));
     const summary = summaryFilters.axisMode === "date"
-      ? buildDateSummary(state.records, summaryCountSongs, state.filters)
+      ? buildDateSummary(state.records, summaryCountSongs, summaryFilters)
       : buildSummary(summaryBandBaseSongs, summarySongs, summaryCountSongs, summaryFilters.axisMode);
     const totalPages = Math.max(1, Math.ceil(visibleSongs.length / PAGE_SIZE));
     const currentPage = Math.max(1, Math.min(state.currentPage, totalPages));
