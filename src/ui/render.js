@@ -1263,6 +1263,10 @@ export function createRenderer(store) {
 
   function lockHeroButtonsExcept(activeButton) {
     document.querySelectorAll(".hero-actions .button").forEach((button) => {
+      if (button.id === "theme-toggle-button") {
+        return;
+      }
+
       if (button === activeButton) {
         return;
       }
