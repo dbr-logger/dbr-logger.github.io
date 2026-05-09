@@ -1612,8 +1612,84 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 }
 
 .floating-filter-value {
+  align-items: center;
+  display: flex;
+  gap: 8px;
   min-height: 22px;
   line-height: 22px;
+}
+
+.floating-filter-inline-action {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.floating-filter-range-wrap {
+  display: grid;
+  min-width: 0;
+  position: relative;
+  --range-start: 0%;
+  --range-end: 100%;
+  height: 22px;
+  touch-action: none;
+}
+
+.floating-filter-range-slider {
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 2;
+}
+
+.floating-filter-range-wrap::before,
+.floating-filter-range-wrap::after {
+  border-radius: 999px;
+  content: "";
+  height: 6px;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+  top: 8px;
+  z-index: 1;
+}
+
+.floating-filter-range-wrap::before {
+  background: rgba(36, 50, 56, 0.14);
+}
+
+.floating-filter-range-wrap::after {
+  background: var(--accent);
+  left: var(--range-start);
+  right: calc(100% - var(--range-end));
+}
+
+.floating-filter-range-slider::-webkit-slider-runnable-track {
+  background: transparent !important;
+}
+
+.floating-filter-range-slider::-moz-range-track,
+.floating-filter-range-slider::-moz-range-progress {
+  background: transparent !important;
+}
+
+.floating-filter-range-slider[data-axis-range-start] {
+  z-index: 4;
+}
+
+.floating-filter-range-wrap.is-end-active .floating-filter-range-slider[data-axis-range-end] {
+  z-index: 5;
+}
+
+.floating-filter-range-wrap.is-start-active .floating-filter-range-slider[data-axis-range-start] {
+  z-index: 5;
 }
 
 .floating-filter-search input {

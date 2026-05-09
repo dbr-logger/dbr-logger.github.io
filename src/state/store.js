@@ -13,6 +13,7 @@ const PAGE_SIZE = 100;
 const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "latest", "recommend", "memo"];
 const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
+const NUMERIC_AXIS_MODES = ["level", "splv", "katate"];
 const DEFAULT_SORT_MODE_BY_AXIS = {
   level: "level",
   splv: "splv",
@@ -146,11 +147,54 @@ function isTextAxisMode(axisMode) {
   return axisMode === "title" || axisMode === "memo";
 }
 
+function isNumericAxisMode(axisMode) {
+  return NUMERIC_AXIS_MODES.includes(axisMode);
+}
+
+function isAxisRangeModeEnabled(filters) {
+  return NUMERIC_AXIS_MODES.some((axisMode) => Boolean(filters.axisRangeModeByAxis?.[axisMode]));
+}
+
 function normalizeAxisMemory(axisMemory) {
   return {
     level: typeof axisMemory?.level === "string" ? axisMemory.level : "",
     splv: typeof axisMemory?.splv === "string" ? axisMemory.splv : "",
     katate: typeof axisMemory?.katate === "string" ? axisMemory.katate : "",
+  };
+}
+
+function normalizeAxisRangeModeByAxis(rangeModeByAxis) {
+  const enabled = Boolean(rangeModeByAxis?.level) || Boolean(rangeModeByAxis?.splv) || Boolean(rangeModeByAxis?.katate);
+  return {
+    level: enabled,
+    splv: enabled,
+    katate: enabled,
+  };
+}
+
+function normalizeAxisRangePair(range) {
+  const start = typeof range?.start === "string" ? range.start : "";
+  const end = typeof range?.end === "string" ? range.end : "";
+  const normalized = normalizeRangePair(start, end);
+  return {
+    start: typeof normalized.min === "string" ? normalized.min : "",
+    end: typeof normalized.max === "string" ? normalized.max : "",
+  };
+}
+
+function normalizeAxisRanges(axisRanges) {
+  return {
+    level: normalizeAxisRangePair(axisRanges?.level),
+    splv: normalizeAxisRangePair(axisRanges?.splv),
+    katate: normalizeAxisRangePair(axisRanges?.katate),
+  };
+}
+
+function normalizeAxisSingleReturnValues(axisSingleReturnValues) {
+  return {
+    level: typeof axisSingleReturnValues?.level === "string" ? axisSingleReturnValues.level : "",
+    splv: typeof axisSingleReturnValues?.splv === "string" ? axisSingleReturnValues.splv : "",
+    katate: typeof axisSingleReturnValues?.katate === "string" ? axisSingleReturnValues.katate : "",
   };
 }
 
@@ -208,6 +252,10 @@ function normalizeStoredFilters(filters) {
     titleQuery: typeof filters?.titleQuery === "string" ? filters.titleQuery : "",
     dateStart: dateRange.dateStart,
     dateEnd: dateRange.dateEnd,
+    axisRangeModeByAxis: normalizeAxisRangeModeByAxis(filters?.axisRangeModeByAxis),
+    axisRanges: normalizeAxisRanges(filters?.axisRanges),
+    axisLastRanges: normalizeAxisRanges(filters?.axisLastRanges),
+    axisSingleReturnValues: normalizeAxisSingleReturnValues(filters?.axisSingleReturnValues),
     recommend: normalizeRecommendSelection(filters?.recommend),
     lamps: normalizeLampSelection(filters?.lamps),
     inf: normalizeBooleanFilter(filters?.inf),
@@ -845,6 +893,10 @@ export function createStore() {
       titleQuery: "",
       dateStart: "",
       dateEnd: "",
+      axisRangeModeByAxis: normalizeAxisRangeModeByAxis(),
+      axisRanges: normalizeAxisRanges(),
+      axisLastRanges: normalizeAxisRanges(),
+      axisSingleReturnValues: normalizeAxisSingleReturnValues(),
       recommend: [...RECOMMEND_OPTIONS],
       lamps: [...LAMP_OPTIONS],
       inf: "all",
@@ -1036,21 +1088,30 @@ export function createStore() {
       return false;
     }
 
-    if (filters.axisMode === "level") {
+    if (isNumericAxisMode(filters.axisMode) && isAxisRangeModeEnabled(filters)) {
+      const range = filters.axisRanges?.[filters.axisMode] ?? { start: "", end: "" };
+      const start = parseOptionalNumber(range.start);
+      const end = parseOptionalNumber(range.end);
+      const entryValue = filters.axisMode === "level"
+        ? entry.levelValue
+        : filters.axisMode === "splv"
+          ? entry.splvValue
+          : entry.katateValue;
+
+      if (start !== null && end !== null && (entryValue === null || entryValue < start || entryValue > end)) {
+        return false;
+      }
+    } else if (filters.axisMode === "level") {
       const selectedLevel = parseOptionalNumber(filters.axisValue);
       if (selectedLevel !== null && entry.levelValue !== selectedLevel) {
         return false;
       }
-    }
-
-    if (filters.axisMode === "splv") {
+    } else if (filters.axisMode === "splv") {
       const selectedSplv = parseOptionalNumber(filters.axisValue);
       if (selectedSplv !== null && entry.splvValue !== selectedSplv) {
         return false;
       }
-    }
-
-    if (filters.axisMode === "katate") {
+    } else if (filters.axisMode === "katate") {
       const selectedKatate = parseOptionalNumber(filters.axisValue);
       if (selectedKatate !== null && entry.katateValue !== selectedKatate) {
         return false;
@@ -1277,6 +1338,18 @@ export function createStore() {
       titleQuery: typeof nextTitleQuery === "string" ? nextTitleQuery : "",
       dateStart: nextDateRange.dateStart,
       dateEnd: nextDateRange.dateEnd,
+      axisRangeModeByAxis: nextFilters.axisRangeModeByAxis
+        ? normalizeAxisRangeModeByAxis(nextFilters.axisRangeModeByAxis)
+        : state.filters.axisRangeModeByAxis,
+      axisRanges: nextFilters.axisRanges
+        ? normalizeAxisRanges(nextFilters.axisRanges)
+        : state.filters.axisRanges,
+      axisLastRanges: nextFilters.axisLastRanges
+        ? normalizeAxisRanges(nextFilters.axisLastRanges)
+        : state.filters.axisLastRanges,
+      axisSingleReturnValues: nextFilters.axisSingleReturnValues
+        ? normalizeAxisSingleReturnValues(nextFilters.axisSingleReturnValues)
+        : state.filters.axisSingleReturnValues,
       recommend: nextFilters.recommend ? normalizeRecommendSelection(nextFilters.recommend) : state.filters.recommend,
       lamps: nextFilters.lamps ? normalizeLampSelection(nextFilters.lamps) : state.filters.lamps,
       inf: nextFilters.inf ? normalizeBooleanFilter(nextFilters.inf) : state.filters.inf,

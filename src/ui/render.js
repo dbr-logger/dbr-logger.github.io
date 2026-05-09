@@ -67,6 +67,10 @@ function isDateAxisMode(axisMode) {
   return axisMode === "date";
 }
 
+function isNumericAxisMode(axisMode) {
+  return axisMode === "level" || axisMode === "splv" || axisMode === "katate";
+}
+
 function isDifficultyTableStale(updatedAt) {
   return Number.isFinite(updatedAt) && Date.now() - updatedAt >= DIFFICULTY_TABLE_STALE_MS;
 }
@@ -520,6 +524,52 @@ function formatDateRangeValue(filters) {
   return `～ ${formatIsoDate(filters.dateEnd)}`;
 }
 
+function isAxisRangeMode(filters) {
+  return isNumericAxisMode(filters.axisMode)
+    && (Boolean(filters.axisRangeModeByAxis?.level)
+      || Boolean(filters.axisRangeModeByAxis?.splv)
+      || Boolean(filters.axisRangeModeByAxis?.katate));
+}
+
+function hasAxisCandidate(axisValues, value) {
+  if (value === "" || value === null || value === undefined) {
+    return false;
+  }
+
+  return axisValues.some((candidate) => String(candidate) === String(value));
+}
+
+function getNormalizedAxisRange(filters, axisValues) {
+  const axisMode = filters.axisMode;
+  const range = filters.axisRanges?.[axisMode] ?? { start: "", end: "" };
+  const startValue = String(range.start ?? "");
+  const endValue = String(range.end ?? "");
+
+  if (!axisValues.length) {
+    return { start: "", end: "", startIndex: 0, endIndex: 0, valid: false };
+  }
+
+  const startIndex = axisValues.findIndex((value) => String(value) === startValue);
+  const endIndex = axisValues.findIndex((value) => String(value) === endValue);
+  if (startIndex >= 0 && endIndex >= 0 && startIndex <= endIndex) {
+    return { start: startValue, end: endValue, startIndex, endIndex, valid: true };
+  }
+
+  const fallbackStart = String(axisValues[0]);
+  const fallbackEnd = String(axisValues[axisValues.length - 1]);
+  return {
+    start: fallbackStart,
+    end: fallbackEnd,
+    startIndex: 0,
+    endIndex: axisValues.length - 1,
+    valid: true,
+  };
+}
+
+function formatAxisRangeValue(axisMode, range) {
+  return `${formatAxisValue(axisMode, range.start)} ～ ${formatAxisValue(axisMode, range.end)}`;
+}
+
 function shouldShowFloatingClear(filters) {
   if (HIDDEN_FLOATING_CLEAR_AXES.has(filters.axisMode)) {
     return false;
@@ -740,16 +790,22 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
   const axisValues = getAxisValues(bounds, filters.axisMode);
   const sliderStops = ["", ...axisValues];
   const previewValue = previewState?.mode === filters.axisMode ? previewState.value : null;
+  const previewRange = previewState?.rangeMode === filters.axisMode ? previewState.range : null;
+  const rangeMode = isAxisRangeMode(filters);
   const effectiveAxisValue = previewValue !== null ? previewValue : filters.axisValue;
   const sliderValueIndex = Math.max(0, sliderStops.findIndex((value) => String(value) === String(effectiveAxisValue)));
+  const effectiveRange = previewRange ?? getNormalizedAxisRange(filters, axisValues);
   const currentAxisValue = isTextAxisMode(filters.axisMode)
     ? filters.titleQuery
     : formatAxisValue(filters.axisMode, effectiveAxisValue);
+  const rangeToggleMarkup = isNumericAxisMode(filters.axisMode)
+    ? `<button class="floating-filter-inline-action" type="button" data-axis-range-toggle>${rangeMode ? "単一選択" : "範囲選択"}</button>`
+    : "";
 
   const searchLabel = filters.axisMode === "memo" ? "メモ検索" : "曲名検索";
   const searchPlaceholder = filters.axisMode === "memo" ? "メモの一部を入力" : "曲名の一部を入力";
   const dateRangeResetMarkup = !isDefaultDateRange(filters, dateDefaultRange)
-    ? '<button class="floating-filter-date-clear" type="button" data-date-reset>戻す</button>'
+    ? '<button class="floating-filter-inline-action" type="button" data-date-reset>戻す</button>'
     : "";
   
   const controlMarkup = isDateAxisMode(filters.axisMode)
@@ -782,9 +838,47 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
         <input type="search" data-axis-query value="${escapeHtml(filters.titleQuery)}" placeholder="${escapeHtml(searchPlaceholder)}" />
       </div>
     `
+    : rangeMode
+    ? `
+      <div class="floating-filter-slider-block">
+        <div class="floating-filter-value">
+          <span>${escapeHtml(formatAxisRangeValue(filters.axisMode, effectiveRange))}</span>
+          ${rangeToggleMarkup}
+        </div>
+        <div
+          class="floating-filter-range-wrap is-start-active"
+          data-range-max="${Math.max(axisValues.length - 1, 1)}"
+          style="--range-start:${axisValues.length ? (effectiveRange.startIndex / Math.max(axisValues.length - 1, 1)) * 100 : 0}%;--range-end:${axisValues.length ? (effectiveRange.endIndex / Math.max(axisValues.length - 1, 1)) * 100 : 0}%"
+        >
+          <input
+            class="filter-slider floating-filter-slider floating-filter-range-slider"
+            type="range"
+            step="1"
+            min="0"
+            max="${Math.max(axisValues.length - 1, 0)}"
+            value="${Math.max(effectiveRange.startIndex, 0)}"
+            data-axis-range-start
+            ${axisValues.length ? "" : "disabled"}
+          />
+          <input
+            class="filter-slider floating-filter-slider floating-filter-range-slider"
+            type="range"
+            step="1"
+            min="0"
+            max="${Math.max(axisValues.length - 1, 0)}"
+            value="${Math.max(effectiveRange.endIndex, 0)}"
+            data-axis-range-end
+            ${axisValues.length ? "" : "disabled"}
+          />
+        </div>
+      </div>
+    `
     : `
       <div class="floating-filter-slider-block">
-        <div class="floating-filter-value">${escapeHtml(currentAxisValue)}</div>
+        <div class="floating-filter-value">
+          <span>${escapeHtml(currentAxisValue)}</span>
+          ${rangeToggleMarkup}
+        </div>
         <input
           class="filter-slider floating-filter-slider"
           type="range"
@@ -957,11 +1051,19 @@ export function createRenderer(store) {
   let floatingFilterOpen = false;
   let floatingAxisPreviewMode = null;
   let floatingAxisPreviewValue = null;
+  let floatingAxisRangePreviewMode = null;
+  let floatingAxisRangePreviewValue = null;
   let floatingAxisShortcutPending = false;
+  let floatingAxisRangeShortcutPending = false;
   let floatingAxisLastValues = {
     level: "",
     splv: "",
     katate: "",
+  };
+  let floatingAxisRangeActiveHandleByAxis = {
+    level: "end",
+    splv: "end",
+    katate: "end",
   };
   let floatingQuerySelection = null;
   let floatingQueryComposing = false;
@@ -970,7 +1072,10 @@ export function createRenderer(store) {
   let pendingQueryBlurIntent = null;
   let floatingClearPointerDown = false;
   let floatingTogglePointerDown = false;
+  let floatingRangeTogglePointerDown = false;
   let suppressNextFloatingToggleClick = false;
+  let suppressNextRangeToggleClick = false;
+  let floatingAxisRangeDragState = null;
   let lastSummaryLampClick = { lamp: "", timestamp: 0 };
   let summaryLampPointerState = null;
   let floatingOutsidePointerState = null;
@@ -1153,7 +1258,12 @@ export function createRenderer(store) {
       filterDraft ?? snapshot.filters,
       latestFilterBounds,
       floatingFilterOpen,
-      { mode: floatingAxisPreviewMode, value: floatingAxisPreviewValue },
+      {
+        mode: floatingAxisPreviewMode,
+        value: floatingAxisPreviewValue,
+        rangeMode: floatingAxisRangePreviewMode,
+        range: floatingAxisRangePreviewValue,
+      },
       snapshot.dateDefaultRange,
     );
     syncFloatingDockClass();
@@ -1245,6 +1355,146 @@ export function createRenderer(store) {
     }
 
     floatingAxisLastValues[axisMode] = String(value);
+  }
+
+  function getActiveAxisRange(filters = filterDraft ?? store.getSnapshot().filters) {
+    const axisValues = getAxisValues(latestFilterBounds, filters.axisMode);
+    return getNormalizedAxisRange(filters, axisValues);
+  }
+
+  function updateFloatingRangeDisplay(axisMode, range) {
+    const wrap = nodes.floatingAxisFilter.querySelector(".floating-filter-range-wrap");
+    if (wrap instanceof HTMLElement) {
+      const max = Math.max(1, Number(wrap.dataset.rangeMax ?? 0));
+      wrap.style.setProperty("--range-start", `${(range.startIndex / max) * 100}%`);
+      wrap.style.setProperty("--range-end", `${(range.endIndex / max) * 100}%`);
+      wrap.classList.toggle("is-start-active", (floatingAxisRangeActiveHandleByAxis[axisMode] ?? "end") === "start");
+      wrap.classList.toggle("is-end-active", (floatingAxisRangeActiveHandleByAxis[axisMode] ?? "end") === "end");
+    }
+
+    const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value span");
+    if (valueNode) {
+      valueNode.textContent = formatAxisRangeValue(axisMode, range);
+    }
+
+    const startInput = nodes.floatingAxisFilter.querySelector("input[data-axis-range-start]");
+    if (startInput instanceof HTMLInputElement) {
+      startInput.value = String(range.startIndex);
+      updateSliderFill(startInput);
+    }
+
+    const endInput = nodes.floatingAxisFilter.querySelector("input[data-axis-range-end]");
+    if (endInput instanceof HTMLInputElement) {
+      endInput.value = String(range.endIndex);
+      updateSliderFill(endInput);
+    }
+  }
+
+  function buildFiltersWithAxisRange(axisMode, range, extraFilters = {}) {
+    const currentFilters = store.getSnapshot().filters;
+    return {
+      ...extraFilters,
+      axisRanges: {
+        ...currentFilters.axisRanges,
+        [axisMode]: { start: range.start, end: range.end },
+      },
+    };
+  }
+
+  function commitFloatingAxisRange(range = floatingAxisRangePreviewValue) {
+    if (!floatingAxisRangeShortcutPending || !floatingAxisRangePreviewMode || !range) {
+      return false;
+    }
+
+    const axisMode = floatingAxisRangePreviewMode;
+    floatingAxisRangeShortcutPending = false;
+    floatingAxisRangePreviewMode = null;
+    floatingAxisRangePreviewValue = null;
+    applyDifficultyFilters(buildFiltersWithAxisRange(axisMode, range), { scrollToCatalog: false });
+    return true;
+  }
+
+  function previewFloatingAxisRangeBy(delta, handle) {
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+    if (!floatingFilterOpen || !isAxisRangeMode(activeFilters)) {
+      return false;
+    }
+
+    const axisValues = getAxisValues(latestFilterBounds, activeFilters.axisMode);
+    if (!axisValues.length) {
+      return false;
+    }
+
+    const baseRange = floatingAxisRangePreviewMode === activeFilters.axisMode && floatingAxisRangePreviewValue
+      ? floatingAxisRangePreviewValue
+      : getActiveAxisRange(activeFilters);
+    const range = { ...baseRange };
+    const activeHandle = handle === "end" ? "end" : "start";
+
+    const nextRange = { ...range };
+    if (activeHandle === "start") {
+      nextRange.startIndex = Math.max(0, Math.min(range.startIndex + delta, range.endIndex));
+      nextRange.start = String(axisValues[nextRange.startIndex]);
+    } else {
+      nextRange.endIndex = Math.max(range.startIndex, Math.min(range.endIndex + delta, axisValues.length - 1));
+      nextRange.end = String(axisValues[nextRange.endIndex]);
+    }
+
+    floatingAxisRangeActiveHandleByAxis[activeFilters.axisMode] = activeHandle;
+    floatingAxisRangePreviewMode = activeFilters.axisMode;
+    floatingAxisRangePreviewValue = nextRange;
+    floatingAxisRangeShortcutPending = true;
+    updateFloatingRangeDisplay(activeFilters.axisMode, nextRange);
+    return true;
+  }
+
+  function previewFloatingAxisRangeToIndex(axisMode, targetIndex, handle) {
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+    const axisValues = getAxisValues(latestFilterBounds, axisMode);
+    if (!axisValues.length) {
+      return false;
+    }
+
+    const baseRange = floatingAxisRangePreviewMode === axisMode && floatingAxisRangePreviewValue
+      ? floatingAxisRangePreviewValue
+      : getActiveAxisRange({ ...activeFilters, axisMode });
+    const nextRange = { ...baseRange };
+    const nextIndex = Math.max(0, Math.min(targetIndex, axisValues.length - 1));
+    const activeHandle = handle === "end" ? "end" : "start";
+
+    if (activeHandle === "start") {
+      nextRange.startIndex = Math.min(nextIndex, nextRange.endIndex);
+      nextRange.start = String(axisValues[nextRange.startIndex] ?? "");
+    } else {
+      nextRange.endIndex = Math.max(nextIndex, nextRange.startIndex);
+      nextRange.end = String(axisValues[nextRange.endIndex] ?? "");
+    }
+
+    floatingAxisRangeActiveHandleByAxis[axisMode] = activeHandle;
+    floatingAxisRangePreviewMode = axisMode;
+    floatingAxisRangePreviewValue = nextRange;
+    floatingAxisRangeShortcutPending = true;
+    updateFloatingRangeDisplay(axisMode, nextRange);
+    return true;
+  }
+
+  function getFloatingAxisRangePointerIndex(event, rangeWrap) {
+    const rect = rangeWrap.getBoundingClientRect();
+    const ratio = rect.width > 0 ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) : 0;
+    const max = Math.max(1, Number(rangeWrap.dataset.rangeMax ?? 0));
+    return Math.round(ratio * max);
+  }
+
+  function releaseFloatingAxisRangePointerCapture() {
+    if (!floatingAxisRangeDragState) {
+      return;
+    }
+
+    try {
+      floatingAxisRangeDragState.rangeWrap.releasePointerCapture?.(floatingAxisRangeDragState.pointerId);
+    } catch {
+      // The capture can already be released by the browser.
+    }
   }
 
   function isShortcutEditableTarget(element) {
@@ -1617,7 +1867,7 @@ export function createRenderer(store) {
     floatingAxisPreviewValue = previewValue;
     floatingAxisShortcutPending = true;
 
-    const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value");
+    const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value span");
     if (valueNode) {
       valueNode.textContent = formatAxisValue(activeFilters.axisMode, previewValue);
     }
@@ -1667,6 +1917,62 @@ export function createRenderer(store) {
       syncQueryScrollLockState();
     }
 
+    if (isSameAxis && isNumericAxisMode(axisMode) && isAxisRangeMode(filters)) {
+      floatingAxisRangeShortcutPending = false;
+      floatingAxisRangePreviewMode = null;
+      floatingAxisRangePreviewValue = null;
+
+      const axisValues = getAxisValues(latestFilterBounds, axisMode);
+      const fullRange = getNormalizedAxisRange({
+        ...filters,
+        axisRanges: {
+          ...filters.axisRanges,
+          [axisMode]: { start: String(axisValues[0] ?? ""), end: String(axisValues[axisValues.length - 1] ?? "") },
+        },
+      }, axisValues);
+      const currentRange = getActiveAxisRange(filters);
+      const isFullRange = currentRange.valid
+        && currentRange.startIndex === 0
+        && currentRange.endIndex === axisValues.length - 1;
+
+      if (!axisValues.length) {
+        return true;
+      }
+
+      if (!isFullRange) {
+        applyFiltersPreservingOverviewPosition({
+          axisLastRanges: {
+            ...filters.axisLastRanges,
+            [axisMode]: { start: currentRange.start, end: currentRange.end },
+          },
+          axisRanges: {
+            ...filters.axisRanges,
+            [axisMode]: { start: fullRange.start, end: fullRange.end },
+          },
+        }, { scrollToCatalog: false });
+        return true;
+      }
+
+      const savedRange = getNormalizedAxisRange({
+        ...filters,
+        axisRanges: {
+          ...filters.axisRanges,
+          [axisMode]: filters.axisLastRanges?.[axisMode] ?? { start: "", end: "" },
+        },
+      }, axisValues);
+      const rawSaved = filters.axisLastRanges?.[axisMode] ?? { start: "", end: "" };
+      if (hasAxisCandidate(axisValues, rawSaved.start) && hasAxisCandidate(axisValues, rawSaved.end)) {
+        applyFiltersPreservingOverviewPosition({
+          axisRanges: {
+            ...filters.axisRanges,
+            [axisMode]: { start: savedRange.start, end: savedRange.end },
+          },
+        }, { scrollToCatalog: false });
+      }
+
+      return true;
+    }
+
     if (isSameAxis && isNumericAxisMode(axisMode)) {
       floatingAxisShortcutPending = false;
       floatingAxisPreviewMode = null;
@@ -1699,7 +2005,24 @@ export function createRenderer(store) {
     floatingAxisPreviewMode = null;
     floatingAxisPreviewValue = null;
 
-    applyFiltersPreservingOverviewPosition({ axisMode }, { scrollToCatalog: false });
+    const nextFilters = { axisMode };
+    if (isNumericAxisMode(axisMode) && isAxisRangeMode({ ...filters, axisMode })) {
+      const axisValues = getAxisValues(latestFilterBounds, axisMode);
+      const rawRange = filters.axisRanges?.[axisMode] ?? { start: "", end: "" };
+      const startIndex = axisValues.findIndex((value) => String(value) === String(rawRange.start));
+      const endIndex = axisValues.findIndex((value) => String(value) === String(rawRange.end));
+      if (axisValues.length && (startIndex < 0 || endIndex < 0 || startIndex > endIndex)) {
+        nextFilters.axisRanges = {
+          ...filters.axisRanges,
+          [axisMode]: {
+            start: String(axisValues[0]),
+            end: String(axisValues[axisValues.length - 1]),
+          },
+        };
+      }
+    }
+
+    applyFiltersPreservingOverviewPosition(nextFilters, { scrollToCatalog: false });
 
     if (isDateAxisMode(axisMode)) {
       window.requestAnimationFrame(() => {
@@ -1709,6 +2032,61 @@ export function createRenderer(store) {
 
     return true;
   }  
+
+  function toggleAxisRangeMode(axisMode) {
+    if (!isNumericAxisMode(axisMode)) {
+      return false;
+    }
+
+    const { filters } = store.getSnapshot();
+    const axisValues = getAxisValues(latestFilterBounds, axisMode);
+    if (!axisValues.length) {
+      return false;
+    }
+
+    const enabled = isAxisRangeMode({ ...filters, axisMode });
+    floatingAxisPreviewMode = null;
+    floatingAxisPreviewValue = null;
+    floatingAxisRangePreviewMode = null;
+    floatingAxisRangePreviewValue = null;
+    floatingAxisRangeShortcutPending = false;
+
+    if (!enabled) {
+      const currentRange = getNormalizedAxisRange(filters, axisValues);
+      const range = currentRange.valid ? currentRange : {
+        start: String(axisValues[0]),
+        end: String(axisValues[axisValues.length - 1]),
+      };
+      applyFiltersPreservingOverviewPosition({
+        axisValue: "",
+        axisRangeModeByAxis: {
+          level: true,
+          splv: true,
+          katate: true,
+        },
+        axisRanges: {
+          ...filters.axisRanges,
+          [axisMode]: { start: range.start, end: range.end },
+        },
+        axisSingleReturnValues: {
+          ...filters.axisSingleReturnValues,
+          [axisMode]: filters.axisValue ?? "",
+        },
+      }, { scrollToCatalog: false });
+      return true;
+    }
+
+    const returnValue = filters.axisSingleReturnValues?.[axisMode] ?? "";
+    applyFiltersPreservingOverviewPosition({
+      axisValue: returnValue === "" || hasAxisValue(axisMode, returnValue) ? returnValue : "",
+      axisRangeModeByAxis: {
+        level: false,
+        splv: false,
+        katate: false,
+      },
+    }, { scrollToCatalog: false });
+    return true;
+  }
 
   function applyTitleQueryFilter(input, options = {}) {
     floatingQuerySelection = {
@@ -1865,12 +2243,49 @@ export function createRenderer(store) {
       applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...dateDefaultRange }, { scrollToCatalog: false });
       return;
     }
+
+    if (target.closest("[data-axis-range-toggle]")) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (suppressNextRangeToggleClick) {
+        suppressNextRangeToggleClick = false;
+        return;
+      }
+
+      if (floatingRangeTogglePointerDown) {
+        return;
+      }
+
+      const activeFilters = filterDraft ?? store.getSnapshot().filters;
+      toggleAxisRangeMode(activeFilters.axisMode);
+      return;
+    }
   });
 
   nodes.floatingAxisFilter.addEventListener("pointerdown", (event) => {
     event.stopPropagation();
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    const rangeWrap = target.closest(".floating-filter-range-wrap");
+    if (rangeWrap instanceof HTMLElement) {
+      event.preventDefault();
+      const activeFilters = filterDraft ?? store.getSnapshot().filters;
+      const range = floatingAxisRangePreviewMode === activeFilters.axisMode && floatingAxisRangePreviewValue
+        ? floatingAxisRangePreviewValue
+        : getActiveAxisRange(activeFilters);
+      const pointerIndex = getFloatingAxisRangePointerIndex(event, rangeWrap);
+      const handle = Math.abs(pointerIndex - range.startIndex) <= Math.abs(pointerIndex - range.endIndex) ? "start" : "end";
+      floatingAxisRangeDragState = {
+        axisMode: activeFilters.axisMode,
+        handle,
+        rangeWrap,
+        pointerId: event.pointerId,
+      };
+      rangeWrap.setPointerCapture?.(event.pointerId);
+      previewFloatingAxisRangeToIndex(activeFilters.axisMode, pointerIndex, handle);
       return;
     }
 
@@ -1923,12 +2338,93 @@ export function createRenderer(store) {
       return;
     }
 
+    if (target.closest("[data-axis-range-toggle]")) {
+      floatingRangeTogglePointerDown = true;
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextRangeToggleClick = true;
+      window.setTimeout(() => {
+        floatingRangeTogglePointerDown = false;
+      }, 0);
+      window.setTimeout(() => {
+        suppressNextRangeToggleClick = false;
+      }, 300);
+      const activeFilters = filterDraft ?? store.getSnapshot().filters;
+      toggleAxisRangeMode(activeFilters.axisMode);
+      return;
+    }
+
     pendingQueryBlurIntent = null;
+  });
+
+  nodes.floatingAxisFilter.addEventListener("pointermove", (event) => {
+    if (!floatingAxisRangeDragState) {
+      return;
+    }
+
+    event.preventDefault();
+    const { axisMode, handle, rangeWrap } = floatingAxisRangeDragState;
+    previewFloatingAxisRangeToIndex(axisMode, getFloatingAxisRangePointerIndex(event, rangeWrap), handle);
+  });
+
+  nodes.floatingAxisFilter.addEventListener("pointerup", (event) => {
+    if (!floatingAxisRangeDragState) {
+      return;
+    }
+
+    event.preventDefault();
+    releaseFloatingAxisRangePointerCapture();
+    floatingAxisRangeDragState = null;
+    commitFloatingAxisRange();
+  });
+
+  nodes.floatingAxisFilter.addEventListener("pointercancel", (event) => {
+    if (!floatingAxisRangeDragState) {
+      return;
+    }
+
+    event.preventDefault();
+    releaseFloatingAxisRangePointerCapture();
+    floatingAxisRangeDragState = null;
+    commitFloatingAxisRange();
   });
 
   nodes.floatingAxisFilter.addEventListener("input", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target instanceof HTMLInputElement
+      && (target.hasAttribute("data-axis-range-start") || target.hasAttribute("data-axis-range-end"))
+    ) {
+      const activeFilters = filterDraft ?? store.getSnapshot().filters;
+      const axisValues = getAxisValues(latestFilterBounds, activeFilters.axisMode);
+      const currentRange = floatingAxisRangePreviewMode === activeFilters.axisMode && floatingAxisRangePreviewValue
+        ? floatingAxisRangePreviewValue
+        : getActiveAxisRange(activeFilters);
+      let startIndex = currentRange.startIndex;
+      let endIndex = currentRange.endIndex;
+
+      if (target.hasAttribute("data-axis-range-start")) {
+        startIndex = Math.min(Number(target.value), endIndex);
+        floatingAxisRangeActiveHandleByAxis[activeFilters.axisMode] = "start";
+      } else {
+        endIndex = Math.max(Number(target.value), startIndex);
+        floatingAxisRangeActiveHandleByAxis[activeFilters.axisMode] = "end";
+      }
+
+      const nextRange = {
+        start: String(axisValues[startIndex] ?? ""),
+        end: String(axisValues[endIndex] ?? ""),
+        startIndex,
+        endIndex,
+        valid: axisValues.length > 0,
+      };
+      floatingAxisRangePreviewMode = activeFilters.axisMode;
+      floatingAxisRangePreviewValue = nextRange;
+      floatingAxisRangeShortcutPending = true;
+      updateFloatingRangeDisplay(activeFilters.axisMode, nextRange);
       return;
     }
 
@@ -1938,7 +2434,7 @@ export function createRenderer(store) {
       const nextValue = ["", ...axisValues][Number(target.value)] ?? "";
       floatingAxisPreviewMode = activeFilters.axisMode;
       floatingAxisPreviewValue = nextValue === "" ? "" : String(nextValue);
-      const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value");
+      const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value span");
       if (valueNode) {
         valueNode.textContent = formatAxisValue(activeFilters.axisMode, floatingAxisPreviewValue);
       }
@@ -1957,6 +2453,13 @@ export function createRenderer(store) {
   nodes.floatingAxisFilter.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
+      return;
+    }
+
+    if (target instanceof HTMLInputElement
+      && (target.hasAttribute("data-axis-range-start") || target.hasAttribute("data-axis-range-end"))
+    ) {
+      commitFloatingAxisRange();
       return;
     }
 
@@ -2006,7 +2509,24 @@ export function createRenderer(store) {
         floatingAxisPreviewValue = null;
         floatingQueryFocused = false;
         syncQueryScrollLockState();
-        applyFiltersPreservingOverviewPosition({ axisMode: nextAxisMode });
+        const currentFilters = store.getSnapshot().filters;
+        const nextAxisFilters = { axisMode: nextAxisMode };
+        if (isNumericAxisMode(nextAxisMode) && isAxisRangeMode({ ...currentFilters, axisMode: nextAxisMode })) {
+          const axisValues = getAxisValues(latestFilterBounds, nextAxisMode);
+          const rawRange = currentFilters.axisRanges?.[nextAxisMode] ?? { start: "", end: "" };
+          const startIndex = axisValues.findIndex((value) => String(value) === String(rawRange.start));
+          const endIndex = axisValues.findIndex((value) => String(value) === String(rawRange.end));
+          if (axisValues.length && (startIndex < 0 || endIndex < 0 || startIndex > endIndex)) {
+            nextAxisFilters.axisRanges = {
+              ...currentFilters.axisRanges,
+              [nextAxisMode]: {
+                start: String(axisValues[0]),
+                end: String(axisValues[axisValues.length - 1]),
+              },
+            };
+          }
+        }
+        applyFiltersPreservingOverviewPosition(nextAxisFilters);
         if (shouldScrollToTitle && canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)) {
           window.requestAnimationFrame(scrollCatalogPanelIntoView);
         }
@@ -2577,6 +3097,12 @@ export function createRenderer(store) {
         return;
       }
 
+      const rangeMoved = previewFloatingAxisRangeBy(shortcutKey === "a" ? -1 : 1, event.shiftKey ? "end" : "start");
+      if (rangeMoved) {
+        event.preventDefault();
+        return;
+      }
+
       const moved = previewFloatingAxisSliderBy(shortcutKey === "a" ? -1 : 1);
       if (!moved) {
         return;
@@ -2625,11 +3151,15 @@ export function createRenderer(store) {
       return;
     }
 
-    if (!commitFloatingAxisSliderShortcut()) {
+    if (floatingAxisRangeShortcutPending) {
+      commitFloatingAxisRange();
+      event.preventDefault();
       return;
     }
 
-    event.preventDefault();
+    if (commitFloatingAxisSliderShortcut()) {
+      event.preventDefault();
+    }
   });  
 
   [nodes.bpInput, nodes.scoreInput].forEach((input) => input?.addEventListener("wheel", (event) => {
