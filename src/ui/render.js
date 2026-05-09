@@ -49,6 +49,14 @@ const AXIS_OPTIONS = [
   { value: "title", label: "曲名" },
   { value: "memo", label: "メモ" },
 ];
+const AXIS_SHORTCUT_KEYS = {
+  f: "level",
+  w: "splv",
+  e: "katate",
+  r: "date",
+  s: "title",
+  t: "memo",
+};
 const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "date"]);
 
 function isTextAxisMode(axisMode) {
@@ -950,6 +958,11 @@ export function createRenderer(store) {
   let floatingAxisPreviewMode = null;
   let floatingAxisPreviewValue = null;
   let floatingAxisShortcutPending = false;
+  let floatingAxisLastValues = {
+    level: "",
+    splv: "",
+    katate: "",
+  };
   let floatingQuerySelection = null;
   let floatingQueryComposing = false;
   let floatingQueryFocused = false;
@@ -1173,6 +1186,28 @@ export function createRenderer(store) {
     queryInput.select?.();
   }
 
+  function focusFloatingDateStart() {
+    const dateStartInput = nodes.floatingAxisFilter.querySelector('input[data-date-start]');
+    if (!(dateStartInput instanceof HTMLInputElement)) {
+      return;
+    }
+
+    dateStartInput.focus();
+    dateStartInput.select?.();
+  }
+
+  function focusFloatingAxisControl(axisMode) {
+    if (isTextAxisMode(axisMode)) {
+      focusFloatingTitleQuery();
+      syncQueryScrollLockState();
+      return;
+    }
+
+    if (isDateAxisMode(axisMode)) {
+      focusFloatingDateStart();
+    }
+  }  
+
   function isMobileViewport() {
     return window.matchMedia("(max-width: 720px)").matches;
   }
@@ -1189,6 +1224,27 @@ export function createRenderer(store) {
 
   function isTitleQueryElement(element) {
     return element instanceof HTMLInputElement && element.hasAttribute("data-axis-query");
+  }
+
+  function isNumericAxisMode(axisMode) {
+    return axisMode === "level" || axisMode === "splv" || axisMode === "katate";
+  }
+
+  function hasAxisValue(axisMode, value) {
+    if (value === "" || value === null || value === undefined) {
+      return false;
+    }
+
+    return getAxisValues(latestFilterBounds, axisMode)
+      .some((candidate) => String(candidate) === String(value));
+  }
+
+  function rememberFloatingAxisValue(axisMode, value) {
+    if (!isNumericAxisMode(axisMode) || value === "" || value === null || value === undefined) {
+      return;
+    }
+
+    floatingAxisLastValues[axisMode] = String(value);
   }
 
   function isShortcutEditableTarget(element) {
@@ -1586,6 +1642,7 @@ export function createRenderer(store) {
     }
 
     const committedValue = floatingAxisPreviewValue === "" ? "" : String(floatingAxisPreviewValue);
+    rememberFloatingAxisValue(activeFilters.axisMode, committedValue);
 
     floatingAxisShortcutPending = false;
     floatingAxisPreviewMode = null;
@@ -1594,54 +1651,61 @@ export function createRenderer(store) {
     applyDifficultyFilters({ axisValue: committedValue }, { scrollToCatalog: false });
     return true;
   }  
-
-  function moveFloatingAxisSliderBy(delta) {
-    const activeFilters = filterDraft ?? store.getSnapshot().filters;
-
-    if (!floatingFilterOpen || isTextAxisMode(activeFilters.axisMode) || isDateAxisMode(activeFilters.axisMode)) {
+  
+  function switchFloatingAxisByShortcut(axisMode) {
+    if (!AXIS_OPTIONS.some((option) => option.value === axisMode)) {
       return false;
     }
 
-    const slider = nodes.floatingAxisFilter.querySelector('input[data-axis-slider]');
-    if (!(slider instanceof HTMLInputElement) || slider.disabled) {
-      return false;
+    const wasOpen = floatingFilterOpen;
+    const { filters } = store.getSnapshot();
+    const isSameAxis = wasOpen && filters.axisMode === axisMode;
+
+    if (!floatingFilterOpen) {
+      floatingFilterOpen = true;
+      renderFloatingFilterShell();
+      syncQueryScrollLockState();
     }
 
-    const axisValues = getAxisValues(latestFilterBounds, activeFilters.axisMode);
-    const sliderStops = ["", ...axisValues];
+    if (isSameAxis && isNumericAxisMode(axisMode)) {
+      floatingAxisShortcutPending = false;
+      floatingAxisPreviewMode = null;
+      floatingAxisPreviewValue = null;
 
-    if (sliderStops.length <= 1) {
-      return false;
-    }
+      const currentValue = filters.axisValue ?? "";
+      if (currentValue !== "") {
+        floatingAxisLastValues[axisMode] = String(currentValue);
+        applyFiltersPreservingOverviewPosition({ axisValue: "" }, { scrollToCatalog: false });
+        return true;
+      }
 
-    const currentIndex = Number(slider.value);
-    if (!Number.isFinite(currentIndex)) {
-      return false;
-    }
+      const savedValue = floatingAxisLastValues[axisMode];
+      if (hasAxisValue(axisMode, savedValue)) {
+        applyFiltersPreservingOverviewPosition({ axisValue: savedValue }, { scrollToCatalog: false });
+      }
 
-    const nextIndex = Math.max(0, Math.min(currentIndex + delta, sliderStops.length - 1));
-    if (nextIndex === currentIndex) {
       return true;
     }
 
-    const nextValue = sliderStops[nextIndex] ?? "";
-    const committedValue = nextValue === "" ? "" : String(nextValue);
-
-    slider.value = String(nextIndex);
-
-    floatingAxisPreviewMode = activeFilters.axisMode;
-    floatingAxisPreviewValue = committedValue;
-
-    const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value");
-    if (valueNode) {
-      valueNode.textContent = formatAxisValue(activeFilters.axisMode, committedValue);
+    if (filters.axisMode === axisMode) {
+      focusFloatingAxisControl(axisMode);
+      return true;
     }
 
-    updateSliderFill(slider);
-
+    floatingFilterOpen = true;
+    floatingQueryRestoreFocus = isTextAxisMode(axisMode);
+    floatingQuerySelection = null;
+    pendingQueryBlurIntent = null;
     floatingAxisPreviewMode = null;
     floatingAxisPreviewValue = null;
-    applyDifficultyFilters({ axisValue: committedValue }, { scrollToCatalog: false });
+
+    applyFiltersPreservingOverviewPosition({ axisMode }, { scrollToCatalog: false });
+
+    if (isDateAxisMode(axisMode)) {
+      window.requestAnimationFrame(() => {
+        focusFloatingAxisControl(axisMode);
+      });
+    }
 
     return true;
   }  
@@ -1901,6 +1965,8 @@ export function createRenderer(store) {
       const committedValue = floatingAxisPreviewMode === activeFilters.axisMode
         ? floatingAxisPreviewValue
         : ["", ...getAxisValues(latestFilterBounds, activeFilters.axisMode)][Number(target.value)] ?? "";
+      const nextAxisValue = committedValue === "" ? "" : String(committedValue);
+      rememberFloatingAxisValue(activeFilters.axisMode, nextAxisValue);
       floatingAxisPreviewMode = null;
       floatingAxisPreviewValue = null;
       if (shouldCloseFloatingFilterAfterSliderCommit()) {
@@ -1908,7 +1974,7 @@ export function createRenderer(store) {
         floatingFilterOpen = false;
         syncQueryScrollLockState();
       }
-      applyDifficultyFilters({ axisValue: committedValue === "" ? "" : String(committedValue) });
+      applyDifficultyFilters({ axisValue: nextAxisValue });
       return;
     }
 
@@ -1962,11 +2028,13 @@ export function createRenderer(store) {
     const committedValue = floatingAxisPreviewMode === activeFilters.axisMode
       ? floatingAxisPreviewValue
       : ["", ...getAxisValues(latestFilterBounds, activeFilters.axisMode)][Number(target.value)] ?? "";
+    const nextAxisValue = committedValue === "" ? "" : String(committedValue);
 
-    if (String(committedValue ?? "") !== String(activeFilters.axisValue ?? "")) {
+    if (String(nextAxisValue ?? "") !== String(activeFilters.axisValue ?? "")) {
       return;
     }
 
+    rememberFloatingAxisValue(activeFilters.axisMode, nextAxisValue);
     floatingAxisPreviewMode = null;
     floatingAxisPreviewValue = null;
 
@@ -1976,7 +2044,7 @@ export function createRenderer(store) {
       syncQueryScrollLockState();
     }
 
-    applyDifficultyFilters({ axisValue: committedValue === "" ? "" : String(committedValue) });
+    applyDifficultyFilters({ axisValue: nextAxisValue });
   });
 
   nodes.floatingAxisFilter.addEventListener("search", (event) => {
@@ -2518,12 +2586,14 @@ export function createRenderer(store) {
       return;
     }
 
+    const axisShortcutMode = AXIS_SHORTCUT_KEYS[shortcutKey];
+
     if (event.repeat
       || event.isComposing
       || event.ctrlKey
       || event.altKey
       || event.metaKey
-      || (shortcutKey !== "q" && shortcutKey !== "s")
+      || (shortcutKey !== "q" && !axisShortcutMode)
     ) {
       return;
     }
@@ -2540,24 +2610,9 @@ export function createRenderer(store) {
       return;
     }
 
-    if (!floatingFilterOpen) {
-      floatingFilterOpen = true;
-      renderFloatingFilterShell();
-      syncQueryScrollLockState();
+    if (axisShortcutMode) {
+      switchFloatingAxisByShortcut(axisShortcutMode);
     }
-
-    const { filters } = store.getSnapshot();
-    if (filters.axisMode === "title") {
-      focusFloatingTitleQuery();
-      syncQueryScrollLockState();
-      return;
-    }
-
-    floatingFilterOpen = true;
-    floatingQueryRestoreFocus = true;
-    floatingQuerySelection = null;
-    pendingQueryBlurIntent = null;
-    applyFiltersPreservingOverviewPosition({ axisMode: "title" }, { scrollToCatalog: false });
   });
 
   document.addEventListener("keyup", (event) => {
