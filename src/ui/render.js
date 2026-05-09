@@ -1879,6 +1879,9 @@ export function createRenderer(store) {
     const target = event.target;
     if (isDateFilterInput(target)) {
       dateFilterKeyboardEditUntil = performance.now() + 900;
+      if (event.key === "Enter" && !event.isComposing) {
+        target.blur();
+      }
       return;
     }
 
