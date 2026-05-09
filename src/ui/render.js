@@ -586,7 +586,7 @@ function shouldShowFloatingClear(filters) {
   return filters.axisValue !== "";
 }
 
-function summarizeAxisFilter(filters) {
+function summarizeAxisFilter(filters, bounds) {
   if (isTextAxisMode(filters.axisMode)) {
     return filters.titleQuery.trim()
       ? `${getAxisLabel(filters.axisMode)} ${filters.titleQuery.trim()}`
@@ -597,15 +597,19 @@ function summarizeAxisFilter(filters) {
     return `${getAxisLabel(filters.axisMode)} ${formatDateRangeValue(filters)}`;
   }
 
+  if (isAxisRangeMode(filters)) {
+    return `${getAxisLabel(filters.axisMode)} ${formatAxisRangeValue(filters.axisMode, getNormalizedAxisRange(filters, getAxisValues(bounds, filters.axisMode)))}`;
+  }
+
   return `${getAxisLabel(filters.axisMode)} ${formatAxisValue(filters.axisMode, filters.axisValue)}`;
 }
 
-function renderFloatingToggleLabel(filters) {
+function renderFloatingToggleLabel(filters, bounds) {
   if (isDateAxisMode(filters.axisMode)) {
     return `絞り込み: ${escapeHtml(getAxisLabel(filters.axisMode))}<br>${escapeHtml(formatDateRangeValue(filters))}`;
   }
 
-  return `絞り込み: ${escapeHtml(summarizeAxisFilter(filters))}`;
+  return `絞り込み: ${escapeHtml(summarizeAxisFilter(filters, bounds))}`;
 }
 
 function isDefaultDateRange(filters, dateDefaultRange) {
@@ -899,7 +903,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
   container.innerHTML = `
     <div class="floating-filter-actions">
       <button class="floating-filter-toggle button button-primary" type="button" data-floating-toggle>
-        ${renderFloatingToggleLabel(filters)}
+        ${renderFloatingToggleLabel(filters, bounds)}
       </button>
       ${clearButtonMarkup}
     </div>
