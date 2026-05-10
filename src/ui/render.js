@@ -877,22 +877,29 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
         </div>
       </div>
     `
+
     : `
       <div class="floating-filter-slider-block">
         <div class="floating-filter-value">
           <span>${escapeHtml(currentAxisValue)}</span>
           ${rangeToggleMarkup}
         </div>
-        <input
-          class="filter-slider floating-filter-slider"
-          type="range"
-          step="1"
-          min="0"
-          max="${Math.max(sliderStops.length - 1, 0)}"
-          value="${Math.max(sliderValueIndex, 0)}"
-          data-axis-slider
-          ${sliderStops.length ? "" : "disabled"}
-        />
+        <div
+          class="floating-filter-range-wrap floating-filter-single-wrap is-end-active"
+          data-single-max="${Math.max(sliderStops.length - 1, 1)}"
+          style="--range-start:0%;--range-end:${sliderStops.length ? (Math.max(sliderValueIndex, 0) / Math.max(sliderStops.length - 1, 1)) * 100 : 0}%"
+        >
+          <input
+            class="filter-slider floating-filter-slider floating-filter-range-slider"
+            type="range"
+            step="1"
+            min="0"
+            max="${Math.max(sliderStops.length - 1, 0)}"
+            value="${Math.max(sliderValueIndex, 0)}"
+            data-axis-slider
+            ${sliderStops.length ? "" : "disabled"}
+          />
+        </div>
       </div>
     `;
 
@@ -1079,6 +1086,7 @@ export function createRenderer(store) {
   let floatingRangeTogglePointerDown = false;
   let suppressNextFloatingToggleClick = false;
   let suppressNextRangeToggleClick = false;
+  let floatingAxisSingleDragState = null;
   let floatingAxisRangeDragState = null;
   let lastSummaryLampClick = { lamp: "", timestamp: 0 };
   let summaryLampPointerState = null;
@@ -1366,6 +1374,74 @@ export function createRenderer(store) {
     return getNormalizedAxisRange(filters, axisValues);
   }
 
+  function updateFloatingSingleSliderDisplay(axisMode, index, previewValue) {
+    const slider = nodes.floatingAxisFilter.querySelector("input[data-axis-slider]");
+    const wrap = nodes.floatingAxisFilter.querySelector(".floating-filter-single-wrap");
+
+    if (slider instanceof HTMLInputElement) {
+      slider.value = String(index);
+      updateSliderFill(slider);
+    }
+
+    if (wrap instanceof HTMLElement) {
+      const max = Math.max(1, Number(wrap.dataset.singleMax ?? 0));
+      wrap.style.setProperty("--range-start", "0%");
+      wrap.style.setProperty("--range-end", `${(index / max) * 100}%`);
+    }
+
+    const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value span");
+    if (valueNode) {
+      valueNode.textContent = formatAxisValue(axisMode, previewValue);
+    }
+  }
+
+  function previewFloatingAxisSliderToIndex(axisMode, targetIndex) {
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+
+    if (!floatingFilterOpen || isTextAxisMode(axisMode) || isDateAxisMode(axisMode) || isAxisRangeMode({ ...activeFilters, axisMode })) {
+      return false;
+    }
+
+    const axisValues = getAxisValues(latestFilterBounds, axisMode);
+    const sliderStops = ["", ...axisValues];
+
+    if (sliderStops.length <= 1) {
+      return false;
+    }
+
+    const nextIndex = Math.max(0, Math.min(targetIndex, sliderStops.length - 1));
+    const nextValue = sliderStops[nextIndex] ?? "";
+    const previewValue = nextValue === "" ? "" : String(nextValue);
+
+    floatingAxisPreviewMode = axisMode;
+    floatingAxisPreviewValue = previewValue;
+    floatingAxisShortcutPending = true;
+
+    updateFloatingSingleSliderDisplay(axisMode, nextIndex, previewValue);
+    return true;
+  }
+
+  function getFloatingAxisSinglePointerIndex(event, sliderWrap) {
+    const rect = sliderWrap.getBoundingClientRect();
+    const ratio = rect.width > 0
+      ? Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
+      : 0;
+    const max = Math.max(1, Number(sliderWrap.dataset.singleMax ?? 0));
+    return Math.round(ratio * max);
+  }
+
+  function releaseFloatingAxisSinglePointerCapture() {
+    if (!floatingAxisSingleDragState) {
+      return;
+    }
+
+    try {
+      floatingAxisSingleDragState.sliderWrap.releasePointerCapture?.(floatingAxisSingleDragState.pointerId);
+    } catch {
+      // Pointer capture can already be released.
+    }
+  }
+
   function updateFloatingRangeDisplay(axisMode, range) {
     const wrap = nodes.floatingAxisFilter.querySelector(".floating-filter-range-wrap");
     if (wrap instanceof HTMLElement) {
@@ -1491,6 +1567,18 @@ export function createRenderer(store) {
     return Math.round(ratio * max);
   }
 
+  function releaseFloatingAxisSinglePointerCapture() {
+    if (!floatingAxisSingleDragState) {
+      return;
+    }
+
+    try {
+      floatingAxisSingleDragState.sliderWrap.releasePointerCapture?.(floatingAxisSingleDragState.pointerId);
+    } catch {
+      // The capture can already be released by the browser.
+    }
+  }
+
   function releaseFloatingAxisRangePointerCapture() {
     if (!floatingAxisRangeDragState) {
       return;
@@ -1506,7 +1594,7 @@ export function createRenderer(store) {
   function isShortcutEditableTarget(element) {
     return element instanceof HTMLInputElement
       || element instanceof HTMLTextAreaElement
-      || element instanceof HTMLSelectElement
+      // || element instanceof HTMLSelectElement
       // || element instanceof HTMLButtonElement
       || Boolean(element instanceof HTMLElement && element.isContentEditable);
   }
@@ -1842,7 +1930,7 @@ export function createRenderer(store) {
       return false;
     }
 
-    const slider = nodes.floatingAxisFilter.querySelector('input[data-axis-slider]');
+    const slider = nodes.floatingAxisFilter.querySelector("input[data-axis-slider]");
     if (!(slider instanceof HTMLInputElement) || slider.disabled) {
       return false;
     }
@@ -1864,24 +1952,8 @@ export function createRenderer(store) {
       return true;
     }
 
-    const nextValue = sliderStops[nextIndex] ?? "";
-    const previewValue = nextValue === "" ? "" : String(nextValue);
-
-    slider.value = String(nextIndex);
-
-    floatingAxisPreviewMode = activeFilters.axisMode;
-    floatingAxisPreviewValue = previewValue;
-    floatingAxisShortcutPending = true;
-
-    const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value span");
-    if (valueNode) {
-      valueNode.textContent = formatAxisValue(activeFilters.axisMode, previewValue);
-    }
-
-    updateSliderFill(slider);
-
-    return true;
-  } 
+    return previewFloatingAxisSliderToIndex(activeFilters.axisMode, nextIndex);
+  }
   
   function commitFloatingAxisSliderShortcut() {
     if (!floatingAxisShortcutPending) {
@@ -2275,6 +2347,30 @@ export function createRenderer(store) {
       return;
     }
 
+    const singleWrap = target.closest(".floating-filter-single-wrap");
+    if (singleWrap instanceof HTMLElement) {
+      event.preventDefault();
+
+      const activeFilters = filterDraft ?? store.getSnapshot().filters;
+      const slider = singleWrap.querySelector("input[data-axis-slider]");
+
+      if (!(slider instanceof HTMLInputElement) || slider.disabled) {
+        return;
+      }
+
+      const pointerIndex = getFloatingAxisSinglePointerIndex(event, singleWrap);
+
+      floatingAxisSingleDragState = {
+        axisMode: activeFilters.axisMode,
+        sliderWrap: singleWrap,
+        pointerId: event.pointerId,
+      };
+
+      singleWrap.setPointerCapture?.(event.pointerId);
+      previewFloatingAxisSliderToIndex(activeFilters.axisMode, pointerIndex);
+      return;
+    }    
+
     const rangeWrap = target.closest(".floating-filter-range-wrap");
     if (rangeWrap instanceof HTMLElement) {
       event.preventDefault();
@@ -2298,7 +2394,7 @@ export function createRenderer(store) {
         floatingAxisRangeDragState.handle = activeHandle;
       }
       return;
-    }
+    }  
 
     if (target.closest("[data-floating-toggle]")) {
       floatingTogglePointerDown = true;
@@ -2369,6 +2465,15 @@ export function createRenderer(store) {
   });
 
   nodes.floatingAxisFilter.addEventListener("pointermove", (event) => {
+    if (floatingAxisSingleDragState) {
+      event.preventDefault();
+
+      const { axisMode, sliderWrap } = floatingAxisSingleDragState;
+      const pointerIndex = getFloatingAxisSinglePointerIndex(event, sliderWrap);
+      previewFloatingAxisSliderToIndex(axisMode, pointerIndex);
+      return;
+    }
+
     if (!floatingAxisRangeDragState) {
       return;
     }
@@ -2386,6 +2491,15 @@ export function createRenderer(store) {
   });
 
   nodes.floatingAxisFilter.addEventListener("pointerup", (event) => {
+    if (floatingAxisSingleDragState) {
+      event.preventDefault();
+
+      releaseFloatingAxisSinglePointerCapture();
+      floatingAxisSingleDragState = null;
+      commitFloatingAxisSliderShortcut();
+      return;
+    }
+
     if (!floatingAxisRangeDragState) {
       return;
     }
@@ -2397,6 +2511,15 @@ export function createRenderer(store) {
   });
 
   nodes.floatingAxisFilter.addEventListener("pointercancel", (event) => {
+    if (floatingAxisSingleDragState) {
+      event.preventDefault();
+
+      releaseFloatingAxisSinglePointerCapture();
+      floatingAxisSingleDragState = null;
+      commitFloatingAxisSliderShortcut();
+      return;
+    }
+
     if (!floatingAxisRangeDragState) {
       return;
     }
@@ -2449,14 +2572,15 @@ export function createRenderer(store) {
     if (target instanceof HTMLInputElement && target.hasAttribute("data-axis-slider")) {
       const activeFilters = filterDraft ?? store.getSnapshot().filters;
       const axisValues = getAxisValues(latestFilterBounds, activeFilters.axisMode);
-      const nextValue = ["", ...axisValues][Number(target.value)] ?? "";
+      const sliderStops = ["", ...axisValues];
+      const index = Number(target.value);
+      const nextValue = sliderStops[index] ?? "";
+      const previewValue = nextValue === "" ? "" : String(nextValue);
+
       floatingAxisPreviewMode = activeFilters.axisMode;
-      floatingAxisPreviewValue = nextValue === "" ? "" : String(nextValue);
-      const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-value span");
-      if (valueNode) {
-        valueNode.textContent = formatAxisValue(activeFilters.axisMode, floatingAxisPreviewValue);
-      }
-      updateSliderFill(target);
+      floatingAxisPreviewValue = previewValue;
+
+      updateFloatingSingleSliderDisplay(activeFilters.axisMode, Number.isFinite(index) ? index : 0, previewValue);
       return;
     }
 

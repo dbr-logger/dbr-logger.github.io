@@ -1632,6 +1632,14 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   padding: 0;
 }
 
+.floating-filter-single-wrap {
+  --range-start: 0%;
+}
+
+.floating-filter-single-wrap .floating-filter-range-slider[data-axis-slider] {
+  z-index: 5;
+}
+
 .floating-filter-range-wrap {
   display: grid;
   min-width: 0;

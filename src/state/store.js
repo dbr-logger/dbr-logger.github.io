@@ -1028,6 +1028,20 @@ export function createStore() {
       : "";
   }
 
+  function mergeTextAxisBaseFixedFilters(baseFilters, sourceFilters) {
+    if (!baseFilters) {
+      return null;
+    }
+
+    return {
+      ...baseFilters,
+      inf: sourceFilters.inf,
+      acdelete: sourceFilters.acdelete,
+      includeUnrated: sourceFilters.includeUnrated,
+      recommend: [...sourceFilters.recommend],
+    };
+  }  
+
   function ensureSelectedSong(snapshot = getSnapshot()) {
     const visibleTitles = new Set(snapshot.pagedSongs.map((song) => song.title));
   
@@ -1372,6 +1386,13 @@ export function createStore() {
         dateStart: nextStateFilters.dateStart,
         dateEnd: nextStateFilters.dateEnd,
       };
+    }
+
+    if (isTextAxisMode(nextStateFilters.axisMode) && state.titleFilterBase) {
+      state.titleFilterBase = mergeTextAxisBaseFixedFilters(
+        state.titleFilterBase,
+        nextStateFilters,
+      );
     }
 
     state.axisMemory = nextAxisMemory;
