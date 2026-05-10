@@ -597,19 +597,22 @@ function buildDateSummary(records, baseSongs, filters) {
   const { start, end, sliceMode, limit } = getDateSummaryRange(filters);
   const bandMap = new Map();
 
+  // 同日最良値（最高ランプ・最小BP・最高スコア）のみ使用
+  const bestByDateTitle = new Map();
   records.forEach((record) => {
-    if (!visibleTitles.has(record.title)) {
-      return;
+    if (!visibleTitles.has(record.title)) return;
+    if (start && record.date < start) return;
+    if (end && record.date > end) return;
+    const key = `${record.date}__${record.title}`;
+    const existing = bestByDateTitle.get(key);
+    if (!existing || getLampRank(record.lamp) > getLampRank(existing.lamp) ||
+        (Number.isFinite(record.bp) && (!Number.isFinite(existing.bp) || record.bp < existing.bp)) ||
+        (Number.isFinite(record.score) && (!Number.isFinite(existing.score) || record.score > existing.score))) {
+      bestByDateTitle.set(key, record);
     }
+  });
 
-    if (start && record.date < start) {
-      return;
-    }
-
-    if (end && record.date > end) {
-      return;
-    }
-
+  bestByDateTitle.forEach((record) => {
     const lamp = LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY";
     if (!bandMap.has(record.date)) {
       bandMap.set(record.date, {
@@ -1549,46 +1552,29 @@ export function createStore() {
 
     const date = todayIso();
     const timestamp = formatLocalDateTime();
-    const existingIndex = state.records.findIndex((record) => record.title === selectedEntry.title && record.date === date);
+    const chartSuffix = selectedEntry.title.match(/\(([BNHAL])\)$/)?.[0] ?? "";
+    state.records.push({
+      id: createRecordId(selectedEntry.title, timestamp),
+      timestamp,
+      date,
+      title: selectedEntry.title,
+      level: selectedEntry.levelValue ?? null,
+      splv: selectedEntry.splvValue ?? null,
+      lamp,
+      bp: normalizedBp,
+      score: normalizedScore,
+      textageKey: selectedEntry.textageid ? `${selectedEntry.textageid}${chartSuffix}` : "",
+      source: "manual",
+    });
+    state.statusMessage = `${selectedEntry.title} の記録を保存しました。`;
 
-    if (existingIndex >= 0) {
-      state.records[existingIndex] = {
-        ...state.records[existingIndex],
-        timestamp,
-        lamp,
-        bp: normalizedBp,
-        score: normalizedScore,
-        level: selectedEntry.levelValue ?? null,
-        splv: selectedEntry.splvValue ?? null,
-        source: "manual",
-      };
-      state.statusMessage = `${selectedEntry.title} の ${date} の記録を更新しました。`;
-    } else {
-      const chartSuffix = selectedEntry.title.match(/\(([BNHAL])\)$/)?.[0] ?? "";
-      state.records.push({
-        id: createRecordId(selectedEntry.title, date),
-        timestamp,
-        date,
-        title: selectedEntry.title,
-        level: selectedEntry.levelValue ?? null,
-        splv: selectedEntry.splvValue ?? null,
-        lamp,
-        bp: normalizedBp,
-        score: normalizedScore,
-        textageKey: selectedEntry.textageid ? `${selectedEntry.textageid}${chartSuffix}` : "",
-        source: "manual",
-      });
-      state.statusMessage = `${selectedEntry.title} の記録を保存しました。`;
-    }
-
-    setDeleteAnchor(selectedEntry.title, date);
     state.records.sort(sortRecords);
     persist();
     emit();
     return { ok: true, message: state.statusMessage };
   }
 
-  function deleteTodayRecord() {
+  function deleteLatestRecord() {
     if (!state.selectedTitle) {
       return { ok: false, message: "曲を選択してください。" };
     }
@@ -1598,15 +1584,24 @@ export function createStore() {
       return { ok: false, message: "選択中の曲情報が見つかりません。" };
     }
 
-    const date = getDeleteAnchorDate(selectedEntry.title) ?? todayIso();
-    const beforeCount = state.records.length;
-    state.records = state.records.filter((record) => !(record.title === selectedEntry.title && record.date === date));
+    const now = Date.now();
+    const twelveHoursMs = 12 * 60 * 60 * 1000;
+    const candidates = state.records
+      .filter((record) => record.title === selectedEntry.title)
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
 
-    if (state.records.length === beforeCount) {
-      return { ok: false, message: `${selectedEntry.title} の ${date} の記録はありません。` };
+    if (candidates.length === 0) {
+      return { ok: false, message: `${selectedEntry.title} の記録はありません。` };
     }
 
-    state.statusMessage = `${selectedEntry.title} の ${date} の記録を削除しました。`;
+    const latest = candidates[0];
+    const recordTime = new Date(latest.timestamp.replace(" ", "T")).getTime();
+    if (now - recordTime > twelveHoursMs) {
+      return { ok: false, message: "12時間以上経過した記録は削除できません。" };
+    }
+
+    state.records = state.records.filter((record) => record.id !== latest.id);
+    state.statusMessage = `${selectedEntry.title} の前回の記録を削除しました。`;
     persist();
     emit();
     return { ok: true, message: state.statusMessage };
@@ -1850,10 +1845,15 @@ export function createStore() {
       ?? visibleSongs[0]
       ?? null;
     const selectedHistory = selectedSong ? [...selectedSong.history].sort((a, b) => sortRecords(b, a)) : [];
-    const selectedDeleteDate = selectedSong ? getDeleteAnchorDate(selectedSong.title) : null;
-    const hasTodayRecord = selectedSong
-      ? selectedHistory.some((record) => record.date === (selectedDeleteDate ?? todayIso()))
-      : false;
+    const hasTodayRecord = (() => {
+      if (!selectedSong) return false;
+      const now = Date.now();
+      const twelveHoursMs = 12 * 60 * 60 * 1000;
+      return selectedHistory.some((record) => {
+        const recordTime = new Date(record.timestamp.replace(" ", "T")).getTime();
+        return now - recordTime <= twelveHoursMs;
+      });
+    })();
 
     return {
       ...state,
@@ -1889,7 +1889,7 @@ export function createStore() {
     setPage,
     selectSong,
     saveRecord,
-    deleteTodayRecord,
+    deleteLatestRecord,
     saveSongNote,
     importDifficultyTable,
     getExportJson,

@@ -3371,7 +3371,7 @@ export function createRenderer(store) {
   });
 
   nodes.deleteTodayButton.addEventListener("click", () => {
-    const result = store.deleteTodayRecord();
+    const result = store.deleteLatestRecord();
     if (!result.ok) {
       window.alert(result.message);
       return;

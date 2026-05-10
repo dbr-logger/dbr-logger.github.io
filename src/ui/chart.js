@@ -269,7 +269,16 @@ function renderTrendChart(container, history, options) {
 }
 
 export function renderBpChart(container, history) {
-  const finiteHistory = history.filter((entry) => Number.isFinite(entry.bp));
+  // 同日最良値（最小BP）のみ使用
+  const bestByDate = new Map();
+  history.forEach((entry) => {
+    if (!Number.isFinite(entry.bp)) return;
+    const existing = bestByDate.get(entry.date);
+    if (!existing || entry.bp < existing.bp) {
+      bestByDate.set(entry.date, entry);
+    }
+  });
+  const finiteHistory = Array.from(bestByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 
   renderTrendChart(container, finiteHistory, {
     ariaLabel: "BP推移グラフ",
@@ -281,8 +290,19 @@ export function renderBpChart(container, history) {
 }
 
 export function renderScoreChart(container, history) {
+  // 同日最良値（最高スコア）のみ使用
+  const bestByDate = new Map();
+  history.forEach((entry) => {
+    if (!Number.isFinite(entry.score)) return;
+    const existing = bestByDate.get(entry.date);
+    if (!existing || entry.score > existing.score) {
+      bestByDate.set(entry.date, entry);
+    }
+  });
   const theoreticalMax = Number(container.dataset.maxScore || 0);
-  renderTrendChart(container, history, {
+  const finiteHistory = Array.from(bestByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+  renderTrendChart(container, finiteHistory, {
     ariaLabel: "スコア推移グラフ",
     emptyMessage: "この曲のスコア履歴はまだありません。",
     getValue: (entry) => entry.score,
