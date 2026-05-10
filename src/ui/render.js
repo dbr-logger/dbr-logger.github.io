@@ -1325,9 +1325,9 @@ export function createRenderer(store) {
       return;
     }
 
-    if (isDateAxisMode(axisMode)) {
-      focusFloatingDateStart();
-    }
+    // if (isDateAxisMode(axisMode)) {
+    //   focusFloatingDateStart();
+    // }
   }  
 
   function isMobileViewport() {
@@ -2496,7 +2496,9 @@ export function createRenderer(store) {
 
       releaseFloatingAxisSinglePointerCapture();
       floatingAxisSingleDragState = null;
-      commitFloatingAxisSliderShortcut();
+      if (commitFloatingAxisSliderShortcut() && shouldCloseFloatingFilterAfterSliderCommit()) {
+        closeFloatingFilter({ preserveScroll: false });
+      }
       return;
     }
 
@@ -2516,7 +2518,9 @@ export function createRenderer(store) {
 
       releaseFloatingAxisSinglePointerCapture();
       floatingAxisSingleDragState = null;
-      commitFloatingAxisSliderShortcut();
+      if (commitFloatingAxisSliderShortcut() && shouldCloseFloatingFilterAfterSliderCommit()) {
+        closeFloatingFilter({ preserveScroll: false });
+      }
       return;
     }
 
