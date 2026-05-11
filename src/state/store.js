@@ -960,6 +960,13 @@ export function createStore() {
     ready: false,
     error: "",
   };
+
+  let catalogSnapshotCache = null;
+
+  function invalidateCatalogSnapshot() {
+    catalogSnapshotCache = null;
+  }
+
   let deleteAnchor = null;
   let deleteAnchorTimer = null;
 
@@ -1030,6 +1037,7 @@ export function createStore() {
   function invalidateCatalogVisibleOrder() {
     state.catalogVisibleSignature = "";
     state.catalogVisibleTitleOrder = [];
+    invalidateCatalogSnapshot();
   }
   
   function applyStableVisibleOrder(visibleSongs, allSongStates = visibleSongs) {
@@ -1097,16 +1105,12 @@ export function createStore() {
 
   function ensureSelectedSong(snapshot = getSnapshot()) {
     const visibleTitles = new Set(snapshot.pagedSongs.map((song) => song.title));
-  
+
     if (!state.selectedTitle || !visibleTitles.has(state.selectedTitle)) {
       state.selectedTitle = snapshot.pagedSongs[0]?.title ?? snapshot.visibleSongs[0]?.title ?? null;
-  
-      return {
-        ...snapshot,
-        selectedTitle: state.selectedTitle,
-      };
+      return getSnapshot();
     }
-  
+
     return snapshot;
   }
 
@@ -1524,6 +1528,7 @@ export function createStore() {
     }
 
     state.currentPage = normalized;
+    invalidateCatalogSnapshot();
     ensureSelectedSong();
     emit();
   }
@@ -1556,7 +1561,13 @@ export function createStore() {
   }
 
   function selectSong(title) {
-    state.selectedTitle = title;
+    const normalizedTitle = typeof title === "string" ? title : "";
+
+    if (!normalizedTitle || normalizedTitle === state.selectedTitle) {
+      return;
+    }
+
+    state.selectedTitle = normalizedTitle;
     emit();
   }
 
@@ -1620,6 +1631,7 @@ export function createStore() {
     state.statusMessage = `${selectedEntry.title} の記録を保存しました。`;
 
     state.records.sort(sortRecords);
+    invalidateCatalogSnapshot();
     persist();
     emit();
     return { ok: true, message: state.statusMessage };
@@ -1633,6 +1645,7 @@ export function createStore() {
 
     state.records.splice(recordIndex, 1);
     state.statusMessage = "記録を削除しました。";
+    invalidateCatalogSnapshot();
     persist();
     emit();
     return { ok: true, message: state.statusMessage };
@@ -1665,6 +1678,7 @@ export function createStore() {
 
     state.records = state.records.filter((record) => record.id !== latest.id);
     state.statusMessage = `${selectedEntry.title} の前回の記録を削除しました。`;
+    invalidateCatalogSnapshot();
     persist();
     emit();
     return { ok: true, message: state.statusMessage };
@@ -1689,6 +1703,7 @@ export function createStore() {
       state.statusMessage = `${selectedEntry.title} のメモを削除しました。`;
     }
 
+    invalidateCatalogSnapshot();
     persist();
     emit();
     return { ok: true, message: state.statusMessage };
@@ -1877,17 +1892,31 @@ export function createStore() {
     });
   }
 
-  function getSnapshot() {
+  function getCatalogSnapshot() {
+    if (catalogSnapshotCache) {
+      return catalogSnapshotCache;
+    }
+
     const catalogEntries = getCatalogEntries();
     const recordIndex = buildRecordIndex(state.records);
     const dateDefaultRange = getDefaultDateRangeFromRecords(state.records);
+
     const songStates = catalogEntries.map((entry) => ({
       ...deriveSongState(entry, recordIndex.get(entry.title) ?? []),
       note: state.songNotes[entry.title] ?? "",
-    })).sort((a, b) => compareCatalogSongs(a, b, state.sortMode, state.sortDirection, state.filters.axisMode));
+    })).sort((a, b) => compareCatalogSongs(
+      a,
+      b,
+      state.sortMode,
+      state.sortDirection,
+      state.filters.axisMode,
+    ));
+
     const filteredVisibleSongs = songStates.filter((entry) => matchesFiltersFor(entry, state.filters));
+
     if (state.filters.axisMode === "title" && state.filters.titleQuery.trim()) {
       const songOrder = new Map(songStates.map((song, index) => [song.title, index]));
+
       filteredVisibleSongs.sort((a, b) => {
         const priority = compareVisibleSongPriority(a, b);
         if (priority !== 0) {
@@ -1897,54 +1926,44 @@ export function createStore() {
         return (songOrder.get(a.title) ?? 0) - (songOrder.get(b.title) ?? 0);
       });
     }
+
     const visibleSongs = applyStableVisibleOrder(filteredVisibleSongs, songStates);
+
     const summaryFilters = isTextAxisMode(state.filters.axisMode) && state.titleFilterBase
       ? state.titleFilterBase
       : state.filters;
+
     const summaryScopeFilters = isTextAxisMode(summaryFilters.axisMode)
       ? { ...summaryFilters }
       : { ...summaryFilters, axisValue: "" };
+
     const summaryBandBaseSongs = summaryFilters.axisMode === "katate"
       ? songStates.filter((entry) => entry.katateValue !== null)
       : songStates;
+
     const summarySongs = summaryBandBaseSongs.filter((entry) => matchesFiltersFor(entry, summaryScopeFilters));
+
     const summaryCountFilters = {
       ...summaryFilters,
       lamps: [...LAMP_OPTIONS],
     };
+
     const summaryCountSongs = songStates.filter((entry) => matchesFiltersFor(entry, summaryCountFilters));
+
     const summary = summaryFilters.axisMode === "date"
       ? buildDateSummary(state.records, summaryCountSongs, summaryFilters)
       : buildSummary(summaryBandBaseSongs, summarySongs, summaryCountSongs, summaryFilters.axisMode);
+
     const totalPages = Math.max(1, Math.ceil(visibleSongs.length / PAGE_SIZE));
     const currentPage = Math.max(1, Math.min(state.currentPage, totalPages));
     const pageStart = (currentPage - 1) * PAGE_SIZE;
     const pagedSongs = visibleSongs.slice(pageStart, pageStart + PAGE_SIZE);
-    const selectedSong = pagedSongs.find((song) => song.title === state.selectedTitle)
-      ?? pagedSongs[0]
-      ?? visibleSongs[0]
-      ?? null;
-    const selectedHistory = selectedSong ? [...selectedSong.history].sort((a, b) => sortRecords(b, a)) : [];
-    const hasTodayRecord = (() => {
-      if (!selectedSong) return false;
-      const now = Date.now();
-      const twelveHoursMs = 12 * 60 * 60 * 1000;
-      return selectedHistory.some((record) => {
-        const recordTime = new Date(record.timestamp.replace(" ", "T")).getTime();
-        return now - recordTime <= twelveHoursMs;
-      });
-    })();
 
-    return {
-      ...state,
+    catalogSnapshotCache = {
       currentPage,
       songStates,
       visibleSongs,
       pagedSongs,
-      selectedSong,
-      selectedHistory,
-      hasTodayRecord,
-      difficultyTable: state.difficultyTable,
       pagination: {
         currentPage,
         totalPages,
@@ -1956,6 +1975,44 @@ export function createStore() {
       summary,
       summaryFilters,
       dateDefaultRange,
+    };
+
+    return catalogSnapshotCache;
+  }
+
+  function getSnapshot() {
+    const catalogSnapshot = getCatalogSnapshot();
+
+    const selectedSong = catalogSnapshot.pagedSongs.find((song) => song.title === state.selectedTitle)
+      ?? catalogSnapshot.pagedSongs[0]
+      ?? catalogSnapshot.visibleSongs[0]
+      ?? null;
+
+    const selectedHistory = selectedSong
+      ? [...selectedSong.history].sort((a, b) => sortRecords(b, a))
+      : [];
+
+    const hasTodayRecord = (() => {
+      if (!selectedSong) {
+        return false;
+      }
+
+      const now = Date.now();
+      const twelveHoursMs = 12 * 60 * 60 * 1000;
+
+      return selectedHistory.some((record) => {
+        const recordTime = new Date(record.timestamp.replace(" ", "T")).getTime();
+        return now - recordTime <= twelveHoursMs;
+      });
+    })();
+
+    return {
+      ...state,
+      ...catalogSnapshot,
+      selectedSong,
+      selectedHistory,
+      hasTodayRecord,
+      difficultyTable: state.difficultyTable,
     };
   }
 
