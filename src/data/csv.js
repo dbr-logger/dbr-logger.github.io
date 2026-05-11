@@ -115,6 +115,23 @@ export function parseCsv(text) {
   });
 }
 
+function isMemoOnlyCsvRow(row) {
+  const title = String(row.title ?? "").trim();
+  const memo = String(row.memo ?? "").trim();
+
+  if (!title || !memo) {
+    return false;
+  }
+
+  return !String(row.timestamp ?? "").trim()
+    && !String(row.date ?? "").trim()
+    && !String(row.lamp ?? "").trim()
+    && !String(row.bp ?? "").trim()
+    && !String(row.score ?? "").trim()
+    && !String(row.level ?? "").trim()
+    && !String(row.splv ?? "").trim();
+}
+
 export function importVerticalCsv(text) {
   const rows = parseCsv(text);
   const songNotes = {};
@@ -131,6 +148,15 @@ export function importVerticalCsv(text) {
     const bp = parseNumber(row.bp);
     const score = parseNumber(row.score);
     const memo = String(row.memo ?? "").trim();
+
+    if (isMemoOnlyCsvRow(row)) {
+      songNotes[title] = memo;
+      return null;
+    }    
+
+    if (!title || !String(row.date ?? "").trim()) {
+      return null;
+    }    
 
     if (memo) {
       songNotes[title] = memo;
@@ -188,7 +214,7 @@ export function exportVerticalCsv(records, songNotes = {}, difficultyTable = nul
     rows.push([
       "",
       "",
-      resolveRecordTextageKey(record, difficultyTable),
+      "",
       title,
       "",
       "",
