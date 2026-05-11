@@ -118,40 +118,7 @@ function chooseLabelPlacement(points, index, role, padding, innerHeight) {
   };
 }
 
-// 年の区切りを時系列軸で描画する場合はこちらを使用
-// function buildYearMarkers(minTimestamp, maxTimestamp, padding, height, innerWidth) {
-//   const markers = [];
-//   const startYear = new Date(minTimestamp).getFullYear();
-//   const endYear = new Date(maxTimestamp).getFullYear();
-
-//   for (let year = startYear; year <= endYear; year += 1) {
-//     const yearStart = new Date(year, 0, 1).getTime();
-//     const nextYearStart = new Date(year + 1, 0, 1).getTime();
-//     const segmentStart = Math.max(minTimestamp, yearStart);
-//     const segmentEnd = Math.min(maxTimestamp, nextYearStart);
-
-//     if (segmentEnd < segmentStart) {
-//       continue;
-//     }
-
-//     const labelTimestamp = segmentStart + ((segmentEnd - segmentStart) / 2);
-//     const boundaryTimestamp = yearStart >= minTimestamp && yearStart <= maxTimestamp ? yearStart : null;
-
-//     markers.push({
-//       year: String(year),
-//       x: scaleTimestamp(labelTimestamp, minTimestamp, maxTimestamp, padding, innerWidth),
-//       isBoundary: false,
-//       boundaryX: boundaryTimestamp !== null ? scaleTimestamp(boundaryTimestamp, minTimestamp, maxTimestamp, padding, innerWidth) : null,
-//       lineTop: padding.top,
-//       lineBottom: height - padding.bottom,
-//       labelY: height - 20,
-//     });
-//   }
-
-//   return markers;
-// }
-
-// データポイントの位置に合わせて年の区切りを描画する場合はこちらを使用
+// データポイントの位置に合わせて年の区切りを描画する
 function isJanuaryFirst(date) {
   return typeof date === "string" && /^\d{4}-01-01$/.test(date);
 }
@@ -219,6 +186,25 @@ function buildYearMarkersByPoints(history, points, padding, height) {
   }).filter(Boolean);
 }
 
+function hasChartValue(entry) {
+  return Number.isFinite(entry?.bp) || Number.isFinite(entry?.score);
+}
+
+function buildChartDateDomain(history) {
+  const dateEntryByDate = new Map();
+
+  history.forEach((entry) => {
+    if (!entry?.date || !hasChartValue(entry) || dateEntryByDate.has(entry.date)) {
+      return;
+    }
+
+    dateEntryByDate.set(entry.date, entry);
+  });
+
+  return Array.from(dateEntryByDate.values())
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+}
+
 function renderTrendChart(container, history, options) {
   if (!history || history.length === 0) {
     container.innerHTML = `<div class="empty-state">${options.emptyMessage}</div>`;
@@ -227,7 +213,34 @@ function renderTrendChart(container, history, options) {
 
   const width = Math.max(Math.floor(container.clientWidth), 280);
   const height = width < 420 ? 260 : 300;
-  const values = history.map((item) => options.getValue(item));
+  const padding = width < 420
+    ? { top: 24, right: 16, bottom: 72, left: 40 }
+    : { top: 24, right: 24, bottom: 72, left: 40 };
+  const innerWidth = width - padding.left - padding.right;
+  const innerHeight = height - padding.top - padding.bottom;
+
+  const domainHistory = options.domainHistory?.length
+    ? options.domainHistory
+    : history;
+
+  const domainPoints = domainHistory.map((entry, index) => ({
+    ...entry,
+    x: scaleIndex(index, domainHistory.length, padding, innerWidth),
+  }));
+
+  const xByDate = new Map(domainPoints.map((point) => [point.date, point.x]));
+
+  const chartHistory = history.filter((entry) => (
+    xByDate.has(entry.date)
+    && Number.isFinite(options.getValue(entry))
+  ));
+
+  if (chartHistory.length === 0) {
+    container.innerHTML = `<div class="empty-state">${options.emptyMessage}</div>`;
+    return;
+  }
+
+  const values = chartHistory.map((item) => options.getValue(item));
   const minValue = options.getMinValue(values);
   const maxValue = options.getMaxValue(values);
   const labelMinValue = Math.min(...values);
@@ -238,17 +251,11 @@ function renderTrendChart(container, history, options) {
     .filter((value) => Number.isFinite(value));
   const widestLabelDigits = Math.max(...[minValue, maxValue, ...guideValues].map((value) => String(Math.abs(Math.round(value))).length));
   const yAxisLabelGap = widestLabelDigits >= 5 ? 20 : widestLabelDigits >= 4 ? 16 : 12;
-  const padding = width < 420
-    ? { top: 24, right: 16, bottom: 72, left: 40 }
-    : { top: 24, right: 24, bottom: 72, left: 40 };
-  const innerWidth = width - padding.left - padding.right;
-  const innerHeight = height - padding.top - padding.bottom;
   const timestamps = history.map((entry) => parseIsoDateTimestamp(entry.date));
   const minTimestamp = Math.min(...timestamps);
   const maxTimestamp = Math.max(...timestamps);
-  const points = history.map((entry, index) => {
-    const timestamp = timestamps[index];
-    const x = scaleIndex(index, history.length, padding, innerWidth);
+  const points = chartHistory.map((entry) => {
+    const x = xByDate.get(entry.date);
     const value = options.getValue(entry);
     const y = maxValue === minValue
       ? padding.top + innerHeight / 2
@@ -266,12 +273,12 @@ function renderTrendChart(container, history, options) {
   if (maxValueIndex >= 0) {
     labelIndices.set(maxValueIndex, "maxValue");
   }
-  labelIndices.set(history.length - 1, "lastValue");
+  labelIndices.set(chartHistory.length - 1, "lastValue");
   labelIndices.set(0, "firstValue");
 
   const linePath = buildPath(points);
   const areaPath = `${linePath} L ${points.at(-1).x} ${height - padding.bottom} L ${points[0].x} ${height - padding.bottom} Z`;
-  const tickCount = clampTickCount(history.length);
+  const tickCount = clampTickCount(chartHistory.length);
   const ticks = maxValue === minValue
     ? [{ value: minValue, y: padding.top + innerHeight / 2 }]
     : Array.from({ length: tickCount }, (_, index) => {
@@ -289,16 +296,16 @@ function renderTrendChart(container, history, options) {
         : padding.top + ((maxValue - guide.value) / valueRange) * innerHeight;
       return { ...guide, y };
     });
-  const yearMarkers = buildYearMarkersByPoints(history, points, padding, height);
+  const yearMarkers = buildYearMarkersByPoints(domainHistory, domainPoints, padding, height);
 
-  const xLabels = points.map((point, index) => {
-    // if (index !== 0 && index !== history.length - 1) {
+  const xLabels = domainPoints.map((point, index) => {
+    // if (index !== 0 && index !== domainHistory.length - 1) {
     //   return "";
     // }
-    if (!Boolean(labelIndices.get(index))) {
-      return "";
-    }
-    return `<text class="chart-axis-text" x="${point.x}" y="${height - 44}" dominant-baseline="hanging" text-anchor="middle">${formatIsoDate(point.date).slice(5)}</text>`;
+    // if (!Boolean(labelIndices.get(index))) {
+    //   return "";
+    // }
+    return `<text class="chart-axis-text" x="${point.x}" y="${height - 46}" dominant-baseline="hanging" text-anchor="middle">${formatIsoDate(point.date).slice(5)}</text>`;
   }).join("");
 
   const yLabels = ticks.map((tick) => `
@@ -322,8 +329,8 @@ function renderTrendChart(container, history, options) {
 
   const pointMarkup = points.map((point, index) => {
     const labelRole = labelIndices.get(index);
-    const shouldShowLabel = Boolean(labelRole);
-    // const shouldShowLabel = true; // 全てのポイントにラベルを表示する場合はこちらを使用
+    // const shouldShowLabel = Boolean(labelRole);
+    const shouldShowLabel = true; // 全てのポイントにラベルを表示する場合はこちらを使用
     const placement = shouldShowLabel
       ? chooseLabelPlacement(points, index, labelRole, padding, innerHeight)
       : null;
@@ -350,18 +357,25 @@ function renderTrendChart(container, history, options) {
 }
 
 export function renderBpChart(container, history) {
-  // 同日最良値（最小BP）のみ使用
+  const domainHistory = buildChartDateDomain(history);
   const bestByDate = new Map();
+
   history.forEach((entry) => {
-    if (!Number.isFinite(entry.bp)) return;
+    if (!Number.isFinite(entry.bp)) {
+      return;
+    }
+
     const existing = bestByDate.get(entry.date);
     if (!existing || entry.bp < existing.bp) {
       bestByDate.set(entry.date, entry);
     }
   });
-  const finiteHistory = Array.from(bestByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+  const finiteHistory = Array.from(bestByDate.values())
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   renderTrendChart(container, finiteHistory, {
+    domainHistory,
     ariaLabel: "BP推移グラフ",
     emptyMessage: "この曲のBP履歴はまだありません。",
     getValue: (entry) => entry.bp,
@@ -371,19 +385,26 @@ export function renderBpChart(container, history) {
 }
 
 export function renderScoreChart(container, history) {
-  // 同日最良値（最高スコア）のみ使用
+  const domainHistory = buildChartDateDomain(history);
   const bestByDate = new Map();
+
   history.forEach((entry) => {
-    if (!Number.isFinite(entry.score)) return;
+    if (!Number.isFinite(entry.score)) {
+      return;
+    }
+
     const existing = bestByDate.get(entry.date);
     if (!existing || entry.score > existing.score) {
       bestByDate.set(entry.date, entry);
     }
   });
+
   const theoreticalMax = Number(container.dataset.maxScore || 0);
-  const finiteHistory = Array.from(bestByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const finiteHistory = Array.from(bestByDate.values())
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   renderTrendChart(container, finiteHistory, {
+    domainHistory,
     ariaLabel: "スコア推移グラフ",
     emptyMessage: "この曲のスコア履歴はまだありません。",
     getValue: (entry) => entry.score,

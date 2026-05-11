@@ -980,6 +980,10 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
     const proposedClass = song.isProposed ? "is-proposed" : "";
     const encodedTitle = encodeURIComponent(song.title);
     const lampColor = getCardLampColor(song.bestLamp);
+    const historyCountBadge = song.entryCount > 0
+      ? badge(`履歴 ${song.entryCount} 件`, "pill-neutral")
+      : "";
+      
     return `
       <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}" style="--card-lamp-color:${escapeHtml(lampColor)}">
         <div class="song-card-meta">
@@ -994,6 +998,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
           ${badge(`Best ${formatBp(song.bestBp)}`, "pill-neutral")}
           ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")}
           ${badge(song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし", "pill-neutral")}
+          ${historyCountBadge}
         </div>
       </button>
     `;
@@ -1847,7 +1852,7 @@ export function createRenderer(store) {
 
     activeChartResizeFrame = window.requestAnimationFrame(() => {
       renderBpChart(nodes.chart, latestChartHistory);
-      renderScoreChart(nodes.scoreChart, latestScoreChartHistory);
+      renderScoreChart(nodes.scoreChart, latestChartHistory);
       syncFloatingDockClass();
       activeChartResizeFrame = null;
     });
@@ -3655,13 +3660,10 @@ export function createRenderer(store) {
       );
       renderHistory(nodes.history, snapshot.selectedHistory, store);
       latestChartHistory = snapshot.selectedHistory.slice().reverse();
-      latestScoreChartHistory = snapshot.selectedHistory
-        .filter((record) => record.score !== null && record.score !== undefined)
-        .slice()
-        .reverse();
+      latestScoreChartHistory = latestChartHistory;
       nodes.scoreChart.dataset.maxScore = snapshot.selectedSong?.notes ? String(snapshot.selectedSong.notes * 4) : "";
       renderBpChart(nodes.chart, latestChartHistory);
-      renderScoreChart(nodes.scoreChart, latestScoreChartHistory);
+      renderScoreChart(nodes.scoreChart, latestChartHistory);
 
       if (pendingCatalogBottomNextScroll) {
         pendingCatalogBottomNextScroll = false;
