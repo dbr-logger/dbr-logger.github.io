@@ -1843,6 +1843,13 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   border-collapse: collapse;
 }
 
+.history-table td:last-child,
+.history-table th:last-child {
+  width: 1%;
+  white-space: nowrap;
+  text-align: left;
+}
+
 th,
 td {
   border-bottom: 1px solid rgba(71, 86, 95, 0.1);

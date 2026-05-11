@@ -196,7 +196,7 @@
                 <div class="form-actions">
                   <div class="action-group">
                     <button class="button button-primary" type="submit">保存する</button>
-                    <button id="delete-today-button" class="button button-secondary" type="button">前回の記録を削除</button>
+                    <button id="delete-today-button" class="button button-secondary" type="button" hidden>前回の記録を削除</button>
                     <button id="back-to-card-button" class="button button-tertiary" type="button">戻る</button>
                   </div>
                 </div>
@@ -239,6 +239,7 @@
                       <th>クリア</th>
                       <th>BP</th>
                       <th>スコア</th>
+                      <th></th>  <!-- 削除列の空ヘッダー -->
                     </tr>
                   </thead>
                   <tbody id="history-body"></tbody>

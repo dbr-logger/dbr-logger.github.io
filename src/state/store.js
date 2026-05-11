@@ -1574,6 +1574,19 @@ export function createStore() {
     return { ok: true, message: state.statusMessage };
   }
 
+  function deleteRecord(recordId) {
+    const recordIndex = state.records.findIndex((record) => record.id === recordId);
+    if (recordIndex === -1) {
+      return { ok: false, message: "記録が見つかりません。" };
+    }
+
+    state.records.splice(recordIndex, 1);
+    state.statusMessage = "記録を削除しました。";
+    persist();
+    emit();
+    return { ok: true, message: state.statusMessage };
+  }
+
   function deleteLatestRecord() {
     if (!state.selectedTitle) {
       return { ok: false, message: "曲を選択してください。" };
@@ -1595,8 +1608,7 @@ export function createStore() {
     }
 
     const latest = candidates[0];
-    const recordTime = new Date(latest.timestamp.replace(" ", "T")).getTime();
-    if (now - recordTime > twelveHoursMs) {
+    if (now - new Date(latest.timestamp.replace(" ", "T")).getTime() > twelveHoursMs) {
       return { ok: false, message: "12時間以上経過した記録は削除できません。" };
     }
 
@@ -1889,6 +1901,7 @@ export function createStore() {
     setPage,
     selectSong,
     saveRecord,
+    deleteRecord,
     deleteLatestRecord,
     saveSongNote,
     importDifficultyTable,

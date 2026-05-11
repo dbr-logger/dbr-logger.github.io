@@ -1000,9 +1000,9 @@ function renderCatalog(catalogContainer, songs, selectedTitle) {
   }).join("");
 }
 
-function renderHistory(historyContainer, records) {
+function renderHistory(historyContainer, records, storeRef) {
   if (records.length === 0) {
-    historyContainer.innerHTML = '<tr><td colspan="4">履歴がありません。</td></tr>';
+    historyContainer.innerHTML = '<tr><td colspan="5">履歴がありません。</td></tr>';
     return;
   }
 
@@ -1012,8 +1012,26 @@ function renderHistory(historyContainer, records) {
       <td>${escapeHtml(record.lamp)}</td>
       <td>${escapeHtml(formatBp(record.bp))}</td>
       <td>${escapeHtml(formatScore(record.score))}</td>
+      <td><a href="#" class="delete-link" data-record-id="${record.id}" style="font-size: 0.82rem; text-decoration: underline;">削除</a></td>
     </tr>
   `).join("");
+
+  // 削除リンクのイベントリスナーを追加
+  document.querySelectorAll(".delete-link").forEach(link => {
+    link.addEventListener("click", (e) => {
+      e.preventDefault();
+      const recordId = link.dataset.recordId;
+      const confirmed = window.confirm("この記録を削除しますか？");
+      if (confirmed) {
+        const result = storeRef.deleteRecord(recordId);
+        if (result.ok) {
+          renderHistory(historyContainer, storeRef.getSnapshot().selectedHistory, storeRef);
+        } else {
+          window.alert(result.message || "削除に失敗しました。");
+        }
+      }
+    });
+  });
 }
 
 function renderPagination(container, pagination, options = {}) {
@@ -3603,7 +3621,7 @@ export function createRenderer(store) {
         nodes.difficultyImportButton,
         !snapshot.difficultyTable || isDifficultyTableStale(snapshot.difficultyTableUpdatedAt)
       );
-      renderHistory(nodes.history, snapshot.selectedHistory);
+      renderHistory(nodes.history, snapshot.selectedHistory, store);
       latestChartHistory = snapshot.selectedHistory.slice().reverse();
       latestScoreChartHistory = snapshot.selectedHistory
         .filter((record) => record.score !== null && record.score !== undefined)
