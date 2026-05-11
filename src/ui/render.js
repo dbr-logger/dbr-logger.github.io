@@ -1012,7 +1012,7 @@ function renderHistory(historyContainer, records, storeRef) {
       <td>${escapeHtml(record.lamp)}</td>
       <td>${escapeHtml(formatBp(record.bp))}</td>
       <td>${escapeHtml(formatScore(record.score))}</td>
-      <td><a href="#" class="delete-link" data-record-id="${record.id}" style="font-size: 0.82rem; text-decoration: underline;">削除</a></td>
+      <td><a href="#" class="delete-link" data-record-id="${escapeHtml(record.id)}" style="font-size: 0.82rem; text-decoration: underline;">削除</a></td>
     </tr>
   `).join("");
 
@@ -3403,6 +3403,17 @@ export function createRenderer(store) {
     scrollSelectedCardIntoView();
   });
 
+  // 難易度表読み込み失敗時のスキップ機能へ接続
+  async function tryRefreshDifficultyTableForIo(actionLabel) {
+    try {
+      await store.importDifficultyTable();
+      return true;
+    } catch (error) {
+      console.error(`${actionLabel}前の難易度表読み込みに失敗:`, error);
+      return false;
+    }
+  }
+
   nodes.difficultyImportButton.addEventListener("click", async () => {
     setButtonLoading(nodes.difficultyImportButton, true, "読み込み中...");
     lockHeroButtonsExcept(nodes.difficultyImportButton);
@@ -3432,7 +3443,12 @@ export function createRenderer(store) {
       return;
     }
 
+    setButtonLoading(nodes.csvImportButton, true, "読み込み中...");
+    lockHeroButtonsExcept(nodes.csvImportButton);
+
     try {
+      await tryRefreshDifficultyTableForIo("CSV読み込み");
+
       const text = await file.text();
       const result = store.importCsvData(text);
       window.alert(`CSVを読み込みました。\n取込件数: ${result.count}\n合計件数: ${result.totalCount}`);
@@ -3441,6 +3457,7 @@ export function createRenderer(store) {
       window.alert(message);
     } finally {
       nodes.csvImportFileInput.value = "";
+      clearHeroButtonStates();
     }
   });
 
@@ -3456,6 +3473,11 @@ export function createRenderer(store) {
         return;
       }
 
+      setButtonLoading(nodes.importButton, true, "読み込み中...");
+      lockHeroButtonsExcept(nodes.importButton);
+
+      await tryRefreshDifficultyTableForIo("JSON読み込み");
+
       const text = await file.text();
       const payload = parseImportedJsonText(text);
       const result = store.importJsonData(payload, referenceDate);
@@ -3465,6 +3487,7 @@ export function createRenderer(store) {
       window.alert(message);
     } finally {
       nodes.importFileInput.value = "";
+      clearHeroButtonStates();
     }
   });
 
@@ -3473,12 +3496,7 @@ export function createRenderer(store) {
     lockHeroButtonsExcept(nodes.exportButton);
 
     try {
-      try {
-        await store.importDifficultyTable();
-      } catch (error) {
-        console.error("JSON書き出し前の難易度表読み込みに失敗:", error);
-        window.alert("難易度表の読み込みに失敗しました。読み込みをスキップしてJSONを書き出します。");
-      }
+      await tryRefreshDifficultyTableForIo("JSON書き出し");
 
       const payload = store.getExportJson();
       const json = JSON.stringify(payload, null, 2);
@@ -3496,15 +3514,29 @@ export function createRenderer(store) {
     }
   });
 
-  nodes.csvExportButton.addEventListener("click", () => {
-    const csv = store.getExportCsv();
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `dbr_records_${formatExportDateStamp()}.csv`;
-    anchor.click();
-    URL.revokeObjectURL(url);
+  nodes.csvExportButton.addEventListener("click", async () => {
+    setButtonLoading(nodes.csvExportButton, true, "書き出し中...");
+    lockHeroButtonsExcept(nodes.csvExportButton);
+
+    try {
+      await tryRefreshDifficultyTableForIo("CSV書き出し");
+
+      const csv = store.getExportCsv();
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+
+      anchor.href = url;
+      anchor.download = `dbr_records_${formatExportDateStamp()}.csv`;
+      anchor.click();
+
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "CSVの書き出しに失敗しました。";
+      window.alert(message);
+    } finally {
+      clearHeroButtonStates();
+    }
   });
 
   nodes.clearAllButton.addEventListener("click", () => {
