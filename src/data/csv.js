@@ -49,6 +49,10 @@ function normalizeTimestamp(value, date) {
   return normalizedDate ? `${normalizedDate}T00:00:00` : "";
 }
 
+function normalizeCsvText(value) {
+  return String(value ?? "").trim();
+}
+
 function escapeCsvValue(value) {
   const stringValue = String(value ?? "");
   if (/[",\n]/.test(stringValue)) {
@@ -78,6 +82,21 @@ function buildDifficultyLookup(difficultyTable) {
   return lookup;
 }
 
+function createTextageKeyFromTitle(title, difficultyTable) {
+  const entry = difficultyTable?.entries?.find((item) => item.title === title);
+  if (!entry?.textageid || !entry?.title) {
+    return "";
+  }
+
+  const suffix = entry.title.slice(-3);
+  return /^\([A-Z]\)$/.test(suffix) ? `${entry.textageid}${suffix}` : "";
+}
+
+function resolveRecordTextageKey(record, difficultyTable) {
+  return String(record?.textageKey ?? "").trim()
+    || createTextageKeyFromTitle(record?.title, difficultyTable);
+}
+
 export function parseCsv(text) {
   const normalizedText = text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").trim();
   const lines = normalizedText.split("\n").filter(Boolean);
@@ -104,6 +123,7 @@ export function importVerticalCsv(text) {
     const date = String(row.date ?? "").trim();
     const timestamp = normalizeTimestamp(row.timestamp, date);
     const title = String(row.title ?? "").trim();
+    const textageKey = normalizeCsvText(row.textageKey ?? row.textagekey ?? row.textage_key);
     const level = parseNumber(row.level);
     const splv = parseNumber(row.splv);
     const rawLamp = String(row.lamp ?? "").trim();
@@ -128,6 +148,7 @@ export function importVerticalCsv(text) {
       id: `${createSongId(title) || "song"}--${date}`,
       timestamp,
       date,
+      textageKey,
       title,
       level,
       splv,
@@ -144,10 +165,11 @@ export function importVerticalCsv(text) {
 
 export function exportVerticalCsv(records, songNotes = {}, difficultyTable = null) {
   const difficultyLookup = buildDifficultyLookup(difficultyTable);
-  const header = ["timestamp", "date", "title", "level", "splv", "lamp", "bp", "score", "memo"];
+  const header = ["timestamp", "date", "textageKey", "title", "level", "splv", "lamp", "bp", "score", "memo"];
   const rows = records.map((record) => [
     normalizeTimestamp(record.timestamp, record.date),
     record.date,
+    resolveRecordTextageKey(record, difficultyTable),
     record.title,
     difficultyLookup.get(record.title)?.level ?? record.level ?? "",
     difficultyLookup.get(record.title)?.splv ?? record.splv ?? "",
@@ -166,6 +188,7 @@ export function exportVerticalCsv(records, songNotes = {}, difficultyTable = nul
     rows.push([
       "",
       "",
+      resolveRecordTextageKey(record, difficultyTable),
       title,
       "",
       "",

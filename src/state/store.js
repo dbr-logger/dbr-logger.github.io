@@ -36,9 +36,18 @@ const RECOMMEND_SORT_RANK = new Map([
   ["△", 3],
   ["", 4],
 ]);
-function createRecordId(title, date) {
-  const seed = Math.random().toString(16).slice(2, 8);
-  return `${title}--${date}--${seed}`;
+const RECORD_ID_PREFIX = "record--";
+
+function createRecordId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `${RECORD_ID_PREFIX}${crypto.randomUUID()}`;
+  }
+
+  return `${RECORD_ID_PREFIX}${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function isCanonicalRecordId(id) {
+  return typeof id === "string" && id.startsWith(RECORD_ID_PREFIX);
 }
 
 function splitTitleAndSuffix(title) {
@@ -362,7 +371,7 @@ function normalizeStoredData(stored) {
     records: [...stored.records]
       .filter((record) => record?.date && record?.title)
       .map((record) => ({
-        id: record.id || createRecordId(record.title, record.date),
+        id: isCanonicalRecordId(record.id) ? record.id : createRecordId(),
         timestamp: normalizeRecordTimestamp(record.timestamp, record.date),
         date: record.date,
         title: record.title,
@@ -404,6 +413,18 @@ function needsRecordTimestampMigration(records) {
     record?.date
     && record?.title
     && normalizeRecordTimestamp(record.timestamp, record.date) !== String(record.timestamp ?? "").trim()
+  ));
+}
+
+function needsRecordIdMigration(records) {
+  if (!Array.isArray(records)) {
+    return false;
+  }
+
+  return records.some((record) => (
+    record?.date
+    && record?.title
+    && !isCanonicalRecordId(record.id)
   ));
 }
 
@@ -1203,8 +1224,9 @@ export function createStore() {
 
       if (stored) {
         const needsTimestampMigration = needsRecordTimestampMigration(stored.records);
+        const needsIdMigration = needsRecordIdMigration(stored.records);
         const normalized = normalizeStoredData(stored);
-        let didMutateStoredData = needsTimestampMigration;
+        let didMutateStoredData = needsTimestampMigration || needsIdMigration;
         state.songs = normalized.songs;
         state.records = normalized.records;
         state.difficultyTable = normalized.difficultyTable;
@@ -1554,7 +1576,7 @@ export function createStore() {
     const timestamp = formatLocalDateTime();
     const chartSuffix = selectedEntry.title.match(/\(([BNHAL])\)$/)?.[0] ?? "";
     state.records.push({
-      id: createRecordId(selectedEntry.title, timestamp),
+      id: createRecordId(),
       timestamp,
       date,
       title: selectedEntry.title,
@@ -1684,7 +1706,7 @@ export function createStore() {
       const splv = selectedEntry?.splvValue ?? record.splv ?? null;
 
       return {
-        id: createRecordId(record.title, record.date),
+        id: createRecordId(),
         timestamp: normalizeRecordTimestamp(record.timestamp, record.date),
         date: record.date,
         title: record.title,
@@ -1711,6 +1733,15 @@ export function createStore() {
     return { count: importedRecords.length, totalCount: state.records.length };
   }
 
+  function createTextageKeyFromCatalogEntry(entry) {
+    if (!entry?.textageid || !entry?.title) {
+      return "";
+    }
+
+    const suffix = entry.title.slice(-3);
+    return /^\([A-Z]\)$/.test(suffix) ? `${entry.textageid}${suffix}` : "";
+  }
+
   function importCsvData(text) {
     const { records, songNotes } = importVerticalCsv(text);
     const catalogEntryByTitle = new Map(getCatalogEntries().map((entry) => [entry.title, entry]));
@@ -1718,9 +1749,12 @@ export function createStore() {
       const selectedEntry = catalogEntryByTitle.get(record.title);
       const level = selectedEntry?.levelValue ?? record.level ?? null;
       const splv = selectedEntry?.splvValue ?? record.splv ?? null;
+      const textageKey = typeof record.textageKey === "string" && record.textageKey
+        ? record.textageKey
+        : createTextageKeyFromCatalogEntry(selectedEntry);
 
       return {
-        id: createRecordId(record.title, record.date),
+        id: createRecordId(),
         timestamp: normalizeRecordTimestamp(record.timestamp, record.date),
         date: record.date,
         title: record.title,
@@ -1729,7 +1763,7 @@ export function createStore() {
         lamp: LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY",
         bp: record.bp,
         score: record.score ?? null,
-        textageKey: "",
+        textageKey,
         source: record.source,
       };
     });
@@ -1738,6 +1772,11 @@ export function createStore() {
     const preservedRecords = state.records.filter((record) => !importedKeys.has(`${record.title}::${record.date}`));
 
     state.records = [...preservedRecords, ...importedRecords].sort(sortRecords);
+    if (state.difficultyTable) {
+      migrateRecordTitlesByTextageKey(state.difficultyTable);
+      updateTextageKeyFromDifficultyTable(state.difficultyTable);
+      state.records = state.records.sort(sortRecords);
+    }    
     state.songNotes = {
       ...state.songNotes,
       ...songNotes,
