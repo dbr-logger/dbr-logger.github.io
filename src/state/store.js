@@ -1748,7 +1748,7 @@ export function createStore() {
   }
 
   function importCsvData(text) {
-    const { records, songNotes } = importVerticalCsv(text);
+    const { records, songNotes } = importVerticalCsv(text, state.difficultyTable);
     const catalogEntryByTitle = new Map(getCatalogEntries().map((entry) => [entry.title, entry]));
     const importedRecords = records.map((record) => {
       const selectedEntry = catalogEntryByTitle.get(record.title);

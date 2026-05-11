@@ -82,6 +82,37 @@ function buildDifficultyLookup(difficultyTable) {
   return lookup;
 }
 
+function createTextageKeyToTitleLookup(difficultyTable) {
+  const lookup = new Map();
+
+  difficultyTable?.entries?.forEach((entry) => {
+    if (!entry?.textageid || !entry?.title) {
+      return;
+    }
+
+    const suffix = entry.title.slice(-3);
+    if (!/^\([A-Z]\)$/.test(suffix)) {
+      return;
+    }
+
+    lookup.set(`${entry.textageid}${suffix}`, entry.title);
+  });
+
+  return lookup;
+}
+
+function resolveCsvTitleByTextageKey(title, textageKey, difficultyTable) {
+  const normalizedTitle = String(title ?? "").trim();
+  const normalizedTextageKey = String(textageKey ?? "").trim();
+
+  if (!normalizedTextageKey) {
+    return normalizedTitle;
+  }
+
+  const titleByTextageKey = createTextageKeyToTitleLookup(difficultyTable);
+  return titleByTextageKey.get(normalizedTextageKey) ?? normalizedTitle;
+}
+
 function createTextageKeyFromTitle(title, difficultyTable) {
   const entry = difficultyTable?.entries?.find((item) => item.title === title);
   if (!entry?.textageid || !entry?.title) {
@@ -132,7 +163,7 @@ function isMemoOnlyCsvRow(row) {
     && !String(row.splv ?? "").trim();
 }
 
-export function importVerticalCsv(text) {
+export function importVerticalCsv(text, difficultyTable = null) {
   const rows = parseCsv(text);
   const songNotes = {};
 
@@ -141,6 +172,7 @@ export function importVerticalCsv(text) {
     const timestamp = normalizeTimestamp(row.timestamp, date);
     const title = String(row.title ?? "").trim();
     const textageKey = normalizeCsvText(row.textageKey ?? row.textagekey ?? row.textage_key);
+    const resolvedNoteTitle = resolveCsvTitleByTextageKey(title, textageKey, difficultyTable);
     const level = parseNumber(row.level);
     const splv = parseNumber(row.splv);
     const rawLamp = String(row.lamp ?? "").trim();
@@ -150,16 +182,18 @@ export function importVerticalCsv(text) {
     const memo = String(row.memo ?? "").trim();
 
     if (isMemoOnlyCsvRow(row)) {
-      songNotes[title] = memo;
+      if (resolvedNoteTitle && memo) {
+        songNotes[resolvedNoteTitle] = memo;
+      }
       return null;
-    }    
+    }   
 
     if (!title || !String(row.date ?? "").trim()) {
       return null;
     }    
 
-    if (memo) {
-      songNotes[title] = memo;
+    if (memo && resolvedNoteTitle) {
+      songNotes[resolvedNoteTitle] = memo;
     }
 
     if (!date || !title) {
@@ -214,7 +248,7 @@ export function exportVerticalCsv(records, songNotes = {}, difficultyTable = nul
     rows.push([
       "",
       "",
-      "",
+      createTextageKeyFromTitle(title, difficultyTable),
       title,
       "",
       "",
