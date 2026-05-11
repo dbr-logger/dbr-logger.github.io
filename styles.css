@@ -960,7 +960,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 }
 
 .summary-lamp-item.is-active {
-  box-shadow: 0 14px 28px rgba(43, 54, 61, 0.08);
+  box-shadow: 0 0 12px rgba(43, 54, 61, 0.08);
 }
 
 .summary-lamp-item.is-inactive {
@@ -1071,13 +1071,13 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 @media (hover: hover) {
   .song-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 18px 32px rgba(43, 54, 61, 0.12);
+    box-shadow: 0 2px 32px rgba(43, 54, 61, 0.12);
   }
 }
 
 .song-card.is-selected {
   border-color: rgba(13, 138, 148, 0.32);
-  box-shadow: 0 18px 32px rgba(13, 138, 148, 0.18);
+  box-shadow: 0 0 32px rgba(13, 138, 148, 0.18);
 }
 
 .song-card-title {
@@ -1965,13 +1965,16 @@ html[data-theme="dark"] .pill-neutral {
   background: rgba(98, 138, 155, 0.08);
 }
 
-html[data-theme="dark"] .summary-lamp-item.is-active,
+html[data-theme="dark"] .summary-lamp-item.is-active {
+  box-shadow: 0 0 12px rgba(83, 199, 207, 0.12);  
+}
+
 html[data-theme="dark"] .song-card.is-selected {
-  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 0 30px rgba(83, 199, 207, 0.12);
 }
 
 html[data-theme="dark"] .song-card:hover {
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.26);
+  box-shadow: 0 2px 32px rgba(83, 199, 207, 0.18);
 }
 
 html[data-theme="dark"] .song-card-note,

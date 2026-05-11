@@ -1008,31 +1008,36 @@ export function createStore() {
     state.catalogVisibleTitleOrder = [];
   }
   
-  function applyStableVisibleOrder(visibleSongs) {
+  function applyStableVisibleOrder(visibleSongs, allSongStates = visibleSongs) {
     const signature = createCatalogVisibleSignature();
-  
+
     if (
       state.catalogVisibleSignature === signature
       && state.catalogVisibleTitleOrder.length > 0
     ) {
-      const songByTitle = new Map(visibleSongs.map((song) => [song.title, song]));
+      const visibleSongByTitle = new Map(visibleSongs.map((song) => [song.title, song]));
+      const allSongByTitle = new Map(allSongStates.map((song) => [song.title, song]));
       const usedTitles = new Set();
-  
+      const shouldKeepPreviousPool = state.sortMode === "latest";
+
       const stableSongs = state.catalogVisibleTitleOrder
         .map((title) => {
-          const song = songByTitle.get(title);
+          const song = visibleSongByTitle.get(title)
+            ?? (shouldKeepPreviousPool ? allSongByTitle.get(title) : null);
+
           if (song) {
             usedTitles.add(title);
           }
+
           return song;
         })
         .filter(Boolean);
-  
+
       const appendedSongs = visibleSongs.filter((song) => !usedTitles.has(song.title));
-  
+
       return [...stableSongs, ...appendedSongs];
     }
-  
+
     state.catalogVisibleSignature = signature;
     state.catalogVisibleTitleOrder = visibleSongs.map((song) => song.title);
     return visibleSongs;
@@ -1868,7 +1873,7 @@ export function createStore() {
         return (songOrder.get(a.title) ?? 0) - (songOrder.get(b.title) ?? 0);
       });
     }
-    const visibleSongs = applyStableVisibleOrder(filteredVisibleSongs);
+    const visibleSongs = applyStableVisibleOrder(filteredVisibleSongs, songStates);
     const summaryFilters = isTextAxisMode(state.filters.axisMode) && state.titleFilterBase
       ? state.titleFilterBase
       : state.filters;

@@ -23,6 +23,14 @@ function scaleTimestamp(timestamp, minTimestamp, maxTimestamp, padding, innerWid
   return padding.left + ((timestamp - minTimestamp) / (maxTimestamp - minTimestamp)) * innerWidth;
 }
 
+function scaleIndex(index, length, padding, innerWidth) {
+  if (length <= 1) {
+    return padding.left + innerWidth / 2;
+  }
+
+  return padding.left + (index / (length - 1)) * innerWidth;
+}
+
 function findLastIndex(values, predicate) {
   for (let index = values.length - 1; index >= 0; index -= 1) {
     if (predicate(values[index], index)) {
@@ -110,36 +118,105 @@ function chooseLabelPlacement(points, index, role, padding, innerHeight) {
   };
 }
 
-function buildYearMarkers(minTimestamp, maxTimestamp, padding, height, innerWidth) {
-  const markers = [];
-  const startYear = new Date(minTimestamp).getFullYear();
-  const endYear = new Date(maxTimestamp).getFullYear();
+// 年の区切りを時系列軸で描画する場合はこちらを使用
+// function buildYearMarkers(minTimestamp, maxTimestamp, padding, height, innerWidth) {
+//   const markers = [];
+//   const startYear = new Date(minTimestamp).getFullYear();
+//   const endYear = new Date(maxTimestamp).getFullYear();
 
-  for (let year = startYear; year <= endYear; year += 1) {
-    const yearStart = new Date(year, 0, 1).getTime();
-    const nextYearStart = new Date(year + 1, 0, 1).getTime();
-    const segmentStart = Math.max(minTimestamp, yearStart);
-    const segmentEnd = Math.min(maxTimestamp, nextYearStart);
+//   for (let year = startYear; year <= endYear; year += 1) {
+//     const yearStart = new Date(year, 0, 1).getTime();
+//     const nextYearStart = new Date(year + 1, 0, 1).getTime();
+//     const segmentStart = Math.max(minTimestamp, yearStart);
+//     const segmentEnd = Math.min(maxTimestamp, nextYearStart);
 
-    if (segmentEnd < segmentStart) {
-      continue;
+//     if (segmentEnd < segmentStart) {
+//       continue;
+//     }
+
+//     const labelTimestamp = segmentStart + ((segmentEnd - segmentStart) / 2);
+//     const boundaryTimestamp = yearStart >= minTimestamp && yearStart <= maxTimestamp ? yearStart : null;
+
+//     markers.push({
+//       year: String(year),
+//       x: scaleTimestamp(labelTimestamp, minTimestamp, maxTimestamp, padding, innerWidth),
+//       isBoundary: false,
+//       boundaryX: boundaryTimestamp !== null ? scaleTimestamp(boundaryTimestamp, minTimestamp, maxTimestamp, padding, innerWidth) : null,
+//       lineTop: padding.top,
+//       lineBottom: height - padding.bottom,
+//       labelY: height - 20,
+//     });
+//   }
+
+//   return markers;
+// }
+
+// データポイントの位置に合わせて年の区切りを描画する場合はこちらを使用
+function isJanuaryFirst(date) {
+  return typeof date === "string" && /^\d{4}-01-01$/.test(date);
+}
+
+function buildYearMarkersByPoints(history, points, padding, height) {
+  const yearGroups = [];
+
+  history.forEach((entry, index) => {
+    const year = String(entry.date ?? "").slice(0, 4);
+    if (!/^\d{4}$/.test(year) || !points[index]) {
+      return;
     }
 
-    const labelTimestamp = segmentStart + ((segmentEnd - segmentStart) / 2);
-    const boundaryTimestamp = yearStart >= minTimestamp && yearStart <= maxTimestamp ? yearStart : null;
+    const lastGroup = yearGroups.at(-1);
+    if (lastGroup?.year === year) {
+      lastGroup.endIndex = index;
+      return;
+    }
 
-    markers.push({
-      year: String(year),
-      x: scaleTimestamp(labelTimestamp, minTimestamp, maxTimestamp, padding, innerWidth),
-      isBoundary: false,
-      boundaryX: boundaryTimestamp !== null ? scaleTimestamp(boundaryTimestamp, minTimestamp, maxTimestamp, padding, innerWidth) : null,
+    yearGroups.push({
+      year,
+      startIndex: index,
+      endIndex: index,
+      boundaryX: null,
+    });
+  });
+
+  yearGroups.forEach((group, groupIndex) => {
+    const startPoint = points[group.startIndex];
+    const previousGroup = yearGroups[groupIndex - 1];
+    const previousEndPoint = previousGroup ? points[previousGroup.endIndex] : null;
+    const firstEntryOfYear = history[group.startIndex];
+
+    if (!startPoint || !previousEndPoint) {
+      return;
+    }
+
+    group.boundaryX = isJanuaryFirst(firstEntryOfYear?.date)
+      ? startPoint.x
+      : previousEndPoint.x + ((startPoint.x - previousEndPoint.x) / 2);
+  });
+
+  return yearGroups.map((group, groupIndex) => {
+    const startPoint = points[group.startIndex];
+    const endPoint = points[group.endIndex];
+
+    if (!startPoint || !endPoint) {
+      return null;
+    }
+
+    const previousBoundaryX = group.boundaryX;
+    const nextBoundaryX = yearGroups[groupIndex + 1]?.boundaryX ?? null;
+
+    const labelStartX = previousBoundaryX ?? startPoint.x;
+    const labelEndX = nextBoundaryX ?? endPoint.x;
+
+    return {
+      year: group.year,
+      x: labelStartX + ((labelEndX - labelStartX) / 2),
+      boundaryX: group.boundaryX,
       lineTop: padding.top,
       lineBottom: height - padding.bottom,
-      labelY: height - 20,
-    });
-  }
-
-  return markers;
+      labelY: height - 24,
+    };
+  }).filter(Boolean);
 }
 
 function renderTrendChart(container, history, options) {
@@ -171,7 +248,7 @@ function renderTrendChart(container, history, options) {
   const maxTimestamp = Math.max(...timestamps);
   const points = history.map((entry, index) => {
     const timestamp = timestamps[index];
-    const x = scaleTimestamp(timestamp, minTimestamp, maxTimestamp, padding, innerWidth);
+    const x = scaleIndex(index, history.length, padding, innerWidth);
     const value = options.getValue(entry);
     const y = maxValue === minValue
       ? padding.top + innerHeight / 2
@@ -212,10 +289,13 @@ function renderTrendChart(container, history, options) {
         : padding.top + ((maxValue - guide.value) / valueRange) * innerHeight;
       return { ...guide, y };
     });
-  const yearMarkers = buildYearMarkers(minTimestamp, maxTimestamp, padding, height, innerWidth);
+  const yearMarkers = buildYearMarkersByPoints(history, points, padding, height);
 
   const xLabels = points.map((point, index) => {
-    if (index !== 0 && index !== history.length - 1) {
+    // if (index !== 0 && index !== history.length - 1) {
+    //   return "";
+    // }
+    if (!Boolean(labelIndices.get(index))) {
       return "";
     }
     return `<text class="chart-axis-text" x="${point.x}" y="${height - 44}" dominant-baseline="hanging" text-anchor="middle">${formatIsoDate(point.date).slice(5)}</text>`;
@@ -243,6 +323,7 @@ function renderTrendChart(container, history, options) {
   const pointMarkup = points.map((point, index) => {
     const labelRole = labelIndices.get(index);
     const shouldShowLabel = Boolean(labelRole);
+    // const shouldShowLabel = true; // 全てのポイントにラベルを表示する場合はこちらを使用
     const placement = shouldShowLabel
       ? chooseLabelPlacement(points, index, labelRole, padding, innerHeight)
       : null;
@@ -250,7 +331,7 @@ function renderTrendChart(container, history, options) {
     return `
     <g>
       <circle class="chart-point" cx="${point.x}" cy="${point.y}" r="6" />
-      ${shouldShowLabel ? `<text class="chart-point-label" x="${placement.x}" y="${placement.y}" dominant-baseline="${placement.dominantBaseline}" text-anchor="middle">${options.getValue(point)}</text>` : ""}
+      ${shouldShowLabel ? `<text class="chart-point-label" x="${placement.x}" y="${point.y - 16}" dominant-baseline="${placement.dominantBaseline}" text-anchor="middle">${options.getValue(point)}</text>` : ""}
     </g>
   `;
   }).join("");
