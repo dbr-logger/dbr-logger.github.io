@@ -91,6 +91,30 @@ function sortRecords(a, b) {
   return compareRecordTimestamps(a, b) || compareIsoDates(a.date, b.date) || compareTitlesWithSuffixOrder(a.title, b.title);
 }
 
+function getCsvRecordMergeKey(record) {
+  const timestamp = normalizeRecordTimestamp(record?.timestamp, record?.date);
+  const textageKey = typeof record?.textageKey === "string" ? record.textageKey.trim() : "";
+  const title = typeof record?.title === "string" ? record.title.trim() : "";
+
+  if (textageKey) {
+    return `textageKey:${textageKey}::timestamp:${timestamp}`;
+  }
+
+  return `title:${title}::timestamp:${timestamp}`;
+}
+
+function getJsonRecordMergeKey(record) {
+  const date = typeof record?.date === "string" ? record.date.trim() : "";
+  const textageKey = typeof record?.textageKey === "string" ? record.textageKey.trim() : "";
+  const title = typeof record?.title === "string" ? record.title.trim() : "";
+
+  if (textageKey) {
+    return `textageKey:${textageKey}::date:${date}`;
+  }
+
+  return `title:${title}::date:${date}`;
+}
+
 function normalizeRecordTimestamp(timestamp, date) {
   const normalized = String(timestamp ?? "").trim();
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized)) {
@@ -1725,8 +1749,8 @@ export function createStore() {
       };
     });
 
-    const importedKeys = new Set(importedRecords.map((record) => `${record.title}::${record.date}`));
-    const preservedRecords = state.records.filter((record) => !importedKeys.has(`${record.title}::${record.date}`));
+    const importedKeys = new Set(importedRecords.map(getJsonRecordMergeKey));
+    const preservedRecords = state.records.filter((record) => !importedKeys.has(getJsonRecordMergeKey(record)));
 
     state.records = [...preservedRecords, ...importedRecords].sort(sortRecords);
     invalidateCatalogVisibleOrder();
@@ -1773,8 +1797,8 @@ export function createStore() {
       };
     });
 
-    const importedKeys = new Set(importedRecords.map((record) => `${record.title}::${record.date}`));
-    const preservedRecords = state.records.filter((record) => !importedKeys.has(`${record.title}::${record.date}`));
+    const importedKeys = new Set(importedRecords.map(getCsvRecordMergeKey));
+    const preservedRecords = state.records.filter((record) => !importedKeys.has(getCsvRecordMergeKey(record)));
 
     state.records = [...preservedRecords, ...importedRecords].sort(sortRecords);
     if (state.difficultyTable) {

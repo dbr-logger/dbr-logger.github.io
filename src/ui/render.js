@@ -1771,6 +1771,32 @@ export function createRenderer(store) {
     });
   }
 
+  function getCatalogNumberShortcutIndex(event) {
+    if (event.key >= "1" && event.key <= "9") {
+      return Number(event.key) - 1;
+    }
+
+    if (event.key === "0") {
+      return 9;
+    }
+
+    return -1;
+  }
+
+  function selectCatalogSongByShortcut(index) {
+    const snapshot = store.getSnapshot();
+    const song = snapshot.pagedSongs[index];
+
+    if (!song) {
+      return false;
+    }
+
+    store.selectSong(song.title);
+    // ショートカット操作時はスクロールしない
+    // window.requestAnimationFrame(scrollEntryPanelIntoView);
+    return true;
+  }  
+
   const nodes = {
     summaryPanel: document.querySelector("#summary-cards")?.closest(".panel"),
     summaryContent: document.querySelector("#summary-content"),
@@ -3254,6 +3280,27 @@ export function createRenderer(store) {
     }
 
     const shortcutKey = event.key.toLowerCase();
+
+    const catalogShortcutIndex = getCatalogNumberShortcutIndex(event);
+
+    if (catalogShortcutIndex >= 0
+      && !event.repeat
+      && !event.isComposing
+      && !event.ctrlKey
+      && !event.altKey
+      && !event.metaKey
+    ) {
+      const target = event.target;
+      if (target instanceof HTMLElement && isShortcutEditableTarget(target)) {
+        return;
+      }
+
+      if (selectCatalogSongByShortcut(catalogShortcutIndex)) {
+        event.preventDefault();
+      }
+
+      return;
+    }    
 
     if ((shortcutKey === "a" || shortcutKey === "d")
       && !event.isComposing
