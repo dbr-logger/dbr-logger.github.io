@@ -2159,7 +2159,8 @@ html[data-theme="dark"] .proposal-success-body a {
     bottom: auto;
     top: 16px;
   } */
-
+  
+  /* 絞り込みボタンを常に上側表示 */
   .floating-axis-filter.is-docked-top {
     bottom: auto;
     top: 16px;
@@ -2518,7 +2519,7 @@ html[data-theme="dark"] .pill-proposed {
 
 @media (max-width: 720px) {
   /* モバイルレイアウトの場合のフローティングボタン領域を確保 */
-  body {
+  .panel-hero {
     margin-top: 66px;
   }
 }
