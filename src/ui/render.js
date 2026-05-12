@@ -960,7 +960,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs) {
       ${selectedSong.isProposed ? badge("新規提案中", "pill-proposed") : ""}
       ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
       ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-splv") : ""}
-      ${badge(selectedSong.bestLamp, "pill-lamp")}
+      ${badge(selectedSong.bestLamp, "pill-lamp")}<br>
       ${badge(`最小 ${formatBp(selectedSong.bestBp)}`, "pill-neutral")}
       ${badge(`最新 ${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
       ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}

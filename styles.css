@@ -1841,7 +1841,6 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 .history-table {
   width: 100%;
   border-collapse: collapse;
-  text-align: left;
   font-size: 0.82rem;
 }
 
@@ -1849,7 +1848,6 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 .history-table th:last-child {
   width: 1%;
   white-space: nowrap;
-  text-align: left;
 }
 
 th,
