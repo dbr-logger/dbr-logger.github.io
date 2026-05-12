@@ -1789,66 +1789,72 @@ export function createStore() {
     return exportVerticalCsv(state.records, state.songNotes, state.difficultyTable);
   }
 
-  function normalizeJsonDuplicateLamp(value) {
+  function normalizeJsonImportLamp(value) {
     return LAMP_OPTIONS.includes(value) && value !== "NO PLAY" ? value : null;
   }
 
-  function normalizeJsonDuplicateNumber(value) {
+  function normalizeJsonImportNumber(value) {
     const parsed = parseOptionalNumber(value);
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  function hasSameJsonRecordValues(a, b) {
-    return normalizeJsonDuplicateLamp(a?.lamp) === normalizeJsonDuplicateLamp(b?.lamp)
-      && normalizeJsonDuplicateNumber(a?.bp) === normalizeJsonDuplicateNumber(b?.bp)
-      && normalizeJsonDuplicateNumber(a?.score) === normalizeJsonDuplicateNumber(b?.score);
-  }
-
-  function isSameJsonRecordChart(a, b) {
-    if (a?.textageKey && b?.textageKey) {
-      return a.textageKey === b.textageKey;
-    }
-
-    return a?.title === b?.title;
-  }
-
-  function hasDuplicateFutureJsonRecord(record, existingRecords, referenceDate) {
-    return existingRecords.some((existing) => {
-      if (!existing.date || existing.date <= referenceDate) {
-        return false;
-      }
-
-      if (!isSameJsonRecordChart(record, existing)) {
-        return false;
-      }
-
-      return hasSameJsonRecordValues(record, existing);
-    });
-  }
-
   function isJsonRecordImprovement(record, currentState) {
-    const importedLamp = LAMP_OPTIONS.includes(record?.lamp) ? record.lamp : "NO PLAY";
-    const importedBp = parseOptionalNumber(record?.bp);
-    const importedScore = parseOptionalNumber(record?.score);
+    const importedLamp = normalizeJsonImportLamp(record?.lamp);
+    const importedBp = normalizeJsonImportNumber(record?.bp);
+    const importedScore = normalizeJsonImportNumber(record?.score);
 
     const currentBestLamp = currentState?.bestLamp ?? "NO PLAY";
     const currentBestBp = currentState?.bestBp ?? null;
     const currentBestScore = currentState?.bestScore ?? null;
 
-    const lampImproved = importedLamp !== "NO PLAY"
+    const lampImproved = importedLamp !== null
       && getLampRank(importedLamp) > getLampRank(currentBestLamp);
 
-    const bpImproved = Number.isFinite(importedBp)
+    const bpImproved = importedBp !== null
       && (!Number.isFinite(currentBestBp) || importedBp < currentBestBp);
 
-    const scoreImproved = Number.isFinite(importedScore)
+    const scoreImproved = importedScore !== null
       && (!Number.isFinite(currentBestScore) || importedScore > currentBestScore);
 
     return lampImproved || bpImproved || scoreImproved;
   }
 
+  function isJsonAggregateAlreadyReflected(record, currentFullState) {
+    const importedLamp = normalizeJsonImportLamp(record?.lamp);
+    const importedBp = normalizeJsonImportNumber(record?.bp);
+    const importedScore = normalizeJsonImportNumber(record?.score);
+
+    const hasLamp = importedLamp !== null;
+    const hasBp = importedBp !== null;
+    const hasScore = importedScore !== null;
+
+    if (!hasLamp && !hasBp && !hasScore) {
+      return false;
+    }
+
+    if (hasLamp && importedLamp !== currentFullState?.bestLamp) {
+      return false;
+    }
+
+    if (hasBp && importedBp !== currentFullState?.bestBp) {
+      return false;
+    }
+
+    if (hasScore && importedScore !== currentFullState?.bestScore) {
+      return false;
+    }
+
+    return true;
+  }
+
   function importJsonData(payload, referenceDate = todayIso()) {
     const catalogEntryByTitle = new Map(getCatalogEntries().map((entry) => [entry.title, entry]));
+
+    const comparableRecordIndex = buildRecordIndex(
+      state.records.filter((record) => record.date && record.date <= referenceDate),
+    );
+
+    const fullRecordIndex = buildRecordIndex(state.records);
 
     const comparableRecordIndex = buildRecordIndex(
       state.records.filter((record) => record.date && record.date <= referenceDate),
@@ -1862,16 +1868,21 @@ export function createStore() {
           return false;
         }
 
-        const currentState = deriveSongState(
+        const comparableState = deriveSongState(
           selectedEntry,
           comparableRecordIndex.get(selectedEntry.title) ?? [],
         );
 
-        if (!isJsonRecordImprovement(record, currentState)) {
+        if (!isJsonRecordImprovement(record, comparableState)) {
           return false;
         }
 
-        if (hasDuplicateFutureJsonRecord(record, state.records, referenceDate)) {
+        const currentFullState = deriveSongState(
+          selectedEntry,
+          fullRecordIndex.get(selectedEntry.title) ?? [],
+        );
+
+        if (isJsonAggregateAlreadyReflected(record, currentFullState)) {
           return false;
         }
 
