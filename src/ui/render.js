@@ -1816,6 +1816,12 @@ export function createRenderer(store) {
     }
 
     store.selectSong(song.title);
+
+    window.requestAnimationFrame(() => {
+      nodes.lampInput?.focus({ preventScroll: true });
+    });
+
+    store.selectSong(song.title);
     // ショートカット操作時はスクロールしない
     // window.requestAnimationFrame(scrollEntryPanelIntoView);
     return true;
