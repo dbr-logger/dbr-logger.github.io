@@ -10,7 +10,7 @@ const { getSearchTextMatchRank, matchesSearchText } = await import(`../utils/sea
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const PAGE_SIZE = 100;
-const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "latest", "recommend", "memo"];
+const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "latest", "entryCount", "recommend", "memo"];
 const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
 const NUMERIC_AXIS_MODES = ["level", "splv", "katate"];
@@ -811,6 +811,11 @@ function comparePrimarySortValue(a, b, sortMode, sortDirection) {
     const compared = compareLatestTimestampValue(a, b);
     return sortDirection === "desc" ? -compared : compared;
   }
+
+  if (sortMode === "entryCount") {
+    const compared = a.entryCount - b.entryCount;
+    return sortDirection === "desc" ? -compared : compared;
+  }  
 
   if (sortMode === "clear") {
     const compared = getLampRank(a.bestLamp) - getLampRank(b.bestLamp);

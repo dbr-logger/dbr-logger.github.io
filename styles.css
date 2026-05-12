@@ -1525,9 +1525,13 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 
 .floating-filter-actions {
   display: grid;
-  gap: 10px;
+  /* gap: 10px; */
   grid-template-columns: minmax(0, 1fr) auto;
   pointer-events: none;
+}
+
+.floating-filter-actions:has(.floating-filter-clear) {
+  gap: 10px;
 }
 
 .floating-filter-actions > * {

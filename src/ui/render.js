@@ -606,7 +606,7 @@ function summarizeAxisFilter(filters, bounds) {
 
 function renderFloatingToggleLabel(filters, bounds) {
   if (isDateAxisMode(filters.axisMode)) {
-    return `絞り込み: ${escapeHtml(getAxisLabel(filters.axisMode))}<br>${escapeHtml(formatDateRangeValue(filters))}`;
+    return `絞り込み: ${escapeHtml(getAxisLabel(filters.axisMode))} ${escapeHtml(formatDateRangeValue(filters))}`;
   }
 
   return `絞り込み: ${escapeHtml(summarizeAxisFilter(filters, bounds))}`;
@@ -2240,7 +2240,7 @@ export function createRenderer(store) {
       axisValue: "",
       dateStart: nodes.floatingAxisFilter.querySelector("[data-date-start]")?.value ?? "",
       dateEnd: nodes.floatingAxisFilter.querySelector("[data-date-end]")?.value ?? "",
-    }, { scrollToCatalog: false });
+    }, { scrollToCatalog: true });
   }
 
   function scheduleDateFilterCommitIfBlurred() {
