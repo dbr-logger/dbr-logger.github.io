@@ -1790,25 +1790,32 @@ export function createStore() {
   }
 
   function isJsonRecordImprovement(record, currentState) {
-    const importedLamp = LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY";
-    const importedBp = parseOptionalNumber(record.bp);
-    const importedScore = parseOptionalNumber(record.score);
+    const importedLamp = LAMP_OPTIONS.includes(record?.lamp) ? record.lamp : "NO PLAY";
+    const importedBp = parseOptionalNumber(record?.bp);
+    const importedScore = parseOptionalNumber(record?.score);
+
+    const currentBestLamp = currentState?.bestLamp ?? "NO PLAY";
+    const currentBestBp = currentState?.bestBp ?? null;
+    const currentBestScore = currentState?.bestScore ?? null;
 
     const lampImproved = importedLamp !== "NO PLAY"
-      && getLampRank(importedLamp) > getLampRank(currentState?.bestLamp ?? "NO PLAY");
+      && getLampRank(importedLamp) > getLampRank(currentBestLamp);
 
     const bpImproved = Number.isFinite(importedBp)
-      && (currentState?.bestBp === null || currentState?.bestBp === undefined || importedBp < currentState.bestBp);
+      && (!Number.isFinite(currentBestBp) || importedBp < currentBestBp);
 
     const scoreImproved = Number.isFinite(importedScore)
-      && (currentState?.bestScore === null || currentState?.bestScore === undefined || importedScore > currentState.bestScore);
+      && (!Number.isFinite(currentBestScore) || importedScore > currentBestScore);
 
     return lampImproved || bpImproved || scoreImproved;
   }
 
   function importJsonData(payload, referenceDate = todayIso()) {
     const catalogEntryByTitle = new Map(getCatalogEntries().map((entry) => [entry.title, entry]));
-    const recordIndex = buildRecordIndex(state.records);
+
+    const comparableRecordIndex = buildRecordIndex(
+      state.records.filter((record) => record.date && record.date <= referenceDate),
+    );
 
     const importedRecords = importDbrJson(payload, referenceDate)
       .filter((record) => {
@@ -1820,7 +1827,7 @@ export function createStore() {
 
         const currentState = deriveSongState(
           selectedEntry,
-          recordIndex.get(selectedEntry.title) ?? [],
+          comparableRecordIndex.get(selectedEntry.title) ?? [],
         );
 
         return isJsonRecordImprovement(record, currentState);
@@ -1837,7 +1844,7 @@ export function createStore() {
           title: record.title,
           level,
           splv,
-          lamp: record.lamp,
+          lamp: LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY",
           bp: record.bp,
           score: record.score,
           textageKey: record.textageKey,
