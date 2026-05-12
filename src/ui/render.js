@@ -1017,7 +1017,7 @@ function renderHistory(historyContainer, records, storeRef) {
       <td>${escapeHtml(record.lamp)}</td>
       <td>${escapeHtml(formatBp(record.bp))}</td>
       <td>${escapeHtml(formatScore(record.score))}</td>
-      <td><a href="#" class="delete-link" data-record-id="${escapeHtml(record.id)}" style="font-size: 0.82rem; text-decoration: underline;">削除</a></td>
+      <td><a href="#" class="delete-link" data-record-id="${escapeHtml(record.id)}">削除</a></td>
     </tr>
   `).join("");
 
@@ -1106,6 +1106,8 @@ export function createRenderer(store) {
   let pendingQueryBlurIntent = null;
   let floatingClearPointerDown = false;
   let floatingTogglePointerDown = false;
+  let floatingTogglePointerId = null;
+  let floatingTogglePointerElement = null;
   let floatingRangeTogglePointerDown = false;
   let suppressNextFloatingToggleClick = false;
   let suppressNextRangeToggleClick = false;
@@ -2445,16 +2447,22 @@ export function createRenderer(store) {
       return;
     }  
 
-    if (target.closest("[data-floating-toggle]")) {
+    const floatingToggleButton = target.closest("[data-floating-toggle]");
+    if (floatingToggleButton instanceof HTMLElement) {
       floatingTogglePointerDown = true;
+      floatingTogglePointerId = event.pointerId;
+      floatingTogglePointerElement = floatingToggleButton;
       pendingQueryBlurIntent = "toggle";
       event.preventDefault();
       event.stopPropagation();
       suppressNextFloatingToggleClick = true;
-      window.setTimeout(() => {
-        floatingTogglePointerDown = false;
-      }, 0);
-      toggleFloatingFilter();
+
+      try {
+        floatingToggleButton.setPointerCapture?.(event.pointerId);
+      } catch {
+        // ignore
+      }
+
       return;
     }
 
@@ -2540,36 +2548,77 @@ export function createRenderer(store) {
   });
 
   nodes.floatingAxisFilter.addEventListener("pointerup", (event) => {
+    if (floatingTogglePointerDown && event.pointerId === floatingTogglePointerId) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      try {
+        floatingTogglePointerElement?.releasePointerCapture?.(event.pointerId);
+      } catch {
+        // ignore
+      }
+
+      floatingTogglePointerDown = false;
+      floatingTogglePointerId = null;
+      floatingTogglePointerElement = null;
+
+      toggleFloatingFilter();
+      return;
+    }
+
     if (floatingAxisSingleDragState) {
       event.preventDefault();
 
       releaseFloatingAxisSinglePointerCapture();
       floatingAxisSingleDragState = null;
-      if (commitFloatingAxisSliderShortcut() && shouldCloseFloatingFilterAfterSliderCommit()) {
-        closeFloatingFilter({ preserveScroll: false });
+
+      const shouldScroll = shouldCloseFloatingFilterAfterSliderCommit();
+      if (commitFloatingAxisSliderShortcut() && shouldScroll) {
+        window.requestAnimationFrame(scrollCatalogPanelIntoView);
       }
+
       return;
     }
 
-    if (!floatingAxisRangeDragState) {
+    if (floatingAxisRangeDragState) {
+      event.preventDefault();
+
+      releaseFloatingAxisRangePointerCapture();
+      floatingAxisRangeDragState = null;
+
+      const shouldScroll = shouldCloseFloatingFilterAfterSliderCommit();
+      if (commitFloatingAxisRange() && shouldScroll) {
+        window.requestAnimationFrame(scrollCatalogPanelIntoView);
+      }
+
       return;
     }
-
-    event.preventDefault();
-    releaseFloatingAxisRangePointerCapture();
-    floatingAxisRangeDragState = null;
-    commitFloatingAxisRange();
   });
 
   nodes.floatingAxisFilter.addEventListener("pointercancel", (event) => {
+    if (floatingTogglePointerDown && event.pointerId === floatingTogglePointerId) {
+      event.preventDefault();
+
+      try {
+        floatingTogglePointerElement?.releasePointerCapture?.(event.pointerId);
+      } catch {
+        // ignore
+      }
+
+      floatingTogglePointerDown = false;
+      floatingTogglePointerId = null;
+      floatingTogglePointerElement = null;
+      return;
+    }
+
     if (floatingAxisSingleDragState) {
       event.preventDefault();
 
       releaseFloatingAxisSinglePointerCapture();
       floatingAxisSingleDragState = null;
-      if (commitFloatingAxisSliderShortcut() && shouldCloseFloatingFilterAfterSliderCommit()) {
-        closeFloatingFilter({ preserveScroll: false });
-      }
+      floatingAxisPreviewMode = null;
+      floatingAxisPreviewValue = null;
+      renderFloatingFilterShell();
       return;
     }
 
@@ -2580,7 +2629,10 @@ export function createRenderer(store) {
     event.preventDefault();
     releaseFloatingAxisRangePointerCapture();
     floatingAxisRangeDragState = null;
-    commitFloatingAxisRange();
+    floatingAxisRangePreviewMode = null;
+    floatingAxisRangePreviewValue = null;
+    floatingAxisRangeShortcutPending = false;
+    renderFloatingFilterShell();
   });
 
   nodes.floatingAxisFilter.addEventListener("input", (event) => {

@@ -1630,6 +1630,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   font-weight: 700;
   text-decoration: underline;
   padding: 0;
+  vertical-align: bottom;
 }
 
 .floating-filter-single-wrap {
@@ -1848,6 +1849,11 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 .history-table th:last-child {
   width: 1%;
   white-space: nowrap;
+}
+
+.delete-link {
+  font-size: 0.72rem;
+  text-decoration: underline; 
 }
 
 th,
