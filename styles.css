@@ -1539,8 +1539,11 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   justify-self: end;
   min-height: 52px;
   padding-inline: 18px;
+  pointer-events: auto;
+  touch-action: none;
 }
 
+/* フローティング要素をhoverで不透明化する機能 */
 /* .floating-axis-filter.is-at-bottom .floating-filter-toggle,
 .floating-axis-filter.is-at-bottom .floating-filter-clear {
   opacity: 0.5;
@@ -2152,14 +2155,19 @@ html[data-theme="dark"] .proposal-success-body a {
     z-index: 35;
   }
 
+  /* .floating-axis-filter.is-docked-top {
+    bottom: auto;
+    top: 16px;
+  } */
+
   .floating-axis-filter.is-docked-top {
     bottom: auto;
     top: 16px;
   }
 
   .floating-axis-filter.is-docked-bottom {
-    bottom: 16px;
-    top: auto;
+    bottom: auto;
+    top: 16px;
   }
 
   .floating-axis-filter.is-at-bottom .floating-filter-toggle,
@@ -2505,5 +2513,12 @@ html[data-theme="dark"] .pill-proposed {
   /* HISTORY panel のみ下余白を追加（floating-filter-toggle と被らないため） */
   .panel-history {
     margin-bottom: 66px;
+  }
+}
+
+@media (max-width: 720px) {
+  /* モバイルレイアウトの場合のフローティングボタン領域を確保 */
+  body {
+    margin-top: 66px;
   }
 }
