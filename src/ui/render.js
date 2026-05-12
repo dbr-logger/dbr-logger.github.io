@@ -411,36 +411,56 @@ function parseImportedJsonText(text) {
 
 function askJsonImportDate() {
   const defaultDate = todayIso();
-  const response = window.prompt("JSONの記録日を入力してください。空欄なら今日として読み込みます。", defaultDate);
+  let promptValue = defaultDate;
 
-  if (response === null) {
-    return null;
+  while (true) {
+    const response = window.prompt(
+      "JSONの記録日を入力してください。空欄なら今日として読み込みます。",
+      promptValue,
+    );
+
+    if (response === null) {
+      return null;
+    }
+
+    const normalized = response.trim();
+
+    if (!normalized) {
+      return defaultDate;
+    }
+
+    promptValue = normalized;
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+      window.alert("記録日は YYYY-MM-DD 形式で入力してください。");
+      continue;
+    }
+
+    const parsed = new Date(`${normalized}T00:00:00`);
+
+    if (Number.isNaN(parsed.getTime())) {
+      window.alert("記録日の形式が不正です。");
+      continue;
+    }
+
+    const [year, month, day] = normalized.split("-").map(Number);
+
+    if (
+      parsed.getFullYear() !== year
+      || parsed.getMonth() + 1 !== month
+      || parsed.getDate() !== day
+    ) {
+      window.alert("存在しない日付です。");
+      continue;
+    }
+
+    if (normalized > defaultDate) {
+      window.alert("未来の日付は指定できません。");
+      continue;
+    }
+
+    return normalized;
   }
-
-  const normalized = response.trim();
-  if (!normalized) {
-    return defaultDate;
-  }
-
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-    throw new Error("記録日は YYYY-MM-DD 形式で入力してください。");
-  }
-
-  const parsed = new Date(`${normalized}T00:00:00`);
-  if (Number.isNaN(parsed.getTime())) {
-    throw new Error("記録日の形式が不正です。");
-  }
-
-  const [year, month, day] = normalized.split("-").map(Number);
-  if (
-    parsed.getFullYear() !== year
-    || parsed.getMonth() + 1 !== month
-    || parsed.getDate() !== day
-  ) {
-    throw new Error("存在しない日付です。");
-  }
-
-  return normalized;
 }
 
 function deriveFilterBounds(songStates) {

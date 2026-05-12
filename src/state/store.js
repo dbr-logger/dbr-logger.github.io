@@ -91,6 +91,23 @@ function sortRecords(a, b) {
   return compareRecordTimestamps(a, b) || compareIsoDates(a.date, b.date) || compareTitlesWithSuffixOrder(a.title, b.title);
 }
 
+function normalizeRecordComparableValue(value) {
+  return value === undefined ? null : value;
+}
+
+function areCsvRecordValuesEqual(a, b) {
+  return normalizeRecordTimestamp(a?.timestamp, a?.date) === normalizeRecordTimestamp(b?.timestamp, b?.date)
+    && String(a?.date ?? "") === String(b?.date ?? "")
+    && String(a?.title ?? "") === String(b?.title ?? "")
+    && String(a?.textageKey ?? "") === String(b?.textageKey ?? "")
+    && String(a?.lamp ?? "NO PLAY") === String(b?.lamp ?? "NO PLAY")
+    && normalizeRecordComparableValue(parseOptionalNumber(a?.bp)) === normalizeRecordComparableValue(parseOptionalNumber(b?.bp))
+    && normalizeRecordComparableValue(parseOptionalNumber(a?.score)) === normalizeRecordComparableValue(parseOptionalNumber(b?.score))
+    && normalizeRecordComparableValue(parseOptionalNumber(a?.level)) === normalizeRecordComparableValue(parseOptionalNumber(b?.level))
+    && normalizeRecordComparableValue(parseOptionalNumber(a?.splv)) === normalizeRecordComparableValue(parseOptionalNumber(b?.splv))
+    && String(a?.source ?? "") === String(b?.source ?? "");
+}
+
 function getCsvRecordMergeKey(record) {
   const timestamp = normalizeRecordTimestamp(record?.timestamp, record?.date);
   const textageKey = typeof record?.textageKey === "string" ? record.textageKey.trim() : "";
@@ -1772,27 +1789,61 @@ export function createStore() {
     return exportVerticalCsv(state.records, state.songNotes, state.difficultyTable);
   }
 
+  function isJsonRecordImprovement(record, currentState) {
+    const importedLamp = LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY";
+    const importedBp = parseOptionalNumber(record.bp);
+    const importedScore = parseOptionalNumber(record.score);
+
+    const lampImproved = importedLamp !== "NO PLAY"
+      && getLampRank(importedLamp) > getLampRank(currentState?.bestLamp ?? "NO PLAY");
+
+    const bpImproved = Number.isFinite(importedBp)
+      && (currentState?.bestBp === null || currentState?.bestBp === undefined || importedBp < currentState.bestBp);
+
+    const scoreImproved = Number.isFinite(importedScore)
+      && (currentState?.bestScore === null || currentState?.bestScore === undefined || importedScore > currentState.bestScore);
+
+    return lampImproved || bpImproved || scoreImproved;
+  }
+
   function importJsonData(payload, referenceDate = todayIso()) {
     const catalogEntryByTitle = new Map(getCatalogEntries().map((entry) => [entry.title, entry]));
-    const importedRecords = importDbrJson(payload, referenceDate).map((record) => {
-      const selectedEntry = catalogEntryByTitle.get(record.title);
-      const level = selectedEntry?.levelValue ?? record.level ?? null;
-      const splv = selectedEntry?.splvValue ?? record.splv ?? null;
+    const recordIndex = buildRecordIndex(state.records);
 
-      return {
-        id: createRecordId(),
-        timestamp: normalizeRecordTimestamp(record.timestamp, record.date),
-        date: record.date,
-        title: record.title,
-        level,
-        splv,
-        lamp: record.lamp,
-        bp: record.bp,
-        score: record.score,
-        textageKey: record.textageKey,
-        source: record.source,
-      };
-    });
+    const importedRecords = importDbrJson(payload, referenceDate)
+      .filter((record) => {
+        const selectedEntry = catalogEntryByTitle.get(record.title);
+
+        if (!selectedEntry) {
+          return false;
+        }
+
+        const currentState = deriveSongState(
+          selectedEntry,
+          recordIndex.get(selectedEntry.title) ?? [],
+        );
+
+        return isJsonRecordImprovement(record, currentState);
+      })
+      .map((record) => {
+        const selectedEntry = catalogEntryByTitle.get(record.title);
+        const level = selectedEntry?.levelValue ?? record.level ?? null;
+        const splv = selectedEntry?.splvValue ?? record.splv ?? null;
+
+        return {
+          id: createRecordId(),
+          timestamp: normalizeRecordTimestamp(record.timestamp, record.date),
+          date: record.date,
+          title: record.title,
+          level,
+          splv,
+          lamp: record.lamp,
+          bp: record.bp,
+          score: record.score,
+          textageKey: record.textageKey,
+          source: record.source,
+        };
+      });
 
     const importedKeys = new Set(importedRecords.map(getJsonRecordMergeKey));
     const preservedRecords = state.records.filter((record) => !importedKeys.has(getJsonRecordMergeKey(record)));
@@ -1842,6 +1893,20 @@ export function createStore() {
       };
     });
 
+    const existingRecordByKey = new Map(
+      state.records.map((record) => [getCsvRecordMergeKey(record), record]),
+    );
+
+    const updatedRecordCount = importedRecords.reduce((count, record) => {
+      const existing = existingRecordByKey.get(getCsvRecordMergeKey(record));
+
+      if (!existing) {
+        return count + 1;
+      }
+
+      return areCsvRecordValuesEqual(existing, record) ? count : count + 1;
+    }, 0);
+
     const importedKeys = new Set(importedRecords.map(getCsvRecordMergeKey));
     const preservedRecords = state.records.filter((record) => !importedKeys.has(getCsvRecordMergeKey(record)));
 
@@ -1857,11 +1922,11 @@ export function createStore() {
     };
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
-    state.statusMessage = `CSVを読み込みました。${importedRecords.length} 件を取り込み、合計 ${state.records.length} 件になりました。`;
+    state.statusMessage = `CSVを読み込みました。${updatedRecordCount} 件を取り込み、合計 ${state.records.length} 件になりました。`;
     persist();
     ensureSelectedSong();
     emit();
-    return { count: importedRecords.length, totalCount: state.records.length };
+    return { count: updatedRecordCount, totalCount: state.records.length };
   }
 
   function clearAllRecords() {
