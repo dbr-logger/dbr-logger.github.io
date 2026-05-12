@@ -906,6 +906,30 @@ function compareFilterAxisTieBreak(a, b, axisMode) {
   return 0;
 }
 
+function hasPrimarySortDifference(songs, sortMode) {
+  if (songs.length <= 1) {
+    return false;
+  }
+
+  const first = songs[0];
+
+  return songs.some((song) => (
+    comparePrimarySortValue(first, song, sortMode, "asc") !== 0
+  ));
+}
+
+function applySortDirectionFallbackIfNoPrimaryEffect(songs, sortMode, sortDirection) {
+  if (sortDirection !== "desc" || songs.length <= 1) {
+    return songs;
+  }
+
+  if (hasPrimarySortDifference(songs, sortMode)) {
+    return songs;
+  }
+
+  return [...songs].reverse();
+}
+
 function compareCatalogSongs(a, b, sortMode, sortDirection, axisMode) {
   return comparePrimarySortValue(a, b, sortMode, sortDirection)
     || compareFilterAxisTieBreak(a, b, axisMode)
@@ -1545,6 +1569,7 @@ export function createStore() {
     }
 
     state.sortMode = normalized;
+    state.sortDirection = "asc";
     state.sortModeMemory = {
       ...state.sortModeMemory,
       [state.filters.axisMode]: normalized,
@@ -1932,7 +1957,13 @@ export function createStore() {
       });
     }
 
-    const visibleSongs = applyStableVisibleOrder(filteredVisibleSongs, songStates);
+    const directionAdjustedVisibleSongs = applySortDirectionFallbackIfNoPrimaryEffect(
+      filteredVisibleSongs,
+      state.sortMode,
+      state.sortDirection,
+    );
+
+    const visibleSongs = applyStableVisibleOrder(directionAdjustedVisibleSongs, songStates);
 
     const summaryFilters = isTextAxisMode(state.filters.axisMode) && state.titleFilterBase
       ? state.titleFilterBase
