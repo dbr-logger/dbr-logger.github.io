@@ -1092,7 +1092,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 }
 
 .song-card-note {
-  margin: -8px 0 12px;
+  margin: -6px 0 12px;
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.35;
