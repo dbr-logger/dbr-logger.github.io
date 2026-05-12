@@ -969,7 +969,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
 
   selectedSongContainer.innerHTML = `
     <p class="eyebrow">Selected Song</p>
-    <h3>${escapeHtml(selectedSong.title)}${katateTitleSuffixHtml}</h3>
+    <h3 class="selected-song-title">${escapeHtml(selectedSong.title)}${katateTitleSuffixHtml}</h3>
     <p class="selected-song-note">${escapeHtml(formatSongMemoDisplay(selectedSong))}</p>
     <div class="selected-song-meta">
       ${selectedSong.isProposed ? badge("新規提案中", "pill-proposed") : ""}
