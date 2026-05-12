@@ -976,8 +976,8 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
       ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
       ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-splv") : ""}
       ${badge(selectedSong.bestLamp, "pill-lamp")}<br>
-      ${badge(`最小 ${formatBp(selectedSong.bestBp)}`, "pill-neutral")}
-      ${badge(`最新 ${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
+      ${badge(`Best ${formatBp(selectedSong.bestBp)}`, "pill-neutral")}
+      ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
       ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}
       ${historyCountBadge}
     </div>
@@ -1015,8 +1015,8 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
         <p class="song-card-title">${escapeHtml(song.title)}${katateTitleSuffixHtml}</p>
         <p class="song-card-note">${escapeHtml(formatSongMemoDisplay(song))}</p>
         <div class="song-card-meta">
-          ${badge(`最小 ${formatBp(song.bestBp)}`, "pill-neutral")}
-          ${badge(`最新 ${formatBp(song.currentBp)}`, "pill-neutral")}
+          ${badge(`Best ${formatBp(song.bestBp)}`, "pill-neutral")}
+          ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")}
           ${badge(song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし", "pill-neutral")}
           ${historyCountBadge}
         </div>
