@@ -968,14 +968,16 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
     : "";  
 
   selectedSongContainer.innerHTML = `
-    <p class="eyebrow">Selected Song</p>
-    <h3 class="selected-song-title">${escapeHtml(selectedSong.title)}${katateTitleSuffixHtml}</h3>
-    <p class="selected-song-note">${escapeHtml(formatSongMemoDisplay(selectedSong))}</p>
+    <p class="eyebrow selected-song-eyebrow">Selected Song</p>
     <div class="selected-song-meta">
       ${selectedSong.isProposed ? badge("新規提案中", "pill-proposed") : ""}
       ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
       ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-splv") : ""}
-      ${badge(selectedSong.bestLamp, "pill-lamp")}<br>
+      ${badge(selectedSong.bestLamp, "pill-lamp")}
+    </div>
+    <h3 class="selected-song-title">${escapeHtml(selectedSong.title)}${katateTitleSuffixHtml}</h3>
+    <p class="selected-song-note">${escapeHtml(formatSongMemoDisplay(selectedSong))}</p>
+    <div class="selected-song-meta">
       ${badge(`Best ${formatBp(selectedSong.bestBp)}`, "pill-neutral")}
       ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
       ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}

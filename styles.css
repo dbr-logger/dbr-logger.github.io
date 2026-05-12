@@ -1101,6 +1101,10 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   white-space: nowrap;
 }
 
+.selected-song-eyebrow {
+  padding-bottom: 12px;
+}
+
 .selected-song-note {
   color: var(--muted);
   font-size: 0.78rem;
