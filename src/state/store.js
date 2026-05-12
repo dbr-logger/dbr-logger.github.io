@@ -1856,10 +1856,6 @@ export function createStore() {
 
     const fullRecordIndex = buildRecordIndex(state.records);
 
-    const comparableRecordIndex = buildRecordIndex(
-      state.records.filter((record) => record.date && record.date <= referenceDate),
-    );
-
     const importedRecords = importDbrJson(payload, referenceDate)
       .filter((record) => {
         const selectedEntry = catalogEntryByTitle.get(record.title);
