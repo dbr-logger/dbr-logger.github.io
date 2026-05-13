@@ -206,6 +206,8 @@ function buildChartDateDomain(history) {
 }
 
 function renderTrendChart(container, history, options) {
+  const showYAxisTicks = options.showYAxisTicks !== false;
+
   if (!history || history.length === 0) {
     container.innerHTML = `<div class="empty-state">${options.emptyMessage}</div>`;
     return;
@@ -299,21 +301,23 @@ function renderTrendChart(container, history, options) {
   const yearMarkers = buildYearMarkersByPoints(domainHistory, domainPoints, padding, height);
 
   const xLabels = domainPoints.map((point, index) => {
-    // if (index !== 0 && index !== domainHistory.length - 1) {
-    //   return "";
-    // }
+    if (index !== 0 && index !== domainHistory.length - 1) {
+      return "";
+    }
     // if (!Boolean(labelIndices.get(index))) {
     //   return "";
     // }
     return `<text class="chart-axis-text" x="${point.x}" y="${height - 46}" dominant-baseline="hanging" text-anchor="middle">${formatIsoDate(point.date).slice(5)}</text>`;
   }).join("");
 
-  const yLabels = ticks.map((tick) => `
-    <g>
-      <line class="chart-grid-line" x1="${padding.left}" x2="${width - padding.right}" y1="${tick.y}" y2="${tick.y}" />
-      <text class="chart-axis-text" x="${padding.left - yAxisLabelGap}" y="${tick.y + 4}" text-anchor="end">${tick.value}</text>
-    </g>
-  `).join("");
+  const yLabels = showYAxisTicks
+    ? ticks.map((tick) => `
+      <g>
+        <line class="chart-grid-line" x1="${padding.left}" x2="${width - padding.right}" y1="${tick.y}" y2="${tick.y}" />
+        <text class="chart-axis-text" x="${padding.left - yAxisLabelGap}" y="${tick.y + 4}" text-anchor="end">${tick.value}</text>
+      </g>
+    `).join("")
+    : "";
   const guideMarkup = guides.map((guide) => `
     <g>
       <line class="chart-grid-line" x1="${padding.left}" x2="${width - padding.right}" y1="${guide.y}" y2="${guide.y}" />
@@ -329,8 +333,8 @@ function renderTrendChart(container, history, options) {
 
   const pointMarkup = points.map((point, index) => {
     const labelRole = labelIndices.get(index);
-    // const shouldShowLabel = Boolean(labelRole);
-    const shouldShowLabel = true; // 全てのポイントにラベルを表示する場合はこちらを使用
+    const shouldShowLabel = Boolean(labelRole);
+    // const shouldShowLabel = true; // 全てのポイントにラベルを表示する場合はこちらを使用
     const placement = shouldShowLabel
       ? chooseLabelPlacement(points, index, labelRole, padding, innerHeight)
       : null;
@@ -338,7 +342,7 @@ function renderTrendChart(container, history, options) {
     return `
     <g>
       <circle class="chart-point" cx="${point.x}" cy="${point.y}" r="6" />
-      ${shouldShowLabel ? `<text class="chart-point-label" x="${placement.x}" y="${point.y - 16}" dominant-baseline="${placement.dominantBaseline}" text-anchor="middle">${options.getValue(point)}</text>` : ""}
+      ${shouldShowLabel ? `<text class="chart-point-label" x="${placement.x}" y="${placement.y}" dominant-baseline="${placement.dominantBaseline}" text-anchor="middle">${options.getValue(point)}</text>` : ""}
     </g>
   `;
   }).join("");
@@ -410,8 +414,10 @@ export function renderScoreChart(container, history) {
     getValue: (entry) => entry.score,
     getMinValue: () => 0,
     getMaxValue: (values) => Math.max(theoreticalMax, ...values),
+    showYAxisTicks: false,
     getGuides: () => theoreticalMax > 0
       ? [
+          { value: theoreticalMax * (9 / 9) },
           { value: theoreticalMax * (8 / 9) },
           { value: theoreticalMax * (7 / 9) },
           { value: theoreticalMax * (6 / 9) },
