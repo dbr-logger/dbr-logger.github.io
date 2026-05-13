@@ -1116,9 +1116,19 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 
 .song-card-meta,
 .selected-song-meta {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.song-card-meta-row,
+.selected-song-meta-row {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .pill {
@@ -2547,4 +2557,42 @@ html[data-theme="dark"] .pill-proposed {
 
 .selected-song-title .song-card-title-katate {
   font-size: 0.82em;
+}
+
+@media (hover: none) {
+  .song-card,
+  .selected-song-card {
+    min-width: 0;
+  }
+
+  .song-card-meta,
+  .selected-song-meta {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .song-card-meta-row,
+  .selected-song-meta-row {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .song-card-meta-row::-webkit-scrollbar,
+  .selected-song-meta-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .song-card-meta-row .pill,
+  .selected-song-meta-row .pill {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
 }

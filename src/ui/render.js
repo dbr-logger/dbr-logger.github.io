@@ -990,18 +990,22 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
   selectedSongContainer.innerHTML = `
     <p class="eyebrow selected-song-eyebrow">Selected Song</p>
     <div class="selected-song-meta">
-      ${selectedSong.isProposed ? badge("新規提案中", "pill-proposed") : ""}
-      ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
-      ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-splv") : ""}
-      ${badge(selectedSong.bestLamp, "pill-lamp")}
+      <div class="selected-song-meta-row">
+        ${selectedSong.isProposed ? badge("新規提案中", "pill-proposed") : ""}
+        ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
+        ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-splv") : ""}
+        ${badge(selectedSong.bestLamp, "pill-lamp")}
+      </div>
     </div>
     <h3 class="selected-song-title">${escapeHtml(selectedSong.title)}${katateTitleSuffixHtml}</h3>
     <p class="selected-song-note">${escapeHtml(formatSongMemoDisplay(selectedSong))}</p>
     <div class="selected-song-meta">
-      ${badge(`Best ${formatBp(selectedSong.bestBp)}`, "pill-neutral")}
-      ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
-      ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}
-      ${historyCountBadge}
+      <div class="selected-song-meta-row">
+        ${badge(`Best ${formatBp(selectedSong.bestBp)}`, "pill-neutral")}
+        ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
+        ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}
+        ${historyCountBadge}
+      </div>
     </div>
   `;
 }
@@ -1029,18 +1033,22 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
     return `
       <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}" style="--card-lamp-color:${escapeHtml(lampColor)}">
         <div class="song-card-meta">
-          ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
-          ${badge(formatDifficultyLabel(song), "pill-level")}
-          ${formatSplvLabel(song) ? badge(formatSplvLabel(song), "pill-splv") : ""}
-          ${badge(song.bestLamp, "pill-lamp")}
+          <div class="song-card-meta-row">
+            ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
+            ${badge(formatDifficultyLabel(song), "pill-level")}
+            ${formatSplvLabel(song) ? badge(formatSplvLabel(song), "pill-splv") : ""}
+            ${badge(song.bestLamp, "pill-lamp")}
+          </div>
         </div>
         <p class="song-card-title">${escapeHtml(song.title)}${katateTitleSuffixHtml}</p>
         <p class="song-card-note">${escapeHtml(formatSongMemoDisplay(song))}</p>
         <div class="song-card-meta">
-          ${badge(`Best ${formatBp(song.bestBp)}`, "pill-neutral")}
-          ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")}
-          ${badge(song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし", "pill-neutral")}
-          ${historyCountBadge}
+          <div class="song-card-meta-row">
+            ${badge(`Best ${formatBp(song.bestBp)}`, "pill-neutral")}
+            ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")}
+            ${badge(song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし", "pill-neutral")}
+            ${historyCountBadge}
+          </div>
         </div>
       </button>
     `;
