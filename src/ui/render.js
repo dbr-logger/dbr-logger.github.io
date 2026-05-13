@@ -1464,9 +1464,8 @@ export function createRenderer(store) {
     return window.matchMedia("(max-width: 720px)").matches;
   }
 
-  function isSmartphoneDevice() {
-    const userAgent = navigator.userAgent || "";
-    return /iPhone|iPod|Android.+Mobile/i.test(userAgent);
+  function isHoverNoneEnvironment() {
+    return window.matchMedia("(hover: none)").matches;
   }
 
   function setQueryScrollLock(locked) {
@@ -1724,9 +1723,7 @@ export function createRenderer(store) {
   }
 
   function syncQueryScrollLockState() {
-    const isSmartphone = isSmartphoneDevice();
-    const shouldLock = floatingFilterOpen && isTitleQueryElement(document.activeElement) && isSmartphone;
-    setQueryScrollLock(shouldLock);
+    setQueryScrollLock(false);
   }
 
   function shouldCloseFloatingFilterAfterSliderCommit() {
@@ -2574,7 +2571,7 @@ export function createRenderer(store) {
     if (target.closest("[data-axis-mode]")) {
       pendingQueryBlurIntent = "axis-mode";
     
-      if (!isSmartphoneDevice() && performance.now() - lastUserScrollAt < 450) {
+      if (!isHoverNoneEnvironment() && performance.now() - lastUserScrollAt < 450) {
         event.preventDefault();
         return;
       }
@@ -2978,7 +2975,6 @@ export function createRenderer(store) {
     floatingQueryFocused = true;
     floatingQueryRestoreFocus = false;
     syncQueryScrollLockState();
-    pinFloatingFilterToDocument();
   });
 
   nodes.floatingAxisFilter.addEventListener("focusout", (event) => {
@@ -3238,7 +3234,7 @@ export function createRenderer(store) {
       summaryLampPointerState.moved = true;
     }
 
-    if (!isSmartphoneDevice() || !(summaryLampPointerState.button instanceof HTMLElement)) {
+    if (!isHoverNoneEnvironment() || !(summaryLampPointerState.button instanceof HTMLElement)) {
       return;
     }
 
@@ -3270,7 +3266,7 @@ export function createRenderer(store) {
       return;
     }
 
-    if (isSmartphoneDevice()) {
+    if (isHoverNoneEnvironment()) {
       const absDeltaX = Math.abs(deltaX);
       const isLeftSwipe = deltaX <= -SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD;
       if (isLeftSwipe) {
@@ -3311,7 +3307,7 @@ export function createRenderer(store) {
       return;
     }
 
-    if (isSmartphoneDevice() && pointerState.lastDeltaX <= -SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD) {
+    if (isHoverNoneEnvironment() && pointerState.lastDeltaX <= -SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD) {
       lastSummaryLampClick = { lamp: "", timestamp: 0 };
       animateSummaryLampSwipeSolo(pointerState.button, () => {
         soloSummaryLampFilter(pointerState.lamp);
@@ -3339,7 +3335,7 @@ export function createRenderer(store) {
       return;
     }
 
-    if (isSmartphoneDevice()) {
+    if (isHoverNoneEnvironment()) {
       toggleSummaryLampFilter(lamp);
       return;
     }

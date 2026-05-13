@@ -2337,6 +2337,47 @@ html[data-theme="dark"] .proposal-success-body a {
     grid-template-columns: 1fr;
   }
 
+  .summary-legend {
+    gap: 8px;
+  }
+
+  .summary-lamp-item {
+    align-items: center;
+    border-radius: 999px;
+    gap: 10px;
+    padding: 9px 12px;
+  }
+
+  .summary-lamp-main {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .summary-lamp-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .summary-lamp-values {
+    align-items: baseline;
+    flex: 0 0 auto;
+    flex-direction: row;
+    gap: 8px;
+  }
+
+  .summary-lamp-values strong {
+    font-size: 1rem;
+    min-width: 3ch;
+    text-align: right;
+  }
+
+  .summary-lamp-values span {
+    font-size: 0.78rem;
+    min-width: 5ch;
+    text-align: right;
+  }
+
   .filters-meta {
     align-items: stretch;
   }
