@@ -59,6 +59,60 @@ const AXIS_SHORTCUT_KEYS = {
 };
 const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "date"]);
 
+// DBR IR送信テスト
+const DBR_IR_IMPORT_TEST_URL = "./dbr-ir-receiver-test.html";
+const DBR_IR_IMPORT_TEST_ORIGIN = window.location.origin;
+
+function openDbrIrImportPageWithJson(jsonText) {
+  const targetUrl = new URL(DBR_IR_IMPORT_TEST_URL, window.location.href);
+  const targetWindow = window.open(targetUrl.href, "_blank");
+
+  if (!targetWindow) {
+    window.alert("DBR IR受け取りページを開けませんでした。ポップアップブロックを確認してください。");
+    return;
+  }
+
+  let sent = false;
+
+  function sendJson() {
+    if (sent) {
+      return;
+    }
+
+    sent = true;
+
+    targetWindow.postMessage({
+      type: "dbr-ir-import-json",
+      payload: jsonText,
+      filename: "dbr-logger.json",
+    }, DBR_IR_IMPORT_TEST_ORIGIN);
+  }
+
+  function handleReady(event) {
+    if (event.origin !== DBR_IR_IMPORT_TEST_ORIGIN) {
+      return;
+    }
+
+    if (event.source !== targetWindow) {
+      return;
+    }
+
+    if (!event.data || event.data.type !== "dbr-ir-import-ready") {
+      return;
+    }
+
+    window.removeEventListener("message", handleReady);
+    sendJson();
+  }
+
+  window.addEventListener("message", handleReady);
+
+  window.setTimeout(() => {
+    window.removeEventListener("message", handleReady);
+    sendJson();
+  }, 1000);
+}
+
 function isTextAxisMode(axisMode) {
   return axisMode === "title" || axisMode === "memo";
 }
@@ -1891,6 +1945,7 @@ export function createRenderer(store) {
     chart: document.querySelector("#chart-container"),
     scoreChart: document.querySelector("#score-chart-container"),
     history: document.querySelector("#history-body"),
+    sendJsonToIrTestButton: document.querySelector("#send-json-to-ir-test"),
   };
 
   nodes.summaryPanel?.classList.add("summary-overview-panel");
@@ -3706,6 +3761,17 @@ export function createRenderer(store) {
     }
 
     store.clearAllRecords();
+  });
+
+  // DBR IR送信テスト
+  nodes.sendJsonToIrTestButton?.addEventListener("click", () => {
+    try {
+      const jsonText = JSON.stringify(store.getExportJson(), null, 2);
+      openDbrIrImportPageWithJson(jsonText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "JSON送信テストに失敗しました。";
+      window.alert(message);
+    }
   });
 
   document.addEventListener("pointerdown", (event) => {

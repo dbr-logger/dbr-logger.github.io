@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>DBR IR JSON Receiver Test</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      line-height: 1.6;
+      margin: 24px;
+    }
+
+    .status {
+      background: #eef7f8;
+      border-radius: 8px;
+      margin: 12px 0;
+      padding: 10px 12px;
+    }
+
+    .file-info {
+      background: #f6f7f8;
+      border-radius: 8px;
+      margin-top: 12px;
+      padding: 10px 12px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>DBR IR JSON Receiver Test</h1>
+
+  <p class="status" id="status">LoggerからのJSONを待機中です。</p>
+
+  <input type="file" id="json-file-input" accept="application/json,.json">
+
+  <div class="file-info" id="file-info">ファイル未入力</div>
+
+  <script>
+    const LOGGER_ORIGIN = window.location.origin;
+
+    const statusEl = document.querySelector("#status");
+    const fileInputEl = document.querySelector("#json-file-input");
+    const fileInfoEl = document.querySelector("#file-info");
+
+    function setJsonAsFileInput(payload, filename = "dbr-logger.json") {
+      if (typeof payload !== "string") {
+        statusEl.textContent = "受信データが文字列ではありません。";
+        return;
+      }
+
+      try {
+        JSON.parse(payload);
+      } catch {
+        statusEl.textContent = "JSONを受信しましたが、JSONとして解析できません。";
+        return;
+      }
+
+      const file = new File([payload], filename, {
+        type: "application/json",
+      });
+
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(file);
+
+      fileInputEl.files = dataTransfer.files;
+
+      fileInputEl.dispatchEvent(new Event("change", {
+        bubbles: true,
+      }));
+
+      statusEl.textContent = "JSONファイルを受信し、file input にセットしました。";
+      fileInfoEl.textContent = [
+        `name: ${file.name}`,
+        `type: ${file.type}`,
+        `size: ${file.size} bytes`,
+      ].join("\n");
+    }
+
+    fileInputEl.addEventListener("change", () => {
+      const file = fileInputEl.files?.[0];
+
+      if (!file) {
+        fileInfoEl.textContent = "ファイル未入力";
+        return;
+      }
+
+      fileInfoEl.textContent = [
+        `name: ${file.name}`,
+        `type: ${file.type}`,
+        `size: ${file.size} bytes`,
+      ].join("\n");
+    });
+
+    window.addEventListener("message", (event) => {
+      if (event.origin !== LOGGER_ORIGIN) {
+        return;
+      }
+
+      const data = event.data;
+
+      if (!data || data.type !== "dbr-ir-import-json") {
+        return;
+      }
+
+      setJsonAsFileInput(data.payload, data.filename);
+    });
+
+    if (window.opener) {
+      window.opener.postMessage({
+        type: "dbr-ir-import-ready",
+      }, LOGGER_ORIGIN);
+    }
+  </script>
+</body>
+</html>
