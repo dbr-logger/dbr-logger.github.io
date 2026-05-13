@@ -767,6 +767,7 @@ function renderSummaryBands(summary) {
       </div>
     `;
   }).join("");
+  const scrollableClass = summary.bands.length >= 17 ? " is-scrollable" : "";
 
   return `
     <div class="summary-chart-wrap">
@@ -774,7 +775,7 @@ function renderSummaryBands(summary) {
         <span>${escapeHtml(summary.totalLabel ?? "総曲数")}</span>
         <strong>${summary.bandTotalSongs ?? summary.totalSongs} ${escapeHtml(summary.totalUnit ?? "曲")}</strong>
       </div>
-      <div class="summary-band-chart">
+      <div class="summary-band-chart${scrollableClass}">
         ${rows}
       </div>
     </div>

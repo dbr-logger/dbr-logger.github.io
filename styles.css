@@ -895,8 +895,20 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 }
 
 .summary-band-chart {
+  --summary-band-row-gap: 10px;
+  --summary-band-row-height: 20px;
+  --summary-band-visible-rows: 16;
   display: grid;
-  gap: 10px;
+  gap: var(--summary-band-row-gap);
+}
+
+.summary-band-chart.is-scrollable {
+  max-height: calc(
+    (var(--summary-band-visible-rows) * var(--summary-band-row-height))
+    + ((var(--summary-band-visible-rows) - 1) * var(--summary-band-row-gap))
+  );
+  overflow-y: auto;
+  padding-right: 5px;
 }
 
 .summary-band-row {
@@ -904,6 +916,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   display: grid;
   gap: 12px;
   grid-template-columns: 64px minmax(0, 1fr) 36px;
+  min-height: var(--summary-band-row-height);
 }
 
 .summary-band-label,
