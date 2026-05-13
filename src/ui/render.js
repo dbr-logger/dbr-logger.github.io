@@ -1559,18 +1559,6 @@ export function createRenderer(store) {
     return Math.round(ratio * max);
   }
 
-  function releaseFloatingAxisSinglePointerCapture() {
-    if (!floatingAxisSingleDragState) {
-      return;
-    }
-
-    try {
-      floatingAxisSingleDragState.sliderWrap.releasePointerCapture?.(floatingAxisSingleDragState.pointerId);
-    } catch {
-      // Pointer capture can already be released.
-    }
-  }
-
   function updateFloatingRangeDisplay(axisMode, range) {
     const wrap = nodes.floatingAxisFilter.querySelector(".floating-filter-range-wrap");
     if (wrap instanceof HTMLElement) {
@@ -2056,18 +2044,23 @@ export function createRenderer(store) {
 
   function readFiltersFromPanel() {
     const panel = nodes.summaryFiltersPanel;
+    const currentFilters = filterDraft ?? store.getSnapshot().filters;
     const selectedRecommend = Array.from(panel.querySelectorAll('input[data-filter="recommend"]:checked')).map((input) => input.value);
 
     return {
-      axisMode: filterDraft?.axisMode ?? "level",
-      axisValue: filterDraft?.axisValue ?? "",
-      titleQuery: filterDraft?.titleQuery ?? "",
-      dateStart: filterDraft?.dateStart ?? "",
-      dateEnd: filterDraft?.dateEnd ?? "",
+      axisMode: currentFilters.axisMode ?? "level",
+      axisValue: currentFilters.axisValue ?? "",
+      titleQuery: currentFilters.titleQuery ?? "",
+      dateStart: currentFilters.dateStart ?? "",
+      dateEnd: currentFilters.dateEnd ?? "",
+      axisRangeModeByAxis: currentFilters.axisRangeModeByAxis,
+      axisRanges: currentFilters.axisRanges,
+      axisLastRanges: currentFilters.axisLastRanges,
+      axisSingleReturnValues: currentFilters.axisSingleReturnValues,
       inf: panel.querySelector('select[data-filter="inf"]')?.value ?? "all",
       acdelete: panel.querySelector('select[data-filter="acdelete"]')?.value ?? "all",
       recommend: selectedRecommend,
-      lamps: filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS],
+      lamps: currentFilters.lamps ? [...currentFilters.lamps] : [...LAMP_OPTIONS],
       includeUnrated: panel.querySelector('select[data-filter="includeUnrated"]')?.value ?? "all",
     };
   }

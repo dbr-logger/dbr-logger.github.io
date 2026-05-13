@@ -644,14 +644,14 @@ function getDateSummaryRange(filters) {
   }
 
   if (dateStart) {
-    return { start: dateStart, end: "", sliceMode: "first", limit: 31 };
+    return { start: dateStart, end: "", sliceMode: "all", limit: null };
   }
 
   if (dateEnd) {
-    return { start: "", end: dateEnd, sliceMode: "last", limit: 31 };
+    return { start: "", end: dateEnd, sliceMode: "all", limit: null };
   }
 
-  return { start: "", end: "", sliceMode: "last", limit: 14 };
+  return { start: "", end: "", sliceMode: "all", limit: null };
 }
 
 function buildDateSummary(records, baseSongs, filters) {
@@ -2095,7 +2095,7 @@ export function createStore() {
 
     const summaryScopeFilters = isTextAxisMode(summaryFilters.axisMode)
       ? { ...summaryFilters }
-      : { ...summaryFilters, axisValue: "" };
+      : { ...summaryFilters, axisValue: "", axisRangeModeByAxis: normalizeAxisRangeModeByAxis() };
 
     const summaryBandBaseSongs = summaryFilters.axisMode === "katate"
       ? songStates.filter((entry) => entry.katateValue !== null)
