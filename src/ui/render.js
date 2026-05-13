@@ -1002,7 +1002,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
     <div class="selected-song-meta">
       <div class="selected-song-meta-row">
         ${badge(`BP ${formatBp(selectedSong.bestBp)}/${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
-        <-- ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")} -->
+        <!-- ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")} -->
         ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}
         ${historyCountBadge}
       </div>
