@@ -1001,8 +1001,8 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
     <p class="selected-song-note">${escapeHtml(formatSongMemoDisplay(selectedSong))}</p>
     <div class="selected-song-meta">
       <div class="selected-song-meta-row">
-        ${badge(`Best ${formatBp(selectedSong.bestBp)}`, "pill-neutral")}
-        ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
+        ${badge(`BP ${formatBp(selectedSong.bestBp)}/${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
+        <-- ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")} -->
         ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}
         ${historyCountBadge}
       </div>
@@ -1044,8 +1044,8 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
         <p class="song-card-note">${escapeHtml(formatSongMemoDisplay(song))}</p>
         <div class="song-card-meta">
           <div class="song-card-meta-row">
-            ${badge(`Best ${formatBp(song.bestBp)}`, "pill-neutral")}
-            ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")}
+            ${badge(`BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`, "pill-neutral")}
+            <!-- ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")} -->
             ${badge(song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし", "pill-neutral")}
             ${historyCountBadge}
           </div>
