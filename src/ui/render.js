@@ -6,16 +6,6 @@ const { formatIsoDate, todayIso } = await import(`../utils/date.js${MODULE_VERSI
 const { renderProposalButton } = await import(`./proposal.js${MODULE_VERSION}`);
 const { escapeHtml } = await import(`../utils/html.js${MODULE_VERSION}`);
 
-const LAMP_SOFT_COLORS = {
-  "NO PLAY": "var(--lamp-no-play-soft)",
-  FAILED: "var(--lamp-failed-soft)",
-  ASSIST: "var(--lamp-assist-soft)",
-  EASY: "var(--lamp-easy-soft)",
-  CLEAR: "var(--lamp-clear-soft)",
-  HARD: "var(--lamp-hard-soft)",
-  EXH: "var(--lamp-exh-soft)",
-  FC: "var(--lamp-fc-soft)",
-};
 const LAMP_COLORS = {
   "NO PLAY": "var(--lamp-no-play)",
   FAILED: "var(--lamp-failed)",
@@ -26,9 +16,8 @@ const LAMP_COLORS = {
   EXH: "var(--lamp-exh)",
   FC: "var(--lamp-fc)",
 };
-const getSoftLampColor = (lamp) => LAMP_SOFT_COLORS[lamp] ?? "transparent";
 const getLampColor = (lamp) => LAMP_COLORS[lamp] ?? "transparent";
-const getSummaryBandLampColor = (lamp) => (lamp === "NO PLAY" || lamp === "FC") ? getLampColor(lamp) : getSoftLampColor(lamp);
+const getSummaryBandLampColor = (lamp) => getLampColor(lamp);
 const getCardLampColor = (lamp) => lamp === "NO PLAY" ? "transparent" : getLampColor(lamp);
 const RECOMMEND_OPTIONS = [
   { value: "", label: "－" },
