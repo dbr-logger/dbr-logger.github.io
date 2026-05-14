@@ -378,6 +378,10 @@ function getRecordPlayDate(record) {
   return record.playDate || record.date;
 }
 
+function getCatalogItemKey(entry) {
+  return entry?.catalogItemKey || `title:${entry?.title ?? ""}`;
+}
+
 function applyPlayDateAdjustment(records) {
   const sortedRecords = [...records].sort(sortRecords);
   let previousRecord = null;
@@ -600,6 +604,25 @@ function applyDateScopedDisplayValues(songState, filters) {
     latestTimestamp: dateScopedLatest ? normalizeRecordTimestamp(dateScopedLatest.timestamp, dateScopedLatest.date) : null,
     bestLamp: dateScopedHistory.reduce((best, record) => pickBetterLamp(best, record.lamp), songState.initialLamp),
     currentBp: dateScopedLatestBp,
+  };
+}
+
+function shouldUseRecordScopedCatalog(filters, sortMode) {
+  return filters.axisMode === "date" && sortMode === "latest";
+}
+
+function createRecordScopedCatalogItem(songState, record) {
+  const recordLamp = LAMP_OPTIONS.includes(record?.lamp) ? record.lamp : "NO PLAY";
+
+  return {
+    ...songState,
+    catalogItemKey: `record:${record.id}`,
+    isRecordScopedCard: true,
+    latestDate: getRecordPlayDate(record),
+    latestTimestamp: normalizeRecordTimestamp(record.timestamp, record.date),
+    latestLamp: recordLamp,
+    bestLamp: recordLamp,
+    currentBp: Number.isFinite(record.bp) ? record.bp : null,
   };
 }
 
@@ -1120,6 +1143,7 @@ export function createStore() {
     catalogViewMode: "card",
     currentPage: 1,
     selectedTitle: null,
+    selectedCatalogKey: null,
     statusMessage: "",
     sourceLabel: "",
     ready: false,
@@ -1213,31 +1237,31 @@ export function createStore() {
       state.catalogVisibleSignature === signature
       && state.catalogVisibleTitleOrder.length > 0
     ) {
-      const visibleSongByTitle = new Map(visibleSongs.map((song) => [song.title, song]));
-      const allSongByTitle = new Map(allSongStates.map((song) => [song.title, song]));
-      const usedTitles = new Set();
+      const visibleSongByKey = new Map(visibleSongs.map((song) => [getCatalogItemKey(song), song]));
+      const allSongByKey = new Map(allSongStates.map((song) => [getCatalogItemKey(song), song]));
+      const usedKeys = new Set();
       const shouldKeepPreviousPool = state.sortMode === "latest";
 
       const stableSongs = state.catalogVisibleTitleOrder
-        .map((title) => {
-          const song = visibleSongByTitle.get(title)
-            ?? (shouldKeepPreviousPool ? allSongByTitle.get(title) : null);
+        .map((key) => {
+          const song = visibleSongByKey.get(key)
+            ?? (shouldKeepPreviousPool ? allSongByKey.get(key) : null);
 
           if (song) {
-            usedTitles.add(title);
+            usedKeys.add(key);
           }
 
           return song;
         })
         .filter(Boolean);
 
-      const appendedSongs = visibleSongs.filter((song) => !usedTitles.has(song.title));
+      const appendedSongs = visibleSongs.filter((song) => !usedKeys.has(getCatalogItemKey(song)));
 
       return [...stableSongs, ...appendedSongs];
     }
 
     state.catalogVisibleSignature = signature;
-    state.catalogVisibleTitleOrder = visibleSongs.map((song) => song.title);
+    state.catalogVisibleTitleOrder = visibleSongs.map((song) => getCatalogItemKey(song));
     return visibleSongs;
   }
 
@@ -1271,9 +1295,12 @@ export function createStore() {
 
   function ensureSelectedSong(snapshot = getSnapshot()) {
     const visibleTitles = new Set(snapshot.pagedSongs.map((song) => song.title));
+    const visibleKeys = new Set(snapshot.pagedSongs.map((song) => getCatalogItemKey(song)));
 
-    if (!state.selectedTitle || !visibleTitles.has(state.selectedTitle)) {
-      state.selectedTitle = snapshot.pagedSongs[0]?.title ?? snapshot.visibleSongs[0]?.title ?? null;
+    if (!state.selectedTitle || !visibleTitles.has(state.selectedTitle) || (state.selectedCatalogKey && !visibleKeys.has(state.selectedCatalogKey))) {
+      const nextSong = snapshot.pagedSongs[0] ?? snapshot.visibleSongs[0] ?? null;
+      state.selectedTitle = nextSong?.title ?? null;
+      state.selectedCatalogKey = nextSong ? getCatalogItemKey(nextSong) : null;
       return getSnapshot();
     }
 
@@ -1736,14 +1763,16 @@ export function createStore() {
     emit();
   }
 
-  function selectSong(title) {
+  function selectSong(title, catalogItemKey = null) {
     const normalizedTitle = typeof title === "string" ? title : "";
+    const normalizedCatalogKey = typeof catalogItemKey === "string" ? catalogItemKey : null;
 
-    if (!normalizedTitle || normalizedTitle === state.selectedTitle) {
+    if (!normalizedTitle || (normalizedTitle === state.selectedTitle && normalizedCatalogKey === state.selectedCatalogKey)) {
       return;
     }
 
     state.selectedTitle = normalizedTitle;
+    state.selectedCatalogKey = normalizedCatalogKey;
     emit();
   }
 
@@ -2185,11 +2214,13 @@ export function createStore() {
     const recordIndex = buildRecordIndex(playDateAdjustedRecords);
     const dateDefaultRange = getDefaultDateRangeFromRecords(playDateAdjustedRecords);
 
-    const songStates = catalogEntries.map((entry) => ({
-      ...applyDateScopedDisplayValues(
-        deriveSongState(entry, recordIndex.get(entry.title) ?? []),
-        state.filters,
-      ),
+    const allSongStates = catalogEntries.map((entry) => ({
+      ...deriveSongState(entry, recordIndex.get(entry.title) ?? []),
+      note: state.songNotes[entry.title] ?? "",
+    }));
+
+    const songStates = allSongStates.map((entry) => ({
+      ...applyDateScopedDisplayValues(entry, state.filters),
       note: state.songNotes[entry.title] ?? "",
     })).sort((a, b) => compareCatalogSongs(
       a,
@@ -2199,7 +2230,7 @@ export function createStore() {
       state.filters.axisMode,
     ));
 
-    const filteredVisibleSongs = songStates.filter((entry) => matchesFiltersFor(entry, state.filters));
+    let filteredVisibleSongs = songStates.filter((entry) => matchesFiltersFor(entry, state.filters));
 
     if (state.filters.axisMode === "title" && state.filters.titleQuery.trim()) {
       const songOrder = new Map(songStates.map((song, index) => [song.title, index]));
@@ -2214,13 +2245,28 @@ export function createStore() {
       });
     }
 
+    if (shouldUseRecordScopedCatalog(state.filters, state.sortMode)) {
+      filteredVisibleSongs = filteredVisibleSongs
+        .flatMap((entry) => filterHistoryByDateRange(entry.history, state.filters)
+          .map((record) => createRecordScopedCatalogItem(entry, record)))
+        .sort((a, b) => compareCatalogSongs(
+          a,
+          b,
+          state.sortMode,
+          state.sortDirection,
+          state.filters.axisMode,
+        ));
+    }
+
     const directionAdjustedVisibleSongs = applySortDirectionFallbackIfNoPrimaryEffect(
       filteredVisibleSongs,
       state.sortMode,
       state.sortDirection,
     );
 
-    const visibleSongs = applyStableVisibleOrder(directionAdjustedVisibleSongs, songStates);
+    const visibleSongs = applyStableVisibleOrder(directionAdjustedVisibleSongs, shouldUseRecordScopedCatalog(state.filters, state.sortMode)
+      ? directionAdjustedVisibleSongs
+      : songStates);
 
     const summaryFilters = isTextAxisMode(state.filters.axisMode) && state.titleFilterBase
       ? state.titleFilterBase
@@ -2254,6 +2300,7 @@ export function createStore() {
 
     catalogSnapshotCache = {
       currentPage,
+      allSongStates,
       songStates,
       visibleSongs,
       pagedSongs,
@@ -2276,10 +2323,13 @@ export function createStore() {
   function getSnapshot() {
     const catalogSnapshot = getCatalogSnapshot();
 
-    const selectedSong = catalogSnapshot.pagedSongs.find((song) => song.title === state.selectedTitle)
+    const selectedCatalogItem = catalogSnapshot.pagedSongs.find((song) => getCatalogItemKey(song) === state.selectedCatalogKey)
+      ?? catalogSnapshot.pagedSongs.find((song) => song.title === state.selectedTitle)
       ?? catalogSnapshot.pagedSongs[0]
       ?? catalogSnapshot.visibleSongs[0]
       ?? null;
+    const selectedSong = catalogSnapshot.allSongStates.find((song) => song.title === selectedCatalogItem?.title)
+      ?? selectedCatalogItem;
 
     const selectedHistory = selectedSong
       ? [...selectedSong.history].sort((a, b) => sortRecords(b, a))
@@ -2303,6 +2353,7 @@ export function createStore() {
       ...state,
       ...catalogSnapshot,
       selectedSong,
+      selectedCatalogKey: selectedCatalogItem ? getCatalogItemKey(selectedCatalogItem) : null,
       selectedHistory,
       hasTodayRecord,
       difficultyTable: state.difficultyTable,

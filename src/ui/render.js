@@ -1097,9 +1097,13 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
   }
 
   catalogContainer.innerHTML = songs.map((song) => {
-    const selectedClass = song.title === selectedTitle ? "is-selected" : "";
+    const catalogItemKey = song.catalogItemKey || `title:${song.title}`;
+    const selectedClass = options.selectedCatalogKey
+      ? (catalogItemKey === options.selectedCatalogKey ? "is-selected" : "")
+      : (song.title === selectedTitle ? "is-selected" : "");
     const proposedClass = song.isProposed ? "is-proposed" : "";
     const encodedTitle = encodeURIComponent(song.title);
+    const encodedCatalogItemKey = encodeURIComponent(catalogItemKey);
     const lampColor = getCardLampColor(song.bestLamp);
     const historyCountBadge = song.entryCount > 0
       ? badge(`履歴 ${song.entryCount} 件`, "pill-neutral")
@@ -1121,7 +1125,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
       ].filter(Boolean).join(", ");
 
       return `
-        <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}" style="--card-lamp-color:${escapeHtml(lampColor)}">
+        <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}" data-catalog-key="${encodedCatalogItemKey}" style="--card-lamp-color:${escapeHtml(lampColor)}">
           <p class="song-card-title">
             <span class="song-card-list-title-tags">
               ${badge(formatDifficultyLabel(song), "pill-level")}
@@ -1137,7 +1141,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
     }
 
     return `
-      <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}" style="--card-lamp-color:${escapeHtml(lampColor)}">
+      <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}" data-catalog-key="${encodedCatalogItemKey}" style="--card-lamp-color:${escapeHtml(lampColor)}">
         <div class="song-card-meta">
           <div class="song-card-meta-row">
             ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
@@ -1357,6 +1361,15 @@ export function createRenderer(store) {
   }
 
   function scrollSelectedCardIntoView() {
+    const encodedCatalogKey = nodes.selectedSong?.dataset.catalogKey;
+    if (encodedCatalogKey) {
+      const card = nodes.catalog?.querySelector(`[data-catalog-key="${encodedCatalogKey}"]`);
+      if (card) {
+        scrollElementIntoView(card);
+        return;
+      }
+    }
+
     const encodedTitle = nodes.selectedSong?.dataset.title;
     if (!encodedTitle) {
       return;
@@ -1927,13 +1940,12 @@ export function createRenderer(store) {
       return false;
     }
 
-    store.selectSong(song.title);
+    store.selectSong(song.title, song.catalogItemKey || `title:${song.title}`);
 
     window.requestAnimationFrame(() => {
       nodes.lampInput?.focus({ preventScroll: true });
     });
 
-    store.selectSong(song.title);
     // ショートカット操作時はスクロールしない
     // window.requestAnimationFrame(scrollEntryPanelIntoView);
     return true;
@@ -3487,7 +3499,10 @@ export function createRenderer(store) {
     if (!button) {
       return;
     }
-    store.selectSong(decodeURIComponent(button.dataset.title));
+    store.selectSong(
+      decodeURIComponent(button.dataset.title),
+      button.dataset.catalogKey ? decodeURIComponent(button.dataset.catalogKey) : null,
+    );
     window.requestAnimationFrame(scrollEntryPanelIntoView);
   });
 
@@ -4011,6 +4026,7 @@ export function createRenderer(store) {
       renderCatalog(nodes.catalog, snapshot.pagedSongs, snapshot.selectedSong?.title ?? null, {
         showKatateTitleSuffix: snapshot.sortMode === "katate" || snapshot.filters.axisMode === "katate",
         viewMode: snapshot.catalogViewMode,
+        selectedCatalogKey: snapshot.selectedCatalogKey,
       });
       renderPagination(nodes.catalogPaginationTop, snapshot.pagination, {
         showSortDirectionToggle: true,
@@ -4050,11 +4066,14 @@ export function createRenderer(store) {
       nodes.recordDate.value = formatIsoDate(todayIso());
       nodes.catalogMeta.textContent = "";
       const selectedCardExists = snapshot.selectedSong
-        ? Boolean(nodes.catalog?.querySelector(`[data-title="${encodeURIComponent(snapshot.selectedSong.title)}"]`))
+        ? Boolean(nodes.catalog?.querySelector(snapshot.selectedCatalogKey
+          ? `[data-catalog-key="${encodeURIComponent(snapshot.selectedCatalogKey)}"]`
+          : `[data-title="${encodeURIComponent(snapshot.selectedSong.title)}"]`))
         : false;
 
       if (snapshot.selectedSong) {
         const selectedTitle = encodeURIComponent(snapshot.selectedSong.title);
+        const selectedCatalogKey = snapshot.selectedCatalogKey ? encodeURIComponent(snapshot.selectedCatalogKey) : "";
         const nextBpPlaceholder = formatBpPlaceholder(snapshot.selectedSong);
         const nextScorePlaceholder = formatScorePlaceholder(snapshot.selectedSong);
         const nextMemoValue = snapshot.selectedSong.note ?? "";
@@ -4062,6 +4081,11 @@ export function createRenderer(store) {
 
         if (selectedSongChanged) {
           nodes.selectedSong.dataset.title = selectedTitle;
+        }
+        if (selectedCatalogKey) {
+          nodes.selectedSong.dataset.catalogKey = selectedCatalogKey;
+        } else {
+          delete nodes.selectedSong.dataset.catalogKey;
         }
 
         if (nodes.lampInput.value !== LAMP_OPTIONS[0]) {
@@ -4088,6 +4112,7 @@ export function createRenderer(store) {
         }
       } else {
         delete nodes.selectedSong.dataset.title;
+        delete nodes.selectedSong.dataset.catalogKey;
         if (nodes.lampInput.value !== LAMP_OPTIONS[0]) {
           nodes.lampInput.value = LAMP_OPTIONS[0];
         }
