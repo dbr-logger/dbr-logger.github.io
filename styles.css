@@ -311,12 +311,23 @@ td {
   margin-bottom: 18px;
 }
 
+.panel-header > div:first-child {
+  display: grid;
+  gap: 8px;
+}
+
+.panel-header .eyebrow {
+  line-height: 1;
+  margin: 0;
+}
+
 .catalog-header {
   align-items: flex-end;
   justify-content: flex-end;
 }
 
 .catalog-header > div:first-child {
+  align-self: flex-start;
   margin-right: auto;
 }
 
@@ -995,6 +1006,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   width: 100%;
   text-align: left;
   transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease, border-color 160ms ease;
+  touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
@@ -1167,6 +1179,10 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   display: inline-flex;
   flex: 0 0 auto;
   gap: 6px;
+}
+
+.song-card-list-title-tags .pill {
+  font-family: var(--font-ui);
 }
 
 .song-card-list-meta-text {
@@ -2486,13 +2502,13 @@ html[data-theme="dark"] .proposal-success-body a {
 
   .summary-lamp-values strong {
     font-size: 1rem;
-    min-width: 3ch;
+    min-width: 4ch;
     text-align: right;
   }
 
   .summary-lamp-values span {
     font-size: 0.78rem;
-    min-width: 5ch;
+    min-width: 6ch;
     text-align: right;
   }
 
