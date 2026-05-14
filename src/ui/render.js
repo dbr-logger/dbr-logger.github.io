@@ -826,11 +826,17 @@ function renderSummary(summaryContainer, summary, filters) {
 }
 
 function renderDifficultyFilters(container, filters) {
+  const fixedFilterDisabled = {
+    inf: filters.axisMode === "date",
+    acdelete: filters.axisMode === "date",
+    includeUnrated: filters.axisMode === "date" || isTextAxisMode(filters.axisMode),
+    recommend: filters.axisMode === "date" || isTextAxisMode(filters.axisMode),
+  };
   const recommendMarkup = RECOMMEND_OPTIONS.map((option) => {
     const checked = filters.recommend.includes(option.value) ? "checked" : "";
     return `
-      <label class="recommend-chip">
-        <input type="checkbox" data-filter="recommend" value="${escapeHtml(option.value)}" ${checked} />
+      <label class="recommend-chip ${fixedFilterDisabled.recommend ? "is-disabled" : ""}">
+        <input type="checkbox" data-filter="recommend" value="${escapeHtml(option.value)}" ${checked} ${fixedFilterDisabled.recommend ? "disabled" : ""} />
         <span>${escapeHtml(option.label)}</span>
       </label>
     `;
@@ -842,7 +848,7 @@ function renderDifficultyFilters(container, filters) {
         <div class="field">
           <span>INFINITAS</span>
           <div class="field-select overview-select-wrap">
-            <select data-filter="inf">
+            <select data-filter="inf" ${fixedFilterDisabled.inf ? "disabled" : ""}>
               <option value="all" ${filters.inf === "all" ? "selected" : ""}>すべて</option>
               <option value="yes" ${filters.inf === "yes" ? "selected" : ""}>収録あり</option>
               <option value="no" ${filters.inf === "no" ? "selected" : ""}>収録なし</option>
@@ -852,7 +858,7 @@ function renderDifficultyFilters(container, filters) {
         <div class="field">
           <span>AC収録</span>
           <div class="field-select overview-select-wrap">
-            <select data-filter="acdelete">
+            <select data-filter="acdelete" ${fixedFilterDisabled.acdelete ? "disabled" : ""}>
               <option value="all" ${filters.acdelete === "all" ? "selected" : ""}>すべて</option>
               <option value="no" ${filters.acdelete === "no" ? "selected" : ""}>収録あり</option>
               <option value="yes" ${filters.acdelete === "yes" ? "selected" : ""}>収録なし</option>
@@ -862,7 +868,7 @@ function renderDifficultyFilters(container, filters) {
         <div class="field">
           <span>未査定曲</span>
           <div class="field-select overview-select-wrap">
-            <select data-filter="includeUnrated">
+            <select data-filter="includeUnrated" ${fixedFilterDisabled.includeUnrated ? "disabled" : ""}>
               <option value="all" ${filters.includeUnrated === "all" ? "selected" : ""}>すべて</option>
               <option value="rated" ${filters.includeUnrated === "rated" ? "selected" : ""}>査定済み</option>
               <option value="unrated" ${filters.includeUnrated === "unrated" ? "selected" : ""}>未査定のみ</option>
@@ -2100,7 +2106,18 @@ export function createRenderer(store) {
   function readFiltersFromPanel() {
     const panel = nodes.summaryFiltersPanel;
     const currentFilters = filterDraft ?? store.getSnapshot().filters;
-    const selectedRecommend = Array.from(panel.querySelectorAll('input[data-filter="recommend"]:checked')).map((input) => input.value);
+    const recommendInputs = Array.from(panel.querySelectorAll('input[data-filter="recommend"]'));
+    const selectedRecommend = recommendInputs.some((input) => input.disabled)
+      ? [...(currentFilters.recommend ?? RECOMMEND_OPTIONS.map((option) => option.value))]
+      : recommendInputs.filter((input) => input.checked).map((input) => input.value);
+    const readSelectFilter = (name, fallback = "all") => {
+      const select = panel.querySelector(`select[data-filter="${name}"]`);
+      if (!(select instanceof HTMLSelectElement) || select.disabled) {
+        return currentFilters[name] ?? fallback;
+      }
+
+      return select.value;
+    };
 
     return {
       axisMode: currentFilters.axisMode ?? "level",
@@ -2114,11 +2131,11 @@ export function createRenderer(store) {
       axisRanges: currentFilters.axisRanges,
       axisLastRanges: currentFilters.axisLastRanges,
       axisSingleReturnValues: currentFilters.axisSingleReturnValues,
-      inf: panel.querySelector('select[data-filter="inf"]')?.value ?? "all",
-      acdelete: panel.querySelector('select[data-filter="acdelete"]')?.value ?? "all",
+      inf: readSelectFilter("inf"),
+      acdelete: readSelectFilter("acdelete"),
       recommend: selectedRecommend,
       lamps: currentFilters.lamps ? [...currentFilters.lamps] : [...LAMP_OPTIONS],
-      includeUnrated: panel.querySelector('select[data-filter="includeUnrated"]')?.value ?? "all",
+      includeUnrated: readSelectFilter("includeUnrated"),
     };
   }
 

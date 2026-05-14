@@ -595,13 +595,10 @@ function applyDateScopedDisplayValues(songState, filters) {
   }
 
   const dateScopedHistory = filterHistoryByDateRange(songState.history, filters);
-  const dateScopedLatest = dateScopedHistory.at(-1) ?? null;
   const dateScopedLatestBp = getLatestFiniteValue(dateScopedHistory, "bp");
 
   return {
     ...songState,
-    latestDate: dateScopedLatest ? getRecordPlayDate(dateScopedLatest) : null,
-    latestTimestamp: dateScopedLatest ? normalizeRecordTimestamp(dateScopedLatest.timestamp, dateScopedLatest.date) : null,
     bestLamp: dateScopedHistory.reduce((best, record) => pickBetterLamp(best, record.lamp), songState.initialLamp),
     currentBp: dateScopedLatestBp,
   };
