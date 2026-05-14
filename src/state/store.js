@@ -14,6 +14,8 @@ const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "la
 const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
 const NUMERIC_AXIS_MODES = ["level", "splv", "katate"];
+const PLAY_DATE_RESET_HOUR = 5;
+const PLAY_DATE_CHAIN_THRESHOLD_MS = 60 * 60 * 1000;
 const DEFAULT_SORT_MODE_BY_AXIS = {
   level: "level",
   splv: "splv",
@@ -139,6 +141,16 @@ function normalizeRecordTimestamp(timestamp, date) {
   }
 
   return date ? `${date}T00:00:00` : "";
+}
+
+function parseRecordTimestampMs(record) {
+  const timestamp = normalizeRecordTimestamp(record?.timestamp, record?.date);
+  if (!timestamp) {
+    return null;
+  }
+
+  const parsed = new Date(timestamp).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function compareRecordTimestamps(a, b) {
@@ -271,6 +283,10 @@ function normalizeDateValue(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : "";
 }
 
+function normalizeDateSelectionMode(value) {
+  return value === "range" ? "range" : "single";
+}
+
 function normalizeDateRange(startValue, endValue) {
   const start = normalizeDateValue(startValue);
   const end = normalizeDateValue(endValue);
@@ -300,6 +316,8 @@ function normalizeStoredFilters(filters) {
     axisMode: normalizeAxisMode(filters?.axisMode),
     axisValue: typeof filters?.axisValue === "string" ? filters.axisValue : "",
     titleQuery: typeof filters?.titleQuery === "string" ? filters.titleQuery : "",
+    dateSelectionMode: normalizeDateSelectionMode(filters?.dateSelectionMode),
+    dateSingle: normalizeDateValue(filters?.dateSingle) || todayIso(),
     dateStart: dateRange.dateStart,
     dateEnd: dateRange.dateEnd,
     axisRangeModeByAxis: normalizeAxisRangeModeByAxis(filters?.axisRangeModeByAxis),
@@ -354,6 +372,43 @@ function buildRecordIndex(records) {
 
   index.forEach((history) => history.sort(sortRecords));
   return index;
+}
+
+function getRecordPlayDate(record) {
+  return record.playDate || record.date;
+}
+
+function applyPlayDateAdjustment(records) {
+  const sortedRecords = [...records].sort(sortRecords);
+  let previousRecord = null;
+  let previousPlayDate = "";
+
+  return sortedRecords.map((record) => {
+    let playDate = record.date;
+    const recordTime = parseRecordTimestampMs(record);
+    const previousTime = parseRecordTimestampMs(previousRecord);
+    const timestamp = normalizeRecordTimestamp(record.timestamp, record.date);
+    const hour = Number(timestamp.slice(11, 13));
+    const previousBaseDate = previousPlayDate || previousRecord?.date || "";
+    const shouldInheritPlayDate = previousRecord
+      && previousTime !== null
+      && recordTime !== null
+      && record.date !== previousBaseDate
+      && recordTime - previousTime >= 0
+      && recordTime - previousTime <= PLAY_DATE_CHAIN_THRESHOLD_MS
+      && Number.isFinite(hour)
+      && hour < PLAY_DATE_RESET_HOUR;
+
+    if (shouldInheritPlayDate) {
+      playDate = previousPlayDate || previousRecord.date;
+    }
+
+    previousRecord = record;
+    previousPlayDate = playDate;
+
+    const adjustedRecord = { ...record, playDate };
+    return adjustedRecord;
+  });
 }
 
 function buildDifficultyTextageIndex(difficultyTable) {
@@ -501,6 +556,53 @@ function deriveSongState(song, history = []) {
   };
 }
 
+function filterHistoryByDateRange(history, filters) {
+  if (filters.axisMode !== "date") {
+    return history;
+  }
+
+  if (filters.dateSelectionMode === "single") {
+    const dateSingle = normalizeDateValue(filters.dateSingle) || todayIso();
+    return history.filter((record) => getRecordPlayDate(record) === dateSingle);
+  }
+
+  const { dateStart, dateEnd } = normalizeDateRange(filters.dateStart, filters.dateEnd);
+  if (!dateStart && !dateEnd) {
+    return history;
+  }
+
+  return history.filter((record) => {
+    const playDate = getRecordPlayDate(record);
+    if (dateStart && playDate < dateStart) {
+      return false;
+    }
+
+    if (dateEnd && playDate > dateEnd) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function applyDateScopedDisplayValues(songState, filters) {
+  if (filters.axisMode !== "date") {
+    return songState;
+  }
+
+  const dateScopedHistory = filterHistoryByDateRange(songState.history, filters);
+  const dateScopedLatest = dateScopedHistory.at(-1) ?? null;
+  const dateScopedLatestBp = getLatestFiniteValue(dateScopedHistory, "bp");
+
+  return {
+    ...songState,
+    latestDate: dateScopedLatest ? getRecordPlayDate(dateScopedLatest) : null,
+    latestTimestamp: dateScopedLatest ? normalizeRecordTimestamp(dateScopedLatest.timestamp, dateScopedLatest.date) : null,
+    bestLamp: dateScopedHistory.reduce((best, record) => pickBetterLamp(best, record.lamp), songState.initialLamp),
+    currentBp: dateScopedLatestBp,
+  };
+}
+
 function createDifficultyCatalogEntries(difficultyTable) {
   const chartMap = new Map();
 
@@ -644,6 +746,11 @@ function formatDateBandLabel(date) {
 function getDateSummaryRange(filters) {
   const { dateStart, dateEnd } = normalizeDateRange(filters.dateStart, filters.dateEnd);
 
+  if (filters.dateSelectionMode === "single") {
+    const dateSingle = normalizeDateValue(filters.dateSingle) || todayIso();
+    return { start: dateSingle, end: dateSingle, sliceMode: "all", limit: null };
+  }
+
   if (dateStart && dateEnd) {
     return { start: dateStart, end: dateEnd, sliceMode: "all", limit: null };
   }
@@ -668,9 +775,10 @@ function buildDateSummary(records, baseSongs, filters) {
   const bestByDateTitle = new Map();
   records.forEach((record) => {
     if (!visibleTitles.has(record.title)) return;
-    if (start && record.date < start) return;
-    if (end && record.date > end) return;
-    const key = `${record.date}__${record.title}`;
+    const playDate = getRecordPlayDate(record);
+    if (start && playDate < start) return;
+    if (end && playDate > end) return;
+    const key = `${playDate}__${record.title}`;
     const existing = bestByDateTitle.get(key);
     if (!existing || getLampRank(record.lamp) > getLampRank(existing.lamp) ||
         (Number.isFinite(record.bp) && (!Number.isFinite(existing.bp) || record.bp < existing.bp)) ||
@@ -681,11 +789,12 @@ function buildDateSummary(records, baseSongs, filters) {
 
   bestByDateTitle.forEach((record) => {
     const lamp = LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY";
-    if (!bandMap.has(record.date)) {
-      bandMap.set(record.date, {
-        key: record.date,
-        value: record.date,
-        label: formatDateBandLabel(record.date),
+    const playDate = getRecordPlayDate(record);
+    if (!bandMap.has(playDate)) {
+      bandMap.set(playDate, {
+        key: playDate,
+        value: playDate,
+        label: formatDateBandLabel(playDate),
         total: 0,
         lampCounts: createLampCounts(),
         baseTotal: 0,
@@ -693,7 +802,7 @@ function buildDateSummary(records, baseSongs, filters) {
       });
     }
 
-    const band = bandMap.get(record.date);
+    const band = bandMap.get(playDate);
     band.baseTotal += 1;
     band.baseLampCounts[lamp] += 1;
 
@@ -728,7 +837,7 @@ function buildDateSummary(records, baseSongs, filters) {
 }
 
 function getDefaultDateRangeFromRecords(records) {
-  const dates = [...new Set(records.map((record) => record.date).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const dates = [...new Set(records.map((record) => getRecordPlayDate(record)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const recentDates = dates.slice(-14);
   const today = todayIso();
 
@@ -738,7 +847,7 @@ function getDefaultDateRangeFromRecords(records) {
 
   return {
     dateStart: recentDates[0],
-    dateEnd: today,
+    dateEnd: recentDates[recentDates.length - 1],
   };
 }
 
@@ -755,6 +864,8 @@ function getDateFilterReturnBase(previousFilters, titleFilterBase) {
       axisMode: "level",
       axisValue: "",
       titleQuery: "",
+      dateSelectionMode: "single",
+      dateSingle: todayIso(),
       dateStart: "",
       dateEnd: "",
     };
@@ -990,6 +1101,8 @@ export function createStore() {
       axisMode: "level",
       axisValue: "",
       titleQuery: "",
+      dateSelectionMode: "single",
+      dateSingle: todayIso(),
       dateStart: "",
       dateEnd: "",
       axisRangeModeByAxis: normalizeAxisRangeModeByAxis(),
@@ -1183,19 +1296,9 @@ export function createStore() {
     }
 
     if (filters.axisMode === "date") {
-      const { dateStart, dateEnd } = normalizeDateRange(filters.dateStart, filters.dateEnd);
+      const dateScopedHistory = filterHistoryByDateRange(entry.history, filters);
 
-      if ((dateStart || dateEnd) && !entry.history.some((record) => {
-        if (dateStart && record.date < dateStart) {
-          return false;
-        }
-
-        if (dateEnd && record.date > dateEnd) {
-          return false;
-        }
-
-        return true;
-      })) {
+      if (dateScopedHistory.length === 0) {
         return false;
       }
     }
@@ -1204,12 +1307,14 @@ export function createStore() {
       return false;
     }
 
-    if (entry.levelValue === null) {
-      if (filters.includeUnrated === "rated") {
+    if (filters.axisMode !== "date") {
+      if (entry.levelValue === null) {
+        if (filters.includeUnrated === "rated") {
+          return false;
+        }
+      } else if (filters.includeUnrated === "unrated") {
         return false;
       }
-    } else if (filters.includeUnrated === "unrated") {
-      return false;
     }
 
     if (isNumericAxisMode(filters.axisMode) && isAxisRangeModeEnabled(filters)) {
@@ -1242,7 +1347,7 @@ export function createStore() {
       }
     }
 
-    if (!filters.recommend.includes(entry.recommend)) {
+    if (filters.axisMode !== "date" && !filters.recommend.includes(entry.recommend)) {
       return false;
     }
 
@@ -1250,19 +1355,19 @@ export function createStore() {
       return false;
     }
 
-    if (filters.inf === "yes" && !entry.infAvailable) {
+    if (filters.axisMode !== "date" && filters.inf === "yes" && !entry.infAvailable) {
       return false;
     }
 
-    if (filters.inf === "no" && entry.infAvailable) {
+    if (filters.axisMode !== "date" && filters.inf === "no" && entry.infAvailable) {
       return false;
     }
 
-    if (filters.acdelete === "yes" && !entry.acdelete) {
+    if (filters.axisMode !== "date" && filters.acdelete === "yes" && !entry.acdelete) {
       return false;
     }
 
-    if (filters.acdelete === "no" && entry.acdelete) {
+    if (filters.axisMode !== "date" && filters.acdelete === "no" && entry.acdelete) {
       return false;
     }
 
@@ -1403,6 +1508,8 @@ export function createStore() {
       : state.filters.titleQuery;
     let nextDateStart = nextFilters.dateStart ?? state.filters.dateStart;
     let nextDateEnd = nextFilters.dateEnd ?? state.filters.dateEnd;
+    let nextDateSelectionMode = normalizeDateSelectionMode(nextFilters.dateSelectionMode ?? state.filters.dateSelectionMode);
+    let nextDateSingle = nextFilters.dateSingle ?? state.filters.dateSingle ?? todayIso();
 
     if (axisModeChanged) {
       const wasTextAxisMode = isTextAxisMode(previousFilters.axisMode);
@@ -1429,6 +1536,10 @@ export function createStore() {
         state.titleFilterBase = null;
         nextAxisValue = "";
         nextTitleQuery = "";
+        nextDateSelectionMode = normalizeDateSelectionMode(nextFilters.dateSelectionMode ?? state.filters.dateSelectionMode);
+        nextDateSingle = typeof nextFilters.dateSingle === "string"
+          ? nextFilters.dateSingle
+          : state.filters.dateSingle || todayIso();
         nextDateStart = typeof nextFilters.dateStart === "string"
           ? nextFilters.dateStart
           : rememberedDateRange.dateStart || defaultDateRange.dateStart;
@@ -1462,6 +1573,8 @@ export function createStore() {
       axisMode: nextAxisMode,
       axisValue: typeof nextAxisValue === "string" ? nextAxisValue : "",
       titleQuery: typeof nextTitleQuery === "string" ? nextTitleQuery : "",
+      dateSelectionMode: nextDateSelectionMode,
+      dateSingle: normalizeDateValue(nextDateSingle) || todayIso(),
       dateStart: nextDateRange.dateStart,
       dateEnd: nextDateRange.dateEnd,
       axisRangeModeByAxis: nextFilters.axisRangeModeByAxis
@@ -1556,6 +1669,8 @@ export function createStore() {
         axisMode: "level",
         axisValue: "",
         titleQuery: "",
+        dateSelectionMode: "single",
+        dateSingle: todayIso(),
         dateStart: "",
         dateEnd: "",
       };
@@ -2066,11 +2181,15 @@ export function createStore() {
     }
 
     const catalogEntries = getCatalogEntries();
-    const recordIndex = buildRecordIndex(state.records);
-    const dateDefaultRange = getDefaultDateRangeFromRecords(state.records);
+    const playDateAdjustedRecords = applyPlayDateAdjustment(state.records);
+    const recordIndex = buildRecordIndex(playDateAdjustedRecords);
+    const dateDefaultRange = getDefaultDateRangeFromRecords(playDateAdjustedRecords);
 
     const songStates = catalogEntries.map((entry) => ({
-      ...deriveSongState(entry, recordIndex.get(entry.title) ?? []),
+      ...applyDateScopedDisplayValues(
+        deriveSongState(entry, recordIndex.get(entry.title) ?? []),
+        state.filters,
+      ),
       note: state.songNotes[entry.title] ?? "",
     })).sort((a, b) => compareCatalogSongs(
       a,
@@ -2125,7 +2244,7 @@ export function createStore() {
     const summaryCountSongs = songStates.filter((entry) => matchesFiltersFor(entry, summaryCountFilters));
 
     const summary = summaryFilters.axisMode === "date"
-      ? buildDateSummary(state.records, summaryCountSongs, summaryFilters)
+      ? buildDateSummary(playDateAdjustedRecords, summaryCountSongs, summaryFilters)
       : buildSummary(summaryBandBaseSongs, summarySongs, summaryCountSongs, summaryFilters.axisMode);
 
     const totalPages = Math.max(1, Math.ceil(visibleSongs.length / PAGE_SIZE));

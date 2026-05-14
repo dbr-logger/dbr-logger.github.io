@@ -49,7 +49,7 @@ const AXIS_SHORTCUT_KEYS = {
 const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "date"]);
 
 // DBR IR送信テスト
-const DBR_IR_IMPORT_TEST_URL = "dbr_ir_from_logger.html";
+const DBR_IR_IMPORT_TEST_URL = "https://dbr-difficulty.github.io/dbr_ir_from_logger.html";
 const DBR_IR_IMPORT_TEST_ORIGIN = "dbr-difficulty.github.io";
 
 function openDbrIrImportPageWithJson(jsonText) {
@@ -536,6 +536,20 @@ function deriveFilterBounds(songStates) {
   };
 }
 
+function deriveHistoryDates(songStates) {
+  const dates = new Set();
+  songStates.forEach((song) => {
+    song.history?.forEach((record) => {
+      const playDate = record?.playDate || record?.date;
+      if (playDate) {
+        dates.add(playDate);
+      }
+    });
+  });
+
+  return [...dates].sort((a, b) => a.localeCompare(b));
+}
+
 function getAxisLabel(axisMode) {
   return AXIS_OPTIONS.find((option) => option.value === axisMode)?.label ?? "Lv.";
 }
@@ -581,6 +595,10 @@ function formatExportDateStamp() {
 }
 
 function formatDateRangeValue(filters) {
+  if (filters.dateSelectionMode === "single") {
+    return formatIsoDate(filters.dateSingle || todayIso());
+  }
+
   if (!filters.dateStart && !filters.dateEnd) {
     return "ALL";
   }
@@ -685,6 +703,10 @@ function renderFloatingToggleLabel(filters, bounds) {
 }
 
 function isDefaultDateRange(filters, dateDefaultRange) {
+  if (filters.dateSelectionMode === "single") {
+    return (filters.dateSingle || todayIso()) === (dateDefaultRange?.dateEnd || todayIso());
+  }
+
   return filters.dateStart === dateDefaultRange?.dateStart && filters.dateEnd === dateDefaultRange?.dateEnd;
 }
 
@@ -884,6 +906,9 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
   const dateRangeResetMarkup = !isDefaultDateRange(filters, dateDefaultRange)
     ? '<button class="floating-filter-inline-action" type="button" data-date-reset>戻す</button>'
     : "";
+  const dateModeToggleMarkup = isDateAxisMode(filters.axisMode)
+    ? `<button class="floating-filter-inline-action" type="button" data-date-mode-toggle>${filters.dateSelectionMode === "single" ? "範囲選択" : "単一選択"}</button>`
+    : "";
   
   const controlMarkup = isDateAxisMode(filters.axisMode)
     ? `
@@ -891,8 +916,16 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
         <div class="floating-filter-date-summary">
           <span>${escapeHtml(formatDateRangeValue(filters))}</span>
           ${dateRangeResetMarkup}
+          ${dateModeToggleMarkup}
         </div>
-        <div class="floating-filter-date-grid">
+        ${filters.dateSelectionMode === "single" ? `
+          <div class="field floating-filter-date-field">
+            <span class="input-field">
+              <input class="form-date" type="date" data-date-single value="${escapeHtml(filters.dateSingle || todayIso())}" />
+            </span>
+          </div>
+        ` : `
+          <div class="floating-filter-date-grid">
           <div class="field floating-filter-date-field">
             <span>開始日</span>
             <span class="input-field">
@@ -905,7 +938,8 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
               <input class="form-date" type="date" data-date-end value="${escapeHtml(filters.dateEnd ?? "")}" />
             </span>
           </div>
-        </div>
+          </div>
+        `}
       </div>
     `
     : isTextAxisMode(filters.axisMode)
@@ -1193,6 +1227,7 @@ export function createRenderer(store) {
     splv: { min: 1, max: 12, step: 1, values: [] },
     katate: { min: 11, max: 13, step: 0.1, values: [] },
   };
+  let latestHistoryDates = [];
   let latestVisibleCount = 0;
   let filterDraft = null;
   let appliedFilterSignature = "";
@@ -1211,6 +1246,8 @@ export function createRenderer(store) {
   let floatingAxisRangePreviewValue = null;
   let floatingAxisShortcutPending = false;
   let floatingAxisRangeShortcutPending = false;
+  let floatingDateShortcutPending = false;
+  let floatingDatePreviewValue = null;
   let floatingAxisLastValues = {
     level: "",
     splv: "",
@@ -1455,26 +1492,12 @@ export function createRenderer(store) {
     queryInput.select?.();
   }
 
-  function focusFloatingDateStart() {
-    const dateStartInput = nodes.floatingAxisFilter.querySelector('input[data-date-start]');
-    if (!(dateStartInput instanceof HTMLInputElement)) {
-      return;
-    }
-
-    dateStartInput.focus();
-    dateStartInput.select?.();
-  }
-
   function focusFloatingAxisControl(axisMode) {
     if (isTextAxisMode(axisMode)) {
       focusFloatingTitleQuery();
       syncQueryScrollLockState();
       return;
     }
-
-    // if (isDateAxisMode(axisMode)) {
-    //   focusFloatingDateStart();
-    // }
   }  
 
   function isMobileViewport() {
@@ -2071,6 +2094,8 @@ export function createRenderer(store) {
       axisMode: currentFilters.axisMode ?? "level",
       axisValue: currentFilters.axisValue ?? "",
       titleQuery: currentFilters.titleQuery ?? "",
+      dateSelectionMode: currentFilters.dateSelectionMode ?? "single",
+      dateSingle: currentFilters.dateSingle ?? todayIso(),
       dateStart: currentFilters.dateStart ?? "",
       dateEnd: currentFilters.dateEnd ?? "",
       axisRangeModeByAxis: currentFilters.axisRangeModeByAxis,
@@ -2170,79 +2195,13 @@ export function createRenderer(store) {
       syncQueryScrollLockState();
     }
 
-    if (isSameAxis && isNumericAxisMode(axisMode) && isAxisRangeMode(filters)) {
-      floatingAxisRangeShortcutPending = false;
-      floatingAxisRangePreviewMode = null;
-      floatingAxisRangePreviewValue = null;
-
-      const axisValues = getAxisValues(latestFilterBounds, axisMode);
-      const fullRange = getNormalizedAxisRange({
-        ...filters,
-        axisRanges: {
-          ...filters.axisRanges,
-          [axisMode]: { start: String(axisValues[0] ?? ""), end: String(axisValues[axisValues.length - 1] ?? "") },
-        },
-      }, axisValues);
-      const currentRange = getActiveAxisRange(filters);
-      const isFullRange = currentRange.valid
-        && currentRange.startIndex === 0
-        && currentRange.endIndex === axisValues.length - 1;
-
-      if (!axisValues.length) {
-        return true;
-      }
-
-      if (!isFullRange) {
-        applyFiltersPreservingOverviewPosition({
-          axisLastRanges: {
-            ...filters.axisLastRanges,
-            [axisMode]: { start: currentRange.start, end: currentRange.end },
-          },
-          axisRanges: {
-            ...filters.axisRanges,
-            [axisMode]: { start: fullRange.start, end: fullRange.end },
-          },
-        }, { scrollToCatalog: false });
-        return true;
-      }
-
-      const savedRange = getNormalizedAxisRange({
-        ...filters,
-        axisRanges: {
-          ...filters.axisRanges,
-          [axisMode]: filters.axisLastRanges?.[axisMode] ?? { start: "", end: "" },
-        },
-      }, axisValues);
-      const rawSaved = filters.axisLastRanges?.[axisMode] ?? { start: "", end: "" };
-      if (hasAxisCandidate(axisValues, rawSaved.start) && hasAxisCandidate(axisValues, rawSaved.end)) {
-        applyFiltersPreservingOverviewPosition({
-          axisRanges: {
-            ...filters.axisRanges,
-            [axisMode]: { start: savedRange.start, end: savedRange.end },
-          },
-        }, { scrollToCatalog: false });
-      }
-
+    if (isSameAxis && isNumericAxisMode(axisMode)) {
+      toggleAxisRangeMode(axisMode);
       return true;
     }
 
-    if (isSameAxis && isNumericAxisMode(axisMode)) {
-      floatingAxisShortcutPending = false;
-      floatingAxisPreviewMode = null;
-      floatingAxisPreviewValue = null;
-
-      const currentValue = filters.axisValue ?? "";
-      if (currentValue !== "") {
-        floatingAxisLastValues[axisMode] = String(currentValue);
-        applyFiltersPreservingOverviewPosition({ axisValue: "" }, { scrollToCatalog: false });
-        return true;
-      }
-
-      const savedValue = floatingAxisLastValues[axisMode];
-      if (hasAxisValue(axisMode, savedValue)) {
-        applyFiltersPreservingOverviewPosition({ axisValue: savedValue }, { scrollToCatalog: false });
-      }
-
+    if (isSameAxis && isDateAxisMode(axisMode)) {
+      toggleDateSelectionMode();
       return true;
     }
 
@@ -2276,12 +2235,6 @@ export function createRenderer(store) {
     }
 
     applyFiltersPreservingOverviewPosition(nextFilters, { scrollToCatalog: false });
-
-    if (isDateAxisMode(axisMode)) {
-      window.requestAnimationFrame(() => {
-        focusFloatingAxisControl(axisMode);
-      });
-    }
 
     return true;
   }  
@@ -2355,16 +2308,165 @@ export function createRenderer(store) {
 
   function isDateFilterInput(element) {
     return element instanceof HTMLInputElement
-      && (element.hasAttribute("data-date-start") || element.hasAttribute("data-date-end"));
+      && (
+        element.hasAttribute("data-date-single")
+        || element.hasAttribute("data-date-start")
+        || element.hasAttribute("data-date-end")
+      );
   }
 
   function applyDateFilter() {
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+    const dateSelectionMode = activeFilters.dateSelectionMode === "range" ? "range" : "single";
     applyFiltersPreservingOverviewPosition({
       axisMode: "date",
       axisValue: "",
-      dateStart: nodes.floatingAxisFilter.querySelector("[data-date-start]")?.value ?? "",
-      dateEnd: nodes.floatingAxisFilter.querySelector("[data-date-end]")?.value ?? "",
+      dateSelectionMode,
+      dateSingle: nodes.floatingAxisFilter.querySelector("[data-date-single]")?.value ?? activeFilters.dateSingle ?? todayIso(),
+      dateStart: nodes.floatingAxisFilter.querySelector("[data-date-start]")?.value ?? activeFilters.dateStart ?? "",
+      dateEnd: nodes.floatingAxisFilter.querySelector("[data-date-end]")?.value ?? activeFilters.dateEnd ?? "",
     });
+  }
+
+  function shiftIsoDate(isoDate, delta) {
+    const base = String(isoDate || todayIso());
+    const date = new Date(`${base}T00:00:00`);
+    if (Number.isNaN(date.getTime())) {
+      return todayIso();
+    }
+
+    date.setDate(date.getDate() + delta);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }
+
+  function shiftHistoryDate(isoDate, delta) {
+    if (!latestHistoryDates.length) {
+      return shiftIsoDate(isoDate, delta);
+    }
+
+    const base = String(isoDate || todayIso());
+    const direction = delta < 0 ? -1 : 1;
+    let index = latestHistoryDates.indexOf(base);
+
+    if (index < 0) {
+      index = direction < 0
+        ? latestHistoryDates.findLastIndex((date) => date <= base)
+        : latestHistoryDates.findIndex((date) => date >= base);
+
+      if (index < 0) {
+        index = direction < 0 ? 0 : latestHistoryDates.length - 1;
+      }
+    } else {
+      index += direction;
+    }
+
+    index = Math.max(0, Math.min(index, latestHistoryDates.length - 1));
+    return latestHistoryDates[index] ?? base;
+  }
+
+  function updateFloatingDateDisplay(filters) {
+    const valueNode = nodes.floatingAxisFilter.querySelector(".floating-filter-date-summary span");
+    if (valueNode) {
+      valueNode.textContent = formatDateRangeValue(filters);
+    }
+
+    const singleInput = nodes.floatingAxisFilter.querySelector("input[data-date-single]");
+    if (singleInput instanceof HTMLInputElement) {
+      singleInput.value = filters.dateSingle || todayIso();
+    }
+
+    const startInput = nodes.floatingAxisFilter.querySelector("input[data-date-start]");
+    if (startInput instanceof HTMLInputElement) {
+      startInput.value = filters.dateStart || "";
+    }
+
+    const endInput = nodes.floatingAxisFilter.querySelector("input[data-date-end]");
+    if (endInput instanceof HTMLInputElement) {
+      endInput.value = filters.dateEnd || "";
+    }
+  }
+
+  function previewFloatingDateBy(delta, handle) {
+    const activeFilters = filterDraft ?? store.getSnapshot().filters;
+    if (!floatingFilterOpen || !isDateAxisMode(activeFilters.axisMode)) {
+      return false;
+    }
+
+    const baseFilters = floatingDatePreviewValue ?? activeFilters;
+    let nextFilters;
+
+    if (baseFilters.dateSelectionMode === "range") {
+      const activeHandle = handle === "end" ? "end" : "start";
+      const currentStart = baseFilters.dateStart || todayIso();
+      const currentEnd = baseFilters.dateEnd || todayIso();
+      let nextStart = currentStart;
+      let nextEnd = currentEnd;
+
+      if (activeHandle === "end") {
+        nextEnd = shiftHistoryDate(currentEnd, delta);
+        if (nextEnd < nextStart) {
+          nextEnd = nextStart;
+        }
+      } else {
+        nextStart = shiftHistoryDate(currentStart, delta);
+        if (nextStart > nextEnd) {
+          nextStart = nextEnd;
+        }
+      }
+
+      nextFilters = {
+        ...baseFilters,
+        dateSelectionMode: "range",
+        dateStart: nextStart,
+        dateEnd: nextEnd,
+      };
+    } else {
+      nextFilters = {
+        ...baseFilters,
+        dateSelectionMode: "single",
+        dateSingle: shiftHistoryDate(baseFilters.dateSingle || todayIso(), delta),
+      };
+    }
+
+    floatingDatePreviewValue = nextFilters;
+    floatingDateShortcutPending = true;
+    updateFloatingDateDisplay(nextFilters);
+    return true;
+  }
+
+  function commitFloatingDateShortcut() {
+    if (!floatingDateShortcutPending || !floatingDatePreviewValue) {
+      return false;
+    }
+
+    const nextFilters = floatingDatePreviewValue;
+    floatingDateShortcutPending = false;
+    floatingDatePreviewValue = null;
+    applyFiltersPreservingOverviewPosition({
+      axisMode: "date",
+      axisValue: "",
+      dateSelectionMode: nextFilters.dateSelectionMode,
+      dateSingle: nextFilters.dateSingle || todayIso(),
+      dateStart: nextFilters.dateStart || "",
+      dateEnd: nextFilters.dateEnd || "",
+    }, { scrollToCatalog: false });
+    return true;
+  }
+
+  function toggleDateSelectionMode() {
+    const { filters } = store.getSnapshot();
+    const nextMode = filters.dateSelectionMode === "single" ? "range" : "single";
+    applyFiltersPreservingOverviewPosition({
+      axisMode: "date",
+      axisValue: "",
+      dateSelectionMode: nextMode,
+      dateSingle: filters.dateSingle || todayIso(),
+      dateStart: filters.dateStart,
+      dateEnd: filters.dateEnd,
+    }, { scrollToCatalog: false });
   }
 
   function scheduleDateFilterCommitIfBlurred() {
@@ -2438,6 +2540,8 @@ export function createRenderer(store) {
       axisMode: filterDraft?.axisMode ?? "level",
       axisValue: filterDraft?.axisValue ?? "",
       titleQuery: filterDraft?.titleQuery ?? "",
+      dateSelectionMode: filterDraft?.dateSelectionMode ?? "single",
+      dateSingle: filterDraft?.dateSingle ?? todayIso(),
       dateStart: filterDraft?.dateStart ?? "",
       dateEnd: filterDraft?.dateEnd ?? "",
       inf: "all",
@@ -2492,8 +2596,18 @@ export function createRenderer(store) {
       event.preventDefault();
       event.stopPropagation();
       pendingQueryBlurIntent = "clear";
-      const { dateDefaultRange } = store.getSnapshot();
-      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...dateDefaultRange }, { scrollToCatalog: false });
+      const { filters, dateDefaultRange } = store.getSnapshot();
+      const nextDateFilters = filters.dateSelectionMode === "single"
+        ? { dateSelectionMode: "single", dateSingle: dateDefaultRange?.dateEnd || todayIso() }
+        : { dateSelectionMode: "range", ...dateDefaultRange };
+      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...nextDateFilters }, { scrollToCatalog: false });
+      return;
+    }
+
+    if (target.closest("[data-date-mode-toggle]")) {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleDateSelectionMode();
       return;
     }
 
@@ -2621,8 +2735,11 @@ export function createRenderer(store) {
       pendingQueryBlurIntent = "clear";
       event.preventDefault();
       event.stopPropagation();
-      const { dateDefaultRange } = store.getSnapshot();
-      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...dateDefaultRange }, { scrollToCatalog: false });
+      const { filters, dateDefaultRange } = store.getSnapshot();
+      const nextDateFilters = filters.dateSelectionMode === "single"
+        ? { dateSelectionMode: "single", dateSingle: dateDefaultRange?.dateEnd || todayIso() }
+        : { dateSelectionMode: "range", ...dateDefaultRange };
+      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...nextDateFilters }, { scrollToCatalog: false });
       return;
     }
 
@@ -3491,6 +3608,12 @@ export function createRenderer(store) {
         return;
       }
 
+      const dateMoved = previewFloatingDateBy(shortcutKey === "a" ? -1 : 1, event.shiftKey ? "end" : "start");
+      if (dateMoved) {
+        event.preventDefault();
+        return;
+      }
+
       const rangeMoved = previewFloatingAxisRangeBy(shortcutKey === "a" ? -1 : 1, event.shiftKey ? "end" : "start");
       if (rangeMoved) {
         event.preventDefault();
@@ -3542,6 +3665,12 @@ export function createRenderer(store) {
     }
 
     if (event.isComposing || event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    if (floatingDateShortcutPending) {
+      commitFloatingDateShortcut();
+      event.preventDefault();
       return;
     }
 
@@ -3863,6 +3992,7 @@ export function createRenderer(store) {
       nodes.summaryContent?.classList.toggle("is-collapsed", !summaryOpen);
       nodes.summaryPanel?.classList.toggle("is-collapsed", !summaryOpen);
       latestFilterBounds = deriveFilterBounds(snapshot.songStates);
+      latestHistoryDates = deriveHistoryDates(snapshot.songStates);
       latestVisibleCount = snapshot.visibleSongs.length;
       renderFilterDraftPanel();
       renderFloatingFilterShell();
