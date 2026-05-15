@@ -50,7 +50,7 @@ const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "date"]);
 
 // DBR IR送信テスト
 const DBR_IR_IMPORT_TEST_URL = "https://dbr-difficulty.github.io/dbr_ir_from_logger.html";
-const DBR_IR_IMPORT_TEST_ORIGIN = "dbr-difficulty.github.io";
+const DBR_IR_IMPORT_TEST_ORIGIN = "https://dbr-difficulty.github.io";
 
 function openDbrIrImportPageWithJson(jsonText) {
   const targetUrl = new URL(DBR_IR_IMPORT_TEST_URL, window.location.href);
