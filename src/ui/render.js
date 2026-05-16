@@ -3309,7 +3309,7 @@ export function createRenderer(store) {
     if (isTextAxisMode(activeFilters.axisMode)) {
       store.clearTitleFilter();
       closeFloatingFilter({
-        preserveScroll: !canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog),
+        preserveScroll: !shouldScrollCatalogPanelUpward(),
       });
       return;
     }
@@ -3985,6 +3985,11 @@ export function createRenderer(store) {
   nodes.clearAllButton.addEventListener("click", () => {
     const confirmed = window.confirm("保存済みのプレー記録をすべて削除します。よろしいですか？");
     if (!confirmed) {
+      return;
+    }
+
+    const reconfirmed = window.confirm("この操作は取り消せません。本当にすべて削除しますか？");
+    if (!reconfirmed) {
       return;
     }
 
