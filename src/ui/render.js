@@ -336,10 +336,10 @@ function formatKatateFilterValue(value) {
   }
 
   if (numericValue === 13) {
-    return "12.10";
+    return "12-10";
   }
 
-  return numericValue.toFixed(1);
+  return numericValue.toFixed(1).replace(".", "-");
 }
 
 function updateSliderFill(slider) {

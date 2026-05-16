@@ -701,7 +701,11 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode)
     }
 
     if (axisMode === "katate" && Number(value) === 13) {
-      return "☆12.10";
+      return "☆12-10";
+    }
+
+    if (axisMode === "katate") {
+      return `☆${Number(value).toFixed(1).replace(".", "-")}`;
     }
 
     return `☆${String(value)}`;
