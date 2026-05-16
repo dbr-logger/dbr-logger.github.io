@@ -50,16 +50,24 @@ const AXIS_SHORTCUT_KEYS = {
 };
 const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "date"]);
 
-// DBR IR送信テスト
+// DBR IR送信
 const DBR_IR_IMPORT_TEST_URL = "https://dbr-difficulty.github.io/dbr_ir_from_logger.html";
 const DBR_IR_IMPORT_TEST_ORIGIN = "https://dbr-difficulty.github.io";
 
-function openDbrIrImportPageWithJson(jsonText) {
+function openDbrIrImportPage() {
   const targetUrl = new URL(DBR_IR_IMPORT_TEST_URL, window.location.href);
   const targetWindow = window.open(targetUrl.href, "_blank");
 
   if (!targetWindow) {
     window.alert("DBR IR受け取りページを開けませんでした。ポップアップブロックを確認してください。");
+    return null;
+  }
+
+  return targetWindow;
+}
+
+function sendJsonToDbrIrPage(targetWindow, jsonText) {
+  if (!targetWindow) {
     return;
   }
 
@@ -4053,14 +4061,26 @@ export function createRenderer(store) {
     store.clearAllRecords();
   });
 
-  // DBR IR送信テスト
-  nodes.sendJsonToIrTestButton?.addEventListener("click", () => {
+  // DBR IR送信
+  nodes.sendJsonToIrTestButton?.addEventListener("click", async () => {
+    const targetWindow = openDbrIrImportPage();
+    if (!targetWindow) {
+      return;
+    }
+
+    setButtonLoading(nodes.sendJsonToIrTestButton, true, "送信準備中...");
+    lockHeroButtonsExcept(nodes.sendJsonToIrTestButton);
+
     try {
+      await tryRefreshDifficultyTableForIo("DBR IR送信");
+
       const jsonText = JSON.stringify(store.getExportJson(), null, 2);
-      openDbrIrImportPageWithJson(jsonText);
+      sendJsonToDbrIrPage(targetWindow, jsonText);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "JSON送信テストに失敗しました。";
+      const message = error instanceof Error ? error.message : "DBR IR送信に失敗しました。";
       window.alert(message);
+    } finally {
+      clearHeroButtonStates();
     }
   });
 

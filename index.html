@@ -74,6 +74,8 @@
             <a href="./manual.html" target="_blank" rel="noopener noreferrer">マニュアル</a>
             <span aria-hidden="true"> / </span>
             <a href="https://dbr-difficulty.github.io/dbr_ir_upload.html" target="_blank" rel="noopener noreferrer">DBR IR</a>
+            <span aria-hidden="true"> / </span>
+            <button id="clear-all-button" class="hero-inline-link" type="button">データ全削除</button>
           </p>
         </div>
         <div class="hero-actions">
@@ -91,12 +93,11 @@
             </span>
           </button>
           <button id="csv-import-button" class="button button-secondary" type="button">CSV読み込み</button>
-          <button id="csv-export-button" class="button button-secondary" type="button">CSVを書き出す</button>
+          <button id="csv-export-button" class="button button-secondary" type="button">CSV書き出し</button>
           <button id="import-button" class="button button-secondary" type="button">JSON読み込み</button>
-          <button id="export-button" class="button button-secondary" type="button">JSONを書き出す</button>
-          <button type="button" id="send-json-to-ir-test">DBR IRへ送信テスト</button>
+          <button id="export-button" class="button button-secondary" type="button">JSON書き出し</button>
+          <button id="send-json-to-ir-test" class="button button-secondary" type="button">DBR IR送信</button>
           <button id="difficulty-import-button" class="button button-secondary" type="button">難易度表読み込み</button>
-          <button id="clear-all-button" class="button button-danger" type="button">データ全削除</button>
           <input id="csv-import-file-input" type="file" accept="text/csv,.csv" hidden />
           <input id="import-file-input" type="file" accept="application/json,.json" hidden />
         </div>

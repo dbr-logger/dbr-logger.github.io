@@ -198,6 +198,16 @@ td {
   line-height: 1.6;
 }
 
+.hero-inline-link {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  font: inherit;
+  padding: 0;
+  text-decoration: underline;
+}
+
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1132,7 +1142,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   gap: 4px;
   min-width: 0;
   min-height: 76px;
-  padding: 2px 12px 6px 14px;
+  padding: 0 12px 4px 14px;
 }
 
 .song-grid.is-list-view .song-card-title {
