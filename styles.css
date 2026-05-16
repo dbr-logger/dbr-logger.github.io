@@ -1827,7 +1827,6 @@ html[data-theme="dark"] .summary-toggle-button:hover {
   font-weight: 700;
   text-decoration: underline;
   padding: 0;
-  vertical-align: baseline;
 }
 
 .floating-filter-single-wrap {
@@ -1912,7 +1911,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 }
 
 .floating-filter-date-summary {
-  align-items: center;
+  align-items: baseline;
   display: flex;
   gap: 12px;
   justify-content: flex-start;
