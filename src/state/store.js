@@ -1856,39 +1856,6 @@ export function createStore() {
     return { ok: true, message: state.statusMessage };
   }
 
-  function deleteLatestRecord() {
-    if (!state.selectedTitle) {
-      return { ok: false, message: "曲を選択してください。" };
-    }
-
-    const selectedEntry = getCatalogEntries().find((item) => item.title === state.selectedTitle);
-    if (!selectedEntry) {
-      return { ok: false, message: "選択中の曲情報が見つかりません。" };
-    }
-
-    const now = Date.now();
-    const twelveHoursMs = 12 * 60 * 60 * 1000;
-    const candidates = state.records
-      .filter((record) => record.title === selectedEntry.title)
-      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-
-    if (candidates.length === 0) {
-      return { ok: false, message: `${selectedEntry.title} の記録はありません。` };
-    }
-
-    const latest = candidates[0];
-    if (now - new Date(latest.timestamp.replace(" ", "T")).getTime() > twelveHoursMs) {
-      return { ok: false, message: "12時間以上経過した記録は削除できません。" };
-    }
-
-    state.records = state.records.filter((record) => record.id !== latest.id);
-    state.statusMessage = `${selectedEntry.title} の前回の記録を削除しました。`;
-    invalidateCatalogSnapshot();
-    persist();
-    emit();
-    return { ok: true, message: state.statusMessage };
-  }
-
   function saveSongNote(note) {
     if (!state.selectedTitle) {
       return { ok: false, message: "曲を選択してください。" };
@@ -2333,27 +2300,12 @@ export function createStore() {
       ? [...selectedSong.history].sort((a, b) => sortRecords(b, a))
       : [];
 
-    const hasTodayRecord = (() => {
-      if (!selectedSong) {
-        return false;
-      }
-
-      const now = Date.now();
-      const twelveHoursMs = 12 * 60 * 60 * 1000;
-
-      return selectedHistory.some((record) => {
-        const recordTime = new Date(record.timestamp.replace(" ", "T")).getTime();
-        return now - recordTime <= twelveHoursMs;
-      });
-    })();
-
     return {
       ...state,
       ...catalogSnapshot,
       selectedSong,
       selectedCatalogKey: selectedCatalogItem ? getCatalogItemKey(selectedCatalogItem) : null,
       selectedHistory,
-      hasTodayRecord,
       difficultyTable: state.difficultyTable,
     };
   }
@@ -2370,7 +2322,6 @@ export function createStore() {
     selectSong,
     saveRecord,
     deleteRecord,
-    deleteLatestRecord,
     saveSongNote,
     importDifficultyTable,
     getExportJson,

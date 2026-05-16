@@ -217,37 +217,6 @@ function syncThemeToggleButton(button, theme) {
   button.title = isDark ? "ライトテーマに切り替え" : "ダークテーマに切り替え";
 }
 
-function createChevronIconMarkup(className) {
-  return `
-    <span class="${className}" aria-hidden="true">
-      <svg viewBox="0 0 20 20" focusable="false" aria-hidden="true">
-        <path d="M7.25 4.75L13.25 10L7.25 15.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
-      </svg>
-    </span>
-  `;
-}
-
-function syncSummaryToggleButton(button, isOpen) {
-  if (!(button instanceof HTMLButtonElement)) {
-    return;
-  }
-
-  button.innerHTML = createChevronIconMarkup("summary-toggle-icon");
-  button.setAttribute("aria-expanded", isOpen ? "true" : "false");
-  button.setAttribute("aria-label", isOpen ? "Overviewを折りたたむ" : "Overviewを展開する");
-  button.title = isOpen ? "Overviewを折りたたむ" : "Overviewを展開する";
-}
-
-function syncSummaryToggleText(button, isOpen) {
-  if (!(button instanceof HTMLButtonElement)) {
-    return;
-  }
-
-  button.setAttribute("aria-expanded", isOpen ? "true" : "false");
-  button.setAttribute("aria-label", isOpen ? "Overviewを折りたたむ" : "Overviewを展開する");
-  button.title = isOpen ? "Overviewを折りたたむ" : "Overviewを展開する";
-}
-
 function badge(label, className) {
   return `<span class="pill ${className}">${escapeHtml(label)}</span>`;
 }
@@ -1273,7 +1242,6 @@ export function createRenderer(store) {
   let dateFilterCommitTimer = null;
   let dateFilterKeyboardEditUntil = 0;
   let entryBpInputMode = loadEntryBpInputMode();
-  let summaryOpen = true;
   let summaryFiltersOpen = false;
   let floatingFilterOpen = false;
   let floatingAxisPreviewMode = null;
@@ -1985,10 +1953,7 @@ export function createRenderer(store) {
 
   const nodes = {
     summaryPanel: document.querySelector("#summary-cards")?.closest(".panel"),
-    summaryContent: document.querySelector("#summary-content"),
     summary: document.querySelector("#summary-cards"),
-    summaryToggleButton: document.querySelector("#summary-toggle-button"),
-    summaryToggleTextButton: document.querySelector("#summary-toggle-text-button"),
     summaryFiltersToggle: document.querySelector("#summary-filters-toggle"),
     summaryFiltersPanel: document.querySelector("#summary-filters-panel"),
     floatingAxisFilter: document.querySelector("#floating-axis-filter"),
@@ -2011,7 +1976,6 @@ export function createRenderer(store) {
     bpInputModeButtons: document.querySelectorAll("[data-bp-input-mode]"),
     scoreInput: document.querySelector("#score-input"),
     memoInput: document.querySelector("#memo-input"),
-    deleteTodayButton: document.querySelector("#delete-today-button"),
     backToCardButton: document.querySelector("#back-to-card-button"),
     difficultyImportButton: document.querySelector("#difficulty-import-button"),
     csvImportButton: document.querySelector("#csv-import-button"),
@@ -2107,9 +2071,6 @@ export function createRenderer(store) {
   nodes.lampInput.innerHTML = LAMP_OPTIONS.map((lamp) => `<option value="${escapeHtml(lamp)}">${escapeHtml(lamp)}</option>`).join("");
   syncEntryBpInputMode();
   syncThemeToggleButton(nodes.themeToggleButton, getCurrentTheme());
-  syncSummaryToggleButton(nodes.summaryToggleButton, summaryOpen);
-  syncSummaryToggleText(nodes.summaryToggleTextButton, summaryOpen);
-  nodes.summaryPanel?.classList.toggle("is-collapsed", !summaryOpen);
   nodes.recordDate.value = formatIsoDate(todayIso());
   requestAnimationFrame(() => {
     syncFloatingDockSideFromViewport();
@@ -2121,22 +2082,6 @@ export function createRenderer(store) {
     applyTheme(nextTheme);
     persistTheme(nextTheme);
     syncThemeToggleButton(nodes.themeToggleButton, nextTheme);
-  });
-
-  nodes.summaryToggleButton?.addEventListener("click", () => {
-    summaryOpen = !summaryOpen;
-    syncSummaryToggleButton(nodes.summaryToggleButton, summaryOpen);
-    syncSummaryToggleText(nodes.summaryToggleTextButton, summaryOpen);
-    nodes.summaryContent?.classList.toggle("is-collapsed", !summaryOpen);
-    nodes.summaryPanel?.classList.toggle("is-collapsed", !summaryOpen);
-  });
-
-  nodes.summaryToggleTextButton?.addEventListener("click", () => {
-    summaryOpen = !summaryOpen;
-    syncSummaryToggleButton(nodes.summaryToggleButton, summaryOpen);
-    syncSummaryToggleText(nodes.summaryToggleTextButton, summaryOpen);
-    nodes.summaryContent?.classList.toggle("is-collapsed", !summaryOpen);
-    nodes.summaryPanel?.classList.toggle("is-collapsed", !summaryOpen);
   });
 
   window.addEventListener("resize", () => {
@@ -3897,17 +3842,6 @@ export function createRenderer(store) {
     });
   });
 
-  nodes.deleteTodayButton.addEventListener("click", () => {
-    const result = store.deleteLatestRecord();
-    if (!result.ok) {
-      window.alert(result.message);
-      return;
-    }
-
-    clearEntryBpInputs();
-    nodes.scoreInput.value = "";
-  });
-
   nodes.backToCardButton?.addEventListener("click", () => {
     scrollSelectedCardIntoView();
   });
@@ -4156,8 +4090,6 @@ export function createRenderer(store) {
       if (summaryBandChart) {
         summaryBandChart.scrollTop = summaryBandScrollTop;
       }
-      nodes.summaryContent?.classList.toggle("is-collapsed", !summaryOpen);
-      nodes.summaryPanel?.classList.toggle("is-collapsed", !summaryOpen);
       latestFilterBounds = deriveFilterBounds(snapshot.songStates);
       latestHistoryDates = deriveHistoryDates(snapshot.songStates);
       latestVisibleCount = snapshot.visibleSongs.length;
@@ -4281,7 +4213,6 @@ export function createRenderer(store) {
         }
       }
 
-      nodes.deleteTodayButton.disabled = !snapshot.hasTodayRecord;
       if (nodes.backToCardButton) {
         nodes.backToCardButton.disabled = !selectedCardExists;
       }
