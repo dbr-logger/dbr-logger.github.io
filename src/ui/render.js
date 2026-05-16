@@ -1802,14 +1802,7 @@ export function createRenderer(store) {
   }
 
   function syncQueryScrollLockState() {
-    const activeFilters = filterDraft ?? store.getSnapshot().filters;
-    setQueryScrollLock(
-      floatingFilterOpen
-      && floatingQueryFocused
-      && isTextAxisMode(activeFilters.axisMode)
-      && isMobileViewport()
-      && isHoverNoneEnvironment(),
-    );
+    setQueryScrollLock(false);
   }
 
   function shouldCloseFloatingFilterAfterSliderCommit() {
