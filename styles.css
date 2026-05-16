@@ -1624,7 +1624,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 
 .field-title-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: flex-start;
   gap: 8px;
 }
