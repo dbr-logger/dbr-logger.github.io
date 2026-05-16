@@ -1974,32 +1974,32 @@ export function createStore() {
     return lampImproved || bpImproved || scoreImproved;
   }
 
-  function isJsonAggregateAlreadyReflected(record, currentFullState) {
+  function removeJsonAggregateReflectedValues(record, currentFullState) {
     const importedLamp = normalizeJsonImportLamp(record?.lamp);
     const importedBp = normalizeJsonImportNumber(record?.bp);
     const importedScore = normalizeJsonImportNumber(record?.score);
 
-    const hasLamp = importedLamp !== null;
-    const hasBp = importedBp !== null;
-    const hasScore = importedScore !== null;
+    const nextRecord = { ...record };
 
-    if (!hasLamp && !hasBp && !hasScore) {
-      return false;
+    if (importedLamp !== null && importedLamp === currentFullState?.bestLamp) {
+      nextRecord.lamp = "NO PLAY";
     }
 
-    if (hasLamp && importedLamp !== currentFullState?.bestLamp) {
-      return false;
+    if (importedBp !== null && importedBp === currentFullState?.bestBp) {
+      nextRecord.bp = null;
     }
 
-    if (hasBp && importedBp !== currentFullState?.bestBp) {
-      return false;
+    if (importedScore !== null && importedScore === currentFullState?.bestScore) {
+      nextRecord.score = null;
     }
 
-    if (hasScore && importedScore !== currentFullState?.bestScore) {
-      return false;
-    }
+    return nextRecord;
+  }
 
-    return true;
+  function hasJsonImportValue(record) {
+    return normalizeJsonImportLamp(record?.lamp) !== null
+      || normalizeJsonImportNumber(record?.bp) !== null
+      || normalizeJsonImportNumber(record?.score) !== null;
   }
 
   function importJsonData(payload, referenceDate = todayIso()) {
@@ -2012,11 +2012,11 @@ export function createStore() {
     const fullRecordIndex = buildRecordIndex(state.records);
 
     const importedRecords = importDbrJson(payload, referenceDate)
-      .filter((record) => {
+      .map((record) => {
         const selectedEntry = catalogEntryByTitle.get(record.title);
 
         if (!selectedEntry) {
-          return false;
+          return null;
         }
 
         const comparableState = deriveSongState(
@@ -2025,7 +2025,7 @@ export function createStore() {
         );
 
         if (!isJsonRecordImprovement(record, comparableState)) {
-          return false;
+          return null;
         }
 
         const currentFullState = deriveSongState(
@@ -2033,12 +2033,10 @@ export function createStore() {
           fullRecordIndex.get(selectedEntry.title) ?? [],
         );
 
-        if (isJsonAggregateAlreadyReflected(record, currentFullState)) {
-          return false;
-        }
-
-        return true;
+        const nextRecord = removeJsonAggregateReflectedValues(record, currentFullState);
+        return hasJsonImportValue(nextRecord) ? nextRecord : null;
       })
+      .filter(Boolean)
       .map((record) => {
         const selectedEntry = catalogEntryByTitle.get(record.title);
         const level = selectedEntry?.levelValue ?? record.level ?? null;
