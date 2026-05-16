@@ -214,7 +214,7 @@ function isNumericAxisMode(axisMode) {
 }
 
 function isAxisRangeModeEnabled(filters) {
-  return NUMERIC_AXIS_MODES.some((axisMode) => Boolean(filters.axisRangeModeByAxis?.[axisMode]));
+  return isNumericAxisMode(filters.axisMode) && Boolean(filters.axisRangeModeByAxis?.[filters.axisMode]);
 }
 
 function normalizeAxisMemory(axisMemory) {
@@ -226,11 +226,10 @@ function normalizeAxisMemory(axisMemory) {
 }
 
 function normalizeAxisRangeModeByAxis(rangeModeByAxis) {
-  const enabled = Boolean(rangeModeByAxis?.level) || Boolean(rangeModeByAxis?.splv) || Boolean(rangeModeByAxis?.katate);
   return {
-    level: enabled,
-    splv: enabled,
-    katate: enabled,
+    level: Boolean(rangeModeByAxis?.level),
+    splv: Boolean(rangeModeByAxis?.splv),
+    katate: Boolean(rangeModeByAxis?.katate),
   };
 }
 

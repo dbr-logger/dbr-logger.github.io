@@ -643,9 +643,7 @@ function formatDateRangeValue(filters) {
 
 function isAxisRangeMode(filters) {
   return isNumericAxisMode(filters.axisMode)
-    && (Boolean(filters.axisRangeModeByAxis?.level)
-      || Boolean(filters.axisRangeModeByAxis?.splv)
-      || Boolean(filters.axisRangeModeByAxis?.katate));
+    && Boolean(filters.axisRangeModeByAxis?.[filters.axisMode]);
 }
 
 function hasAxisCandidate(axisValues, value) {
@@ -2403,9 +2401,8 @@ export function createRenderer(store) {
       applyFiltersPreservingOverviewPosition({
         axisValue: "",
         axisRangeModeByAxis: {
-          level: true,
-          splv: true,
-          katate: true,
+          ...filters.axisRangeModeByAxis,
+          [axisMode]: true,
         },
         axisRanges: {
           ...filters.axisRanges,
@@ -2423,9 +2420,8 @@ export function createRenderer(store) {
     applyFiltersPreservingOverviewPosition({
       axisValue: returnValue === "" || hasAxisValue(axisMode, returnValue) ? returnValue : "",
       axisRangeModeByAxis: {
-        level: false,
-        splv: false,
-        katate: false,
+        ...filters.axisRangeModeByAxis,
+        [axisMode]: false,
       },
     }, { scrollToCatalog: false });
     return true;
