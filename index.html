@@ -184,12 +184,25 @@
                 </div>
                 <div class="form-row entry-score-row">
                   <div class="field">
-                    <span>BP</span>
-                    <input id="bp-input" type="number" min="0" inputmode="numeric" aria-label="BP" />
-                  </div>
-                  <div class="field">
                     <span>スコア</span>
                     <input id="score-input" type="number" min="0" inputmode="numeric" aria-label="スコア" />
+                  </div>
+                  <div class="field entry-bp-field" data-bp-input-panel="bp">
+                    <div class="field-title-row">
+                      <span>BP</span>
+                      <button class="entry-input-mode-link" type="button" data-bp-input-mode="split">BAD/POOR入力</button>
+                    </div>
+                    <input id="bp-input" type="number" min="0" inputmode="numeric" aria-label="BP" />
+                  </div>
+                  <div class="field entry-bp-field" data-bp-input-panel="split" hidden>
+                    <div class="field-title-row">
+                      <span>BAD / POOR</span>
+                      <button class="entry-input-mode-link" type="button" data-bp-input-mode="bp">BP入力</button>
+                    </div>
+                    <div class="entry-bp-split-inputs">
+                      <input id="bad-input" type="number" min="0" inputmode="numeric" aria-label="BAD" placeholder="BAD" />
+                      <input id="poor-input" type="number" min="0" inputmode="numeric" aria-label="POOR" placeholder="POOR" />
+                    </div>
                   </div>
                 </div>
                 <div class="field field-grow">

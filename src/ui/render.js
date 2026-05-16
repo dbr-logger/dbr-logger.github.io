@@ -30,6 +30,8 @@ const SUMMARY_LAMP_DOUBLE_CLICK_MS = 220;
 const SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD = 40;
 const DIFFICULTY_TABLE_STALE_MS = 12 * 60 * 60 * 1000;
 const THEME_STORAGE_KEY = "dbr-theme";
+const ENTRY_BP_INPUT_MODE_STORAGE_KEY = "dbr-entry-bp-input-mode";
+const ENTRY_BP_INPUT_MODES = new Set(["bp", "split"]);
 const AXIS_OPTIONS = [
   { value: "level", label: "Lv." },
   { value: "splv", label: "SPLv." },
@@ -135,6 +137,23 @@ function getCurrentTheme() {
 function persistTheme(theme) {
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // ignore
+  }
+}
+
+function loadEntryBpInputMode() {
+  try {
+    const mode = window.localStorage.getItem(ENTRY_BP_INPUT_MODE_STORAGE_KEY);
+    return ENTRY_BP_INPUT_MODES.has(mode) ? mode : "bp";
+  } catch {
+    return "bp";
+  }
+}
+
+function persistEntryBpInputMode(mode) {
+  try {
+    window.localStorage.setItem(ENTRY_BP_INPUT_MODE_STORAGE_KEY, mode);
   } catch {
     // ignore
   }
@@ -1247,6 +1266,7 @@ export function createRenderer(store) {
   let floatingAxisModeCommitTimer = null;
   let dateFilterCommitTimer = null;
   let dateFilterKeyboardEditUntil = 0;
+  let entryBpInputMode = loadEntryBpInputMode();
   let summaryOpen = true;
   let summaryFiltersOpen = false;
   let floatingFilterOpen = false;
@@ -1979,6 +1999,10 @@ export function createRenderer(store) {
     recordDate: document.querySelector("#record-date"),
     lampInput: document.querySelector("#lamp-input"),
     bpInput: document.querySelector("#bp-input"),
+    badInput: document.querySelector("#bad-input"),
+    poorInput: document.querySelector("#poor-input"),
+    bpInputPanels: document.querySelectorAll("[data-bp-input-panel]"),
+    bpInputModeButtons: document.querySelectorAll("[data-bp-input-mode]"),
     scoreInput: document.querySelector("#score-input"),
     memoInput: document.querySelector("#memo-input"),
     deleteTodayButton: document.querySelector("#delete-today-button"),
@@ -1999,7 +2023,83 @@ export function createRenderer(store) {
 
   nodes.summaryPanel?.classList.add("summary-overview-panel");
 
+  function syncEntryBpInputMode() {
+    nodes.bpInputPanels.forEach((panel) => {
+      const active = panel.dataset.bpInputPanel === entryBpInputMode;
+      panel.hidden = !active;
+    });
+
+    nodes.bpInputModeButtons.forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.bpInputMode === entryBpInputMode));
+    });
+  }
+
+  function setEntryBpInputMode(mode) {
+    if (!ENTRY_BP_INPUT_MODES.has(mode) || mode === entryBpInputMode) {
+      return;
+    }
+
+    entryBpInputMode = mode;
+    persistEntryBpInputMode(entryBpInputMode);
+    syncEntryBpInputMode();
+  }
+
+  function clearEntryBpInputs() {
+    if (nodes.bpInput.value !== "") {
+      nodes.bpInput.value = "";
+    }
+    if (nodes.badInput?.value !== "") {
+      nodes.badInput.value = "";
+    }
+    if (nodes.poorInput?.value !== "") {
+      nodes.poorInput.value = "";
+    }
+  }
+
+  function parseSplitBpInputValue(input, label) {
+    const rawValue = String(input?.value ?? "").trim();
+    if (rawValue === "") {
+      return { ok: true, value: null };
+    }
+
+    const value = Number(rawValue);
+    if (!Number.isInteger(value) || value < 0) {
+      return { ok: false, message: `${label}は0以上の整数で入力してください。` };
+    }
+
+    return { ok: true, value };
+  }
+
+  function getEntryBpValue() {
+    if (entryBpInputMode !== "split") {
+      return { ok: true, value: nodes.bpInput.value };
+    }
+
+    const badResult = parseSplitBpInputValue(nodes.badInput, "BAD");
+    if (!badResult.ok) {
+      return badResult;
+    }
+
+    const poorResult = parseSplitBpInputValue(nodes.poorInput, "POOR");
+    if (!poorResult.ok) {
+      return poorResult;
+    }
+
+    const hasBad = badResult.value !== null;
+    const hasPoor = poorResult.value !== null;
+
+    if (hasBad !== hasPoor) {
+      return { ok: false, message: "BADとPOORは両方入力するか、両方空にしてください。" };
+    }
+
+    return {
+      ok: true,
+      value: hasBad && hasPoor ? badResult.value + poorResult.value : "",
+    };
+  }
+
   nodes.lampInput.innerHTML = LAMP_OPTIONS.map((lamp) => `<option value="${escapeHtml(lamp)}">${escapeHtml(lamp)}</option>`).join("");
+  syncEntryBpInputMode();
   syncThemeToggleButton(nodes.themeToggleButton, getCurrentTheme());
   syncSummaryToggleButton(nodes.summaryToggleButton, summaryOpen);
   syncSummaryToggleText(nodes.summaryToggleTextButton, summaryOpen);
@@ -3717,7 +3817,7 @@ export function createRenderer(store) {
     }
   });  
 
-  [nodes.bpInput, nodes.scoreInput].forEach((input) => input?.addEventListener("wheel", (event) => {
+  [nodes.bpInput, nodes.badInput, nodes.poorInput, nodes.scoreInput].forEach((input) => input?.addEventListener("wheel", (event) => {
     if (document.activeElement === input) {
       event.preventDefault();
       input.blur();
@@ -3744,9 +3844,11 @@ export function createRenderer(store) {
     const fields = [
       nodes.lampInput,
       nodes.bpInput,
+      nodes.badInput,
+      nodes.poorInput,
       nodes.scoreInput,
       nodes.memoInput,
-    ].filter((field) => field && !field.disabled);
+    ].filter((field) => field && !field.disabled && !field.closest("[hidden]"));
 
     const currentIndex = fields.indexOf(target);
     if (currentIndex < 0) {
@@ -3764,19 +3866,31 @@ export function createRenderer(store) {
 
   nodes.recordForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    const bpResult = getEntryBpValue();
+    if (!bpResult.ok) {
+      window.alert(bpResult.message);
+      return;
+    }
+
     const result = store.saveRecord({
       lamp: nodes.lampInput.value,
-      bp: nodes.bpInput.value,
+      bp: bpResult.value,
       score: nodes.scoreInput.value,
       memo: nodes.memoInput.value,
     });
 
     if (result.ok) {
-      nodes.bpInput.value = "";
+      clearEntryBpInputs();
       nodes.scoreInput.value = "";
     } else {
       window.alert(result.message);
     }
+  });
+
+  nodes.bpInputModeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      setEntryBpInputMode(button.dataset.bpInputMode);
+    });
   });
 
   nodes.deleteTodayButton.addEventListener("click", () => {
@@ -3786,7 +3900,7 @@ export function createRenderer(store) {
       return;
     }
 
-    nodes.bpInput.value = "";
+    clearEntryBpInputs();
     nodes.scoreInput.value = "";
   });
 
@@ -4115,9 +4229,7 @@ export function createRenderer(store) {
         }
 
         if (selectedSongChanged) {
-          if (nodes.bpInput.value !== "") {
-            nodes.bpInput.value = "";
-          }
+          clearEntryBpInputs();
           if (nodes.scoreInput.value !== "") {
             nodes.scoreInput.value = "";
           }
@@ -4138,9 +4250,7 @@ export function createRenderer(store) {
         if (nodes.lampInput.value !== LAMP_OPTIONS[0]) {
           nodes.lampInput.value = LAMP_OPTIONS[0];
         }
-        if (nodes.bpInput.value !== "") {
-          nodes.bpInput.value = "";
-        }
+        clearEntryBpInputs();
         if (nodes.scoreInput.value !== "") {
           nodes.scoreInput.value = "";
         }

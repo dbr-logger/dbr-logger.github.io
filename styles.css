@@ -1573,14 +1573,44 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 }
 
 .entry-score-row #bp-input,
+.entry-score-row #bad-input,
+.entry-score-row #poor-input,
 .entry-score-row #score-input {
   min-width: 0;
   width: 100%;
 }
 
+.entry-bp-split-inputs {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.entry-input-mode-link {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.entry-input-mode-link:hover {
+  color: var(--accent);
+}
+
 .field {
   display: grid;
   gap: 8px;
+}
+
+.field[hidden] {
+  display: none;
 }
 
 .field-grow {
@@ -1594,7 +1624,7 @@ html[data-theme="dark"] .summary-toggle-button:hover {
 
 .field-title-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: flex-start;
   gap: 8px;
 }
