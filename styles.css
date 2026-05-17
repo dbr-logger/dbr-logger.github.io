@@ -888,7 +888,7 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
 .summary-band-label,
 .summary-band-total {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-weight: 700;
 }
 
