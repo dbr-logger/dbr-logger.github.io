@@ -861,9 +861,9 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
 }
 
 .summary-band-chart {
-  --summary-band-row-gap: 10px;
+  --summary-band-row-gap: 8px;
   --summary-band-row-height: 20px;
-  --summary-band-visible-rows: 16;
+  --summary-band-visible-rows: 14;
   display: grid;
   gap: var(--summary-band-row-gap);
 }
@@ -882,13 +882,13 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
   display: grid;
   gap: 12px;
   grid-template-columns: 64px minmax(0, 1fr) 36px;
-  min-height: var(--summary-band-row-height);
+  height: var(--summary-band-row-height);
 }
 
 .summary-band-label,
 .summary-band-total {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 

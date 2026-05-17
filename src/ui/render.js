@@ -772,7 +772,7 @@ function renderSummaryBands(summary) {
       </div>
     `;
   }).join("");
-  const scrollableClass = summary.bands.length >= 17 ? " is-scrollable" : "";
+  const scrollableClass = summary.bands.length >= 1000 ? " is-scrollable" : "";
 
   return `
     <div class="summary-chart-wrap">
@@ -1267,13 +1267,6 @@ export function createRenderer(store) {
   let floatingQueryFocused = false;
   let floatingQueryRestoreFocus = false;
   let pendingQueryBlurIntent = null;
-  let floatingClearPointerDown = false;
-  let floatingTogglePointerDown = false;
-  let floatingTogglePointerId = null;
-  let floatingTogglePointerElement = null;
-  let floatingRangeTogglePointerDown = false;
-  let suppressNextFloatingToggleClick = false;
-  let suppressNextRangeToggleClick = false;
   let floatingAxisSingleDragState = null;
   let floatingAxisRangeDragState = null;
   let lastSummaryLampClick = { lamp: "", timestamp: 0 };
@@ -2642,15 +2635,6 @@ export function createRenderer(store) {
 
     if (target.closest("[data-floating-toggle]")) {
       event.stopPropagation();
-      if (suppressNextFloatingToggleClick) {
-        suppressNextFloatingToggleClick = false;
-        return;
-      }
-
-      if (floatingTogglePointerDown) {
-        return;
-      }
-
       toggleFloatingFilter();
       return;
     }
@@ -2658,10 +2642,6 @@ export function createRenderer(store) {
     if (target.closest("[data-floating-clear]")) {
       event.preventDefault();
       event.stopPropagation();
-      if (floatingClearPointerDown) {
-        return;
-      }
-
       const activeFilters = filterDraft ?? store.getSnapshot().filters;
       clearFloatingAxisFilter();
       if (!isTextAxisMode(activeFilters.axisMode) && !isDateAxisMode(activeFilters.axisMode)) {
@@ -2692,15 +2672,6 @@ export function createRenderer(store) {
     if (target.closest("[data-axis-range-toggle]")) {
       event.preventDefault();
       event.stopPropagation();
-      if (suppressNextRangeToggleClick) {
-        suppressNextRangeToggleClick = false;
-        return;
-      }
-
-      if (floatingRangeTogglePointerDown) {
-        return;
-      }
-
       const activeFilters = filterDraft ?? store.getSnapshot().filters;
       toggleAxisRangeMode(activeFilters.axisMode);
       return;
@@ -2763,25 +2734,6 @@ export function createRenderer(store) {
       return;
     }  
 
-    const floatingToggleButton = target.closest("[data-floating-toggle]");
-    if (floatingToggleButton instanceof HTMLElement) {
-      floatingTogglePointerDown = true;
-      floatingTogglePointerId = event.pointerId;
-      floatingTogglePointerElement = floatingToggleButton;
-      pendingQueryBlurIntent = "toggle";
-      event.preventDefault();
-      event.stopPropagation();
-      suppressNextFloatingToggleClick = true;
-
-      try {
-        floatingToggleButton.setPointerCapture?.(event.pointerId);
-      } catch {
-        // ignore
-      }
-
-      return;
-    }
-
     if (target.closest("[data-axis-mode]")) {
       pendingQueryBlurIntent = "axis-mode";
     
@@ -2790,50 +2742,6 @@ export function createRenderer(store) {
         return;
       }
     
-      return;
-    }
-
-    if (target.closest("[data-floating-clear]")) {
-      floatingClearPointerDown = true;
-      pendingQueryBlurIntent = "clear";
-      event.preventDefault();
-      event.stopPropagation();
-      window.setTimeout(() => {
-        floatingClearPointerDown = false;
-      }, 0);
-      const activeFilters = filterDraft ?? store.getSnapshot().filters;
-      clearFloatingAxisFilter();
-      if (!isTextAxisMode(activeFilters.axisMode) && !isDateAxisMode(activeFilters.axisMode)) {
-        closeFloatingFilter({ preserveScroll: !shouldScrollCatalogPanelUpward() });
-      }
-      return;
-    }
-
-    if (target.closest("[data-date-reset]")) {
-      pendingQueryBlurIntent = "clear";
-      event.preventDefault();
-      event.stopPropagation();
-      const { filters, dateDefaultRange } = store.getSnapshot();
-      const nextDateFilters = filters.dateSelectionMode === "single"
-        ? { dateSelectionMode: "single", dateSingle: dateDefaultRange?.dateEnd || todayIso() }
-        : { dateSelectionMode: "range", ...dateDefaultRange };
-      applyFiltersPreservingOverviewPosition({ axisMode: "date", axisValue: "", ...nextDateFilters }, { scrollToCatalog: false });
-      return;
-    }
-
-    if (target.closest("[data-axis-range-toggle]")) {
-      floatingRangeTogglePointerDown = true;
-      event.preventDefault();
-      event.stopPropagation();
-      suppressNextRangeToggleClick = true;
-      window.setTimeout(() => {
-        floatingRangeTogglePointerDown = false;
-      }, 0);
-      window.setTimeout(() => {
-        suppressNextRangeToggleClick = false;
-      }, 300);
-      const activeFilters = filterDraft ?? store.getSnapshot().filters;
-      toggleAxisRangeMode(activeFilters.axisMode);
       return;
     }
 
@@ -2867,24 +2775,6 @@ export function createRenderer(store) {
   });
 
   nodes.floatingAxisFilter.addEventListener("pointerup", (event) => {
-    if (floatingTogglePointerDown && event.pointerId === floatingTogglePointerId) {
-      event.preventDefault();
-      event.stopPropagation();
-
-      try {
-        floatingTogglePointerElement?.releasePointerCapture?.(event.pointerId);
-      } catch {
-        // ignore
-      }
-
-      floatingTogglePointerDown = false;
-      floatingTogglePointerId = null;
-      floatingTogglePointerElement = null;
-
-      toggleFloatingFilter();
-      return;
-    }
-
     if (floatingAxisSingleDragState) {
       event.preventDefault();
 
@@ -2915,21 +2805,6 @@ export function createRenderer(store) {
   });
 
   nodes.floatingAxisFilter.addEventListener("pointercancel", (event) => {
-    if (floatingTogglePointerDown && event.pointerId === floatingTogglePointerId) {
-      event.preventDefault();
-
-      try {
-        floatingTogglePointerElement?.releasePointerCapture?.(event.pointerId);
-      } catch {
-        // ignore
-      }
-
-      floatingTogglePointerDown = false;
-      floatingTogglePointerId = null;
-      floatingTogglePointerElement = null;
-      return;
-    }
-
     if (floatingAxisSingleDragState) {
       event.preventDefault();
 
