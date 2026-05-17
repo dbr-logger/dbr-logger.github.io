@@ -19,9 +19,17 @@ function normalizeKanaForSearch(value) {
   return String(value || "").replace(/[\u3041-\u3096]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) + 0x60));
 }
 
+function normalizeSmartPunctuation(value) {
+  return String(value ?? "")
+    .replace(/[\u2018\u2019\u201b\u2032\u02bc\uff07]/g, "'")
+    .replace(/[\u201c\u201d\u201f\u2033\uff02]/g, "\"");
+}
+
 function normalizeSearchSurface(value) {
   return normalizeKanaForSearch(
-    decodeHtmlEntities(String(value ?? "").normalize("NFKC"))
+    normalizeSmartPunctuation(
+      decodeHtmlEntities(String(value ?? "").normalize("NFKC"))
+    )
   ).toLowerCase();
 }
 
