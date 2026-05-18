@@ -17,6 +17,18 @@ const LAMP_COLORS = {
   FC: "var(--lamp-fc)",
 };
 const getLampColor = (lamp) => LAMP_COLORS[lamp] ?? "transparent";
+const SCORE_RANK_COLORS = {
+  MAX: "var(--lamp-fc)",
+  AAA: "var(--lamp-fc)",
+  AA: "var(--lamp-exh)",
+  A: "var(--lamp-hard)",
+  B: "var(--lamp-clear)",
+  C: "var(--lamp-easy)",
+  D: "var(--lamp-assist)",
+  E: "var(--lamp-failed)",
+  F: "var(--lamp-no-play)",
+};
+const getScoreRankColor = (rank) => SCORE_RANK_COLORS[rank] ?? "transparent";
 const getSummaryBandLampColor = (lamp) => getLampColor(lamp);
 const getCardLampColor = (lamp) => lamp === "NO PLAY" ? "transparent" : getLampColor(lamp);
 const RECOMMEND_OPTIONS = [
@@ -27,13 +39,19 @@ const RECOMMEND_OPTIONS = [
   { value: "☆", label: "☆" },
 ];
 const CHART_DIFFICULTY_OPTIONS = ["B", "N", "H", "A", "L"];
+const DISPLAY_MODE_OPTIONS = [
+  { value: "clear", label: "クリア" },
+  { value: "score", label: "スコア" },
+];
+const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F"];
+const SCORE_RANK_FILTER_OPTIONS = ["F", "E", "D", "C", "B", "A", "AA", "AAA"];
 const SONG_DATA_FILTER_OPTIONS = [
   { value: "all", label: "すべて", inf: "all", acdelete: "all" },
   { value: "ac", label: "AC", inf: "all", acdelete: "no" },
   { value: "infinitas", label: "INFINITAS", inf: "yes", acdelete: "all" },
   { value: "acOnly", label: "ACのみ", inf: "no", acdelete: "no" },
   { value: "infinitasOnly", label: "INFINITASのみ", inf: "yes", acdelete: "yes" },
-  { value: "csDeleted", label: "CS/削除曲", inf: "no", acdelete: "yes" },
+  { value: "csDeleted", label: "CS/削除曲のみ", inf: "no", acdelete: "yes" },
 ];
 const SUMMARY_LAMP_DOUBLE_CLICK_MS = 220;
 const SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD = 40;
@@ -294,6 +312,28 @@ function formatBpPlaceholder(selectedSong) {
 
 function formatScore(value) {
   return value === null || value === undefined ? "-" : String(value);
+}
+
+function formatScoreRankDisplay(value) {
+  return value === null || value === undefined || value === "" ? "-" : String(value);
+}
+
+function getPrimaryResultBadge(song) {
+  return song?.displayMode === "score"
+    ? badge(formatScoreRankDisplay(song.scoreRank), "pill-lamp")
+    : badge(song.bestLamp, "pill-lamp");
+}
+
+function getBpOrScoreBadge(song) {
+  return song?.displayMode === "score"
+    ? badge(`${formatScoreRankDisplay(song.bestScoreLabel)}/${formatScoreRankDisplay(song.currentScoreLabel)}`, "pill-neutral")
+    : badge(`BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`, "pill-neutral");
+}
+
+function getBpOrScoreMetaText(song) {
+  return song?.displayMode === "score"
+    ? `${formatScoreRankDisplay(song.bestScoreLabel)}/${formatScoreRankDisplay(song.currentScoreLabel)}`
+    : `BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`;
 }
 
 function formatScorePlaceholder(selectedSong) {
@@ -768,9 +808,12 @@ function renderSummaryBands(summary) {
   }
 
   const rows = summary.bands.map((band) => {
-    const segmentOrder = [...LAMP_OPTIONS].reverse();
-    const segments = (band.total === 0 ? ["NO PLAY"] : segmentOrder).map((lamp) => {
-      const count = band.lampCounts[lamp] ?? 0;
+    const categoryOptions = summary.displayMode === "score" ? SCORE_RANK_OPTIONS : LAMP_OPTIONS;
+    const segmentOrder = summary.displayMode === "score" ? categoryOptions : [...categoryOptions].reverse();
+    const emptyKey = summary.displayMode === "score" ? "F" : "NO PLAY";
+    const getColor = summary.displayMode === "score" ? getScoreRankColor : getSummaryBandLampColor;
+    const segments = (band.total === 0 ? [emptyKey] : segmentOrder).map((key) => {
+      const count = band.lampCounts[key] ?? 0;
       if (count <= 0 && band.total !== 0) {
         return "";
       }
@@ -779,7 +822,7 @@ function renderSummaryBands(summary) {
       const segment = `
         <span
           class="summary-band-segment"
-          style="flex:${flexGrow} 1 0px;background:${getSummaryBandLampColor(lamp)}"
+          style="flex:${flexGrow} 1 0px;background:${getColor(key)}"
           aria-hidden="true"
         ></span>
       `;
@@ -813,17 +856,23 @@ function renderSummaryBands(summary) {
 
 function renderSummary(summaryContainer, summary, filters) {
   const lampFilterDisabled = isTextAxisMode(filters.axisMode);
+  const isScoreMode = filters.displayMode === "score";
+  const legendOptions = isScoreMode ? SCORE_RANK_FILTER_OPTIONS : LAMP_OPTIONS;
+  const selectedValues = isScoreMode
+    ? (filters.scoreRanks ?? SCORE_RANK_OPTIONS)
+    : filters.lamps;
+  const getLegendColor = isScoreMode ? getScoreRankColor : getLampColor;
 
-  const legend = LAMP_OPTIONS.map((lamp) => `
+  const legend = legendOptions.map((lamp) => `
     <button
-      class="summary-lamp-item ${filters.lamps.includes(lamp) ? "is-active" : "is-inactive"}"
+      class="summary-lamp-item ${selectedValues.includes(lamp) ? "is-active" : "is-inactive"}"
       type="button"
       data-summary-lamp="${escapeHtml(lamp)}"
-      aria-pressed="${filters.lamps.includes(lamp) ? "true" : "false"}"
+      aria-pressed="${selectedValues.includes(lamp) ? "true" : "false"}"
       ${lampFilterDisabled ? "disabled aria-disabled=\"true\"" : ""}
     >
       <div class="summary-lamp-main">
-        <span class="summary-lamp-dot" style="background:${getLampColor(lamp)}"></span>
+        <span class="summary-lamp-dot" style="background:${getLegendColor(lamp)}"></span>
         <span class="summary-lamp-label">${escapeHtml(lamp)}</span>
       </div>
       <div class="summary-lamp-values">
@@ -851,6 +900,9 @@ function renderDifficultyFilters(container, filters) {
     chartDifficulty: filters.axisMode === "date" || isTextAxisMode(filters.axisMode),
   };
   const selectedSongDataFilter = getSongDataFilterValue(filters);
+  const displayModeOptions = DISPLAY_MODE_OPTIONS.map((option) => `
+    <option value="${escapeHtml(option.value)}" ${filters.displayMode === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>
+  `).join("");
   const songDataOptions = SONG_DATA_FILTER_OPTIONS.map((option) => `
     <option value="${escapeHtml(option.value)}" ${selectedSongDataFilter === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>
   `).join("");
@@ -877,6 +929,14 @@ function renderDifficultyFilters(container, filters) {
   container.innerHTML = `
     <div class="filters-grid">
       <div class="field-stack">
+        <div class="field">
+          <span>表示項目</span>
+          <div class="field-select overview-select-wrap">
+            <select data-filter="displayMode">
+              ${displayModeOptions}
+            </select>
+          </div>
+        </div>
         <div class="field">
           <span>曲データ</span>
           <div class="field-select overview-select-wrap">
@@ -910,9 +970,9 @@ function renderDifficultyFilters(container, filters) {
           ${chartDifficultyMarkup}
         </div>
       </div>
-      <div class="filters-meta">
+      <!-- <div class="filters-meta">
         <button class="button button-tertiary" type="button" data-filter-action="reset">リセット</button>
-      </div>
+      </div> -->
     </div>
   `;
 }
@@ -1104,14 +1164,14 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
         ${selectedSong.isProposed ? badge("新規提案中", "pill-proposed") : ""}
         ${badge(formatDifficultyLabel(selectedSong), "pill-level")}
         ${formatSplvLabel(selectedSong) ? badge(formatSplvLabel(selectedSong), "pill-splv") : ""}
-        ${badge(selectedSong.bestLamp, "pill-lamp")}
+        ${getPrimaryResultBadge(selectedSong)}
       </div>
     </div>
     <h3 class="selected-song-title">${escapeHtml(selectedSong.title)}${katateTitleSuffixHtml}</h3>
     <p class="selected-song-note">${escapeHtml(formatSongMemoDisplay(selectedSong))}</p>
     <div class="selected-song-meta">
       <div class="selected-song-meta-row">
-        ${badge(`BP ${formatBp(selectedSong.bestBp)}/${formatBp(selectedSong.currentBp)}`, "pill-neutral")}
+        ${getBpOrScoreBadge(selectedSong)}
         <!-- ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")} -->
         ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}
         ${historyCountBadge}
@@ -1134,6 +1194,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
       ? (catalogItemKey === options.selectedCatalogKey ? "is-selected" : "")
       : (song.title === selectedTitle ? "is-selected" : "");
     const proposedClass = song.isProposed ? "is-proposed" : "";
+    const deletedRecordClass = song.isDeletedRecordScopedCard ? "is-deleted-record" : "";
     const encodedTitle = encodeURIComponent(song.title);
     const encodedCatalogItemKey = encodeURIComponent(catalogItemKey);
     const lampColor = getCardLampColor(song.bestLamp);
@@ -1151,13 +1212,13 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
       const listMetaText = [
         // song.isProposed ? "新規提案中" : "",
         formatSplvLabel(song),
-        `BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`,
+        getBpOrScoreMetaText(song),
         song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし",
         song.entryCount > 0 ? `履歴 ${song.entryCount} 件` : "",
       ].filter(Boolean).join(", ");
 
       return `
-        <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}" data-catalog-key="${encodedCatalogItemKey}" style="--card-lamp-color:${escapeHtml(lampColor)}">
+        <button class="song-card ${selectedClass} ${proposedClass} ${deletedRecordClass}" type="button" data-title="${encodedTitle}" data-catalog-key="${encodedCatalogItemKey}" style="--card-lamp-color:${escapeHtml(lampColor)}">
           <p class="song-card-title">
             <span class="song-card-list-title-tags">
               ${badge(formatDifficultyLabel(song), "pill-level")}
@@ -1173,20 +1234,20 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
     }
 
     return `
-      <button class="song-card ${selectedClass} ${proposedClass}" type="button" data-title="${encodedTitle}" data-catalog-key="${encodedCatalogItemKey}" style="--card-lamp-color:${escapeHtml(lampColor)}">
+      <button class="song-card ${selectedClass} ${proposedClass} ${deletedRecordClass}" type="button" data-title="${encodedTitle}" data-catalog-key="${encodedCatalogItemKey}" style="--card-lamp-color:${escapeHtml(lampColor)}">
         <div class="song-card-meta">
           <div class="song-card-meta-row">
             ${song.isProposed ? badge("新規提案中", "pill-proposed") : ""}
             ${badge(formatDifficultyLabel(song), "pill-level")}
             ${formatSplvLabel(song) ? badge(formatSplvLabel(song), "pill-splv") : ""}
-            ${badge(song.bestLamp, "pill-lamp")}
+            ${getPrimaryResultBadge(song)}
           </div>
         </div>
         <p class="song-card-title">${escapeHtml(song.title)}${katateTitleSuffixHtml}</p>
         <p class="song-card-note">${escapeHtml(formatSongMemoDisplay(song))}</p>
         <div class="song-card-meta">
           <div class="song-card-meta-row">
-            ${badge(`BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`, "pill-neutral")}
+            ${getBpOrScoreBadge(song)}
             <!-- ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")} -->
             ${badge(song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし", "pill-neutral")}
             ${historyCountBadge}
@@ -2218,10 +2279,12 @@ export function createRenderer(store) {
       axisRanges: currentFilters.axisRanges,
       axisLastRanges: currentFilters.axisLastRanges,
       axisSingleReturnValues: currentFilters.axisSingleReturnValues,
+      displayMode: readSelectFilter("displayMode", "clear"),
       inf: songDataFilter.inf,
       acdelete: songDataFilter.acdelete,
       recommend: selectedRecommend,
       chartDifficulties: selectedChartDifficulties,
+      scoreRanks: currentFilters.scoreRanks ? [...currentFilters.scoreRanks] : [...SCORE_RANK_OPTIONS],
       lamps: currentFilters.lamps ? [...currentFilters.lamps] : [...LAMP_OPTIONS],
       includeUnrated: readSelectFilter("includeUnrated"),
     };
@@ -2659,10 +2722,12 @@ export function createRenderer(store) {
       dateSingle: filterDraft?.dateSingle ?? todayIso(),
       dateStart: filterDraft?.dateStart ?? "",
       dateEnd: filterDraft?.dateEnd ?? "",
+      displayMode: "clear",
       inf: "all",
       acdelete: "all",
       recommend: ["", "△", "○", "◎", "☆"],
       chartDifficulties: ["B", "N", "H", "A", "L"],
+      scoreRanks: [...SCORE_RANK_OPTIONS],
       lamps: filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS],
       includeUnrated: "all",
     };
@@ -3197,6 +3262,15 @@ export function createRenderer(store) {
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
   }
+
+  function getActiveSummaryFilterConfig() {
+    const filters = filterDraft ?? store.getSnapshot().filters;
+    const isScoreMode = filters.displayMode === "score";
+    return {
+      key: isScoreMode ? "scoreRanks" : "lamps",
+      options: isScoreMode ? SCORE_RANK_OPTIONS : LAMP_OPTIONS,
+    };
+  }
   
   function deferDifficultyFilters(nextFilters, options = {}) {
     deferredFilterRevision += 1;
@@ -3244,40 +3318,43 @@ export function createRenderer(store) {
   }
 
   function toggleSummaryLampFilter(lamp) {
-    const currentLamps = filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS];
+    const { key, options } = getActiveSummaryFilterConfig();
+    const currentLamps = filterDraft?.[key] ? [...filterDraft[key]] : [...options];
     let nextLamps = currentLamps.includes(lamp)
       ? currentLamps.filter((value) => value !== lamp)
       : [...currentLamps, lamp];
 
     if (nextLamps.length === 0) {
-      nextLamps = [...LAMP_OPTIONS];
+      nextLamps = [...options];
     }
 
     filterDraft = {
       ...(filterDraft ?? store.getSnapshot().filters),
-      lamps: nextLamps,
+      [key]: nextLamps,
     };
     applySummaryLampVisualState(nextLamps);
-    deferDifficultyFilters({ lamps: nextLamps }, { scrollToCatalog: false });
+    deferDifficultyFilters({ [key]: nextLamps }, { scrollToCatalog: false });
   }
 
   function soloSummaryLampFilter(lamp) {
+    const { key } = getActiveSummaryFilterConfig();
     filterDraft = {
       ...(filterDraft ?? store.getSnapshot().filters),
-      lamps: [lamp],
+      [key]: [lamp],
     };
     applySummaryLampVisualState([lamp]);
-    deferDifficultyFilters({ lamps: [lamp] }, { scrollToCatalog: false });
+    deferDifficultyFilters({ [key]: [lamp] }, { scrollToCatalog: false });
   }
 
   function handleSummaryLampActivation(lamp, timestamp = performance.now()) {
+    const { key } = getActiveSummaryFilterConfig();
     if (lastSummaryLampClick.lamp === lamp && timestamp - lastSummaryLampClick.timestamp <= SUMMARY_LAMP_DOUBLE_CLICK_MS) {
       filterDraft = {
         ...(filterDraft ?? store.getSnapshot().filters),
-        lamps: [lamp],
+        [key]: [lamp],
       };
       applySummaryLampVisualState([lamp]);
-      deferDifficultyFilters({ lamps: [lamp] }, { scrollToCatalog: false });
+      deferDifficultyFilters({ [key]: [lamp] }, { scrollToCatalog: false });
       lastSummaryLampClick = { lamp: "", timestamp: 0 };
       return;
     }
@@ -3337,7 +3414,7 @@ export function createRenderer(store) {
     }
 
     const lamp = button.dataset.summaryLamp;
-    if (!lamp || !LAMP_OPTIONS.includes(lamp)) {
+    if (!lamp || !getActiveSummaryFilterConfig().options.includes(lamp)) {
       summaryLampPointerState = null;
       return;
     }
@@ -3395,7 +3472,7 @@ export function createRenderer(store) {
     summaryLampPointerState = null;
 
     const button = getSummaryLampButton(event.target);
-    if (!lamp || !LAMP_OPTIONS.includes(lamp)) {
+    if (!lamp || !getActiveSummaryFilterConfig().options.includes(lamp)) {
       return;
     }
 
@@ -3464,7 +3541,7 @@ export function createRenderer(store) {
     }
 
     const lamp = button.dataset.summaryLamp;
-    if (!lamp || !LAMP_OPTIONS.includes(lamp)) {
+    if (!lamp || !getActiveSummaryFilterConfig().options.includes(lamp)) {
       return;
     }
 
@@ -4053,7 +4130,7 @@ export function createRenderer(store) {
       renderHistory(nodes.history, snapshot.selectedHistory, store);
       latestChartHistory = snapshot.selectedHistory.slice().reverse();
       latestScoreChartHistory = latestChartHistory;
-      nodes.scoreChart.dataset.maxScore = snapshot.selectedSong?.notes ? String(snapshot.selectedSong.notes * 4) : "";
+      nodes.scoreChart.dataset.maxScore = snapshot.selectedSong?.scoreMax ? String(snapshot.selectedSong.scoreMax) : "";
       renderBpChart(nodes.chart, latestChartHistory);
       renderScoreChart(nodes.scoreChart, latestChartHistory);
 
@@ -4138,6 +4215,20 @@ export function createRenderer(store) {
         nodes.backToCardButton.disabled = !selectedCardExists;
       }
       if (nodes.catalogSortSelect) {
+        const isScoreMode = snapshot.filters.displayMode === "score";
+        const clearSortOption = nodes.catalogSortSelect.querySelector('option[value="clear"]');
+        const bestBpSortOption = nodes.catalogSortSelect.querySelector('option[value="bestBp"]');
+        const latestBpSortOption = nodes.catalogSortSelect.querySelector('option[value="latestBp"]');
+        if (clearSortOption instanceof HTMLOptionElement) {
+          clearSortOption.hidden = isScoreMode;
+          clearSortOption.disabled = isScoreMode;
+        }
+        if (bestBpSortOption instanceof HTMLOptionElement) {
+          bestBpSortOption.textContent = isScoreMode ? "自己ベスト" : "最小BP";
+        }
+        if (latestBpSortOption instanceof HTMLOptionElement) {
+          latestBpSortOption.textContent = isScoreMode ? "最新スコア" : "最新BP";
+        }
         nodes.catalogSortSelect.value = snapshot.sortMode;
       }
       if (nodes.catalogViewToggle) {

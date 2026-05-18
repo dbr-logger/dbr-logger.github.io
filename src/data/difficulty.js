@@ -55,6 +55,9 @@ function buildChartKey(entry) {
 }
 
 function normalizeDifficultyEntry(entry) {
+  const scratchText = normalizeString(entry.scratch);
+  const scratch = scratchText === "" ? null : Number(scratchText);
+
   return {
     title: normalizeString(entry.title),
     level: normalizeString(entry.level),
@@ -63,7 +66,7 @@ function normalizeDifficultyEntry(entry) {
     ver: normalizeString(entry.ver),
     bpm: normalizeString(entry.bpm),
     notes: Number(entry.notes) || 0,
-    scratch: Number(entry.scratch) || 0,
+    scratch: Number.isFinite(scratch) ? scratch : null,
     comment: normalizeString(entry.comment),
     inf: normalizeString(entry.inf),
     infpack: normalizeString(entry.infpack),

@@ -1159,6 +1159,10 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
   box-shadow: 0 0 32px rgba(13, 138, 148, 0.18);
 }
 
+.song-card.is-deleted-record {
+  opacity: 0.52;
+}
+
 .song-card-title {
   margin: 14px 0 12px;
   color: var(--text);
@@ -1440,10 +1444,6 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
   width: 100%;
 }
 
-.overview-select-wrap {
-  max-width: 240px;
-}
-
 .overview-select-wrap select,
 .entry-select-wrap select,
 .quickfilter-select-wrap select {
@@ -1631,7 +1631,7 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
 .field-stack {
   display: grid;
   gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, max-content));
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 
 .floating-axis-filter {
@@ -2213,17 +2213,7 @@ html[data-theme="dark"] .proposal-success-body a {
   }
 
   .field-stack {
-    grid-template-columns: repeat(auto-fit, minmax(180px, max-content));
-  }
-}
-
-@media (max-width: 520px) {
-  .overview-select-wrap {
-    max-width: none;
-  }
-
-  .field-stack {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
 }
 
