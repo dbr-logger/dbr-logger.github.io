@@ -26,6 +26,15 @@ const RECOMMEND_OPTIONS = [
   { value: "◎", label: "◎" },
   { value: "☆", label: "☆" },
 ];
+const CHART_DIFFICULTY_OPTIONS = ["B", "N", "H", "A", "L"];
+const SONG_DATA_FILTER_OPTIONS = [
+  { value: "all", label: "すべて", inf: "all", acdelete: "all" },
+  { value: "ac", label: "AC", inf: "all", acdelete: "no" },
+  { value: "infinitas", label: "INFINITAS", inf: "yes", acdelete: "all" },
+  { value: "acOnly", label: "ACのみ", inf: "no", acdelete: "no" },
+  { value: "infinitasOnly", label: "INFINITASのみ", inf: "yes", acdelete: "yes" },
+  { value: "csDeleted", label: "CS/削除曲", inf: "no", acdelete: "yes" },
+];
 const SUMMARY_LAMP_DOUBLE_CLICK_MS = 220;
 const SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD = 40;
 const DIFFICULTY_TABLE_STALE_MS = 12 * 60 * 60 * 1000;
@@ -122,6 +131,21 @@ function isDateAxisMode(axisMode) {
 
 function isNumericAxisMode(axisMode) {
   return axisMode === "level" || axisMode === "splv" || axisMode === "katate";
+}
+
+function getSongDataFilterOption(value) {
+  return SONG_DATA_FILTER_OPTIONS.find((option) => option.value === value)
+    ?? SONG_DATA_FILTER_OPTIONS[0];
+}
+
+function getSongDataFilterValue(filters) {
+  const inf = filters?.inf ?? "all";
+  const acdelete = filters?.acdelete ?? "all";
+  const option = SONG_DATA_FILTER_OPTIONS.find((candidate) => (
+    candidate.inf === inf && candidate.acdelete === acdelete
+  ));
+
+  return option?.value ?? "all";
 }
 
 function isDifficultyTableStale(updatedAt) {
@@ -821,11 +845,15 @@ function renderSummary(summaryContainer, summary, filters) {
 
 function renderDifficultyFilters(container, filters) {
   const fixedFilterDisabled = {
-    inf: filters.axisMode === "date",
-    acdelete: filters.axisMode === "date",
+    songData: filters.axisMode === "date",
     includeUnrated: filters.axisMode === "date" || isTextAxisMode(filters.axisMode),
     recommend: filters.axisMode === "date" || isTextAxisMode(filters.axisMode),
+    chartDifficulty: filters.axisMode === "date" || isTextAxisMode(filters.axisMode),
   };
+  const selectedSongDataFilter = getSongDataFilterValue(filters);
+  const songDataOptions = SONG_DATA_FILTER_OPTIONS.map((option) => `
+    <option value="${escapeHtml(option.value)}" ${selectedSongDataFilter === option.value ? "selected" : ""}>${escapeHtml(option.label)}</option>
+  `).join("");
   const recommendMarkup = RECOMMEND_OPTIONS.map((option) => {
     const checked = filters.recommend.includes(option.value) ? "checked" : "";
     return `
@@ -835,27 +863,25 @@ function renderDifficultyFilters(container, filters) {
       </label>
     `;
   }).join("");
+  const chartDifficultyMarkup = CHART_DIFFICULTY_OPTIONS.map((option) => {
+    const selectedChartDifficulties = filters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS;
+    const checked = selectedChartDifficulties.includes(option) ? "checked" : "";
+    return `
+      <label class="recommend-chip ${fixedFilterDisabled.chartDifficulty ? "is-disabled" : ""}">
+        <input type="checkbox" data-filter="chartDifficulty" value="${escapeHtml(option)}" ${checked} ${fixedFilterDisabled.chartDifficulty ? "disabled" : ""} />
+        <span>${escapeHtml(option)}</span>
+      </label>
+    `;
+  }).join("");
 
   container.innerHTML = `
     <div class="filters-grid">
       <div class="field-stack">
         <div class="field">
-          <span>INFINITAS</span>
+          <span>曲データ</span>
           <div class="field-select overview-select-wrap">
-            <select data-filter="inf" ${fixedFilterDisabled.inf ? "disabled" : ""}>
-              <option value="all" ${filters.inf === "all" ? "selected" : ""}>すべて</option>
-              <option value="yes" ${filters.inf === "yes" ? "selected" : ""}>収録あり</option>
-              <option value="no" ${filters.inf === "no" ? "selected" : ""}>収録なし</option>
-            </select>
-          </div>
-        </div>
-        <div class="field">
-          <span>AC収録</span>
-          <div class="field-select overview-select-wrap">
-            <select data-filter="acdelete" ${fixedFilterDisabled.acdelete ? "disabled" : ""}>
-              <option value="all" ${filters.acdelete === "all" ? "selected" : ""}>すべて</option>
-              <option value="no" ${filters.acdelete === "no" ? "selected" : ""}>収録あり</option>
-              <option value="yes" ${filters.acdelete === "yes" ? "selected" : ""}>収録なし</option>
+            <select data-filter="songData" ${fixedFilterDisabled.songData ? "disabled" : ""}>
+              ${songDataOptions}
             </select>
           </div>
         </div>
@@ -872,10 +898,16 @@ function renderDifficultyFilters(container, filters) {
       </div>
     </div>
     <div class="filters-footer">
-      <div class="recommend-group">
+      <div class="recommend-group ${fixedFilterDisabled.recommend ? "is-disabled" : ""}">
         <span class="recommend-label">おすすめ</span>
         <div class="recommend-options">
           ${recommendMarkup}
+        </div>
+      </div>
+      <div class="recommend-group chart-difficulty-group ${fixedFilterDisabled.chartDifficulty ? "is-disabled" : ""}">
+        <span class="recommend-label">譜面難易度</span>
+        <div class="recommend-options">
+          ${chartDifficultyMarkup}
         </div>
       </div>
       <div class="filters-meta">
@@ -1242,7 +1274,7 @@ export function createRenderer(store) {
   let dateFilterCommitTimer = null;
   let dateFilterKeyboardEditUntil = 0;
   let entryBpInputMode = loadEntryBpInputMode();
-  let summaryFiltersOpen = false;
+  let summaryFiltersOpen = true;
   let floatingFilterOpen = false;
   let floatingAxisPreviewMode = null;
   let floatingAxisPreviewValue = null;
@@ -2154,6 +2186,10 @@ export function createRenderer(store) {
     const selectedRecommend = recommendInputs.some((input) => input.disabled)
       ? [...(currentFilters.recommend ?? RECOMMEND_OPTIONS.map((option) => option.value))]
       : recommendInputs.filter((input) => input.checked).map((input) => input.value);
+    const chartDifficultyInputs = Array.from(panel.querySelectorAll('input[data-filter="chartDifficulty"]'));
+    const selectedChartDifficulties = chartDifficultyInputs.some((input) => input.disabled)
+      ? [...(currentFilters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS)]
+      : chartDifficultyInputs.filter((input) => input.checked).map((input) => input.value);
     const readSelectFilter = (name, fallback = "all") => {
       const select = panel.querySelector(`select[data-filter="${name}"]`);
       if (!(select instanceof HTMLSelectElement) || select.disabled) {
@@ -2162,6 +2198,13 @@ export function createRenderer(store) {
 
       return select.value;
     };
+    const songDataSelect = panel.querySelector('select[data-filter="songData"]');
+    const songDataFilter = (songDataSelect instanceof HTMLSelectElement && !songDataSelect.disabled)
+      ? getSongDataFilterOption(songDataSelect.value)
+      : {
+          inf: currentFilters.inf ?? "all",
+          acdelete: currentFilters.acdelete ?? "all",
+        };
 
     return {
       axisMode: currentFilters.axisMode ?? "level",
@@ -2175,9 +2218,10 @@ export function createRenderer(store) {
       axisRanges: currentFilters.axisRanges,
       axisLastRanges: currentFilters.axisLastRanges,
       axisSingleReturnValues: currentFilters.axisSingleReturnValues,
-      inf: readSelectFilter("inf"),
-      acdelete: readSelectFilter("acdelete"),
+      inf: songDataFilter.inf,
+      acdelete: songDataFilter.acdelete,
       recommend: selectedRecommend,
+      chartDifficulties: selectedChartDifficulties,
       lamps: currentFilters.lamps ? [...currentFilters.lamps] : [...LAMP_OPTIONS],
       includeUnrated: readSelectFilter("includeUnrated"),
     };
@@ -2618,6 +2662,7 @@ export function createRenderer(store) {
       inf: "all",
       acdelete: "all",
       recommend: ["", "△", "○", "◎", "☆"],
+      chartDifficulties: ["B", "N", "H", "A", "L"],
       lamps: filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS],
       includeUnrated: "all",
     };
@@ -2936,7 +2981,6 @@ export function createRenderer(store) {
     }
 
     if (target instanceof HTMLSelectElement && target.hasAttribute("data-axis-mode")) {
-      const shouldScrollToTitle = isTextAxisMode(target.value);
       const nextAxisMode = target.value;
       if (floatingAxisModeCommitTimer !== null) {
         window.clearTimeout(floatingAxisModeCommitTimer);
@@ -2968,9 +3012,6 @@ export function createRenderer(store) {
           }
         }
         applyFiltersPreservingOverviewPosition(nextAxisFilters);
-        if (shouldScrollToTitle && canAutoScrollElement(nodes.catalogPanel ?? nodes.catalog)) {
-          window.requestAnimationFrame(scrollCatalogPanelIntoView);
-        }
       }, 0);
     }
   });

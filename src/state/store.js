@@ -9,6 +9,7 @@ const { compareIsoDates, formatLocalDateTime, todayIso } = await import(`../util
 const { getSearchTextMatchRank, matchesSearchText } = await import(`../utils/search.js${MODULE_VERSION}`);
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
+const CHART_DIFFICULTY_OPTIONS = ["B", "N", "H", "A", "L"];
 const PAGE_SIZE = 100;
 const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "latest", "entryCount", "recommend", "memo"];
 const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
@@ -185,6 +186,14 @@ function normalizeRecommendSelection(values) {
   return [...new Set(values.filter((value) => RECOMMEND_OPTIONS.includes(value)))];
 }
 
+function normalizeChartDifficultySelection(values) {
+  if (!Array.isArray(values)) {
+    return [...CHART_DIFFICULTY_OPTIONS];
+  }
+
+  return [...new Set(values.filter((value) => CHART_DIFFICULTY_OPTIONS.includes(value)))];
+}
+
 function normalizeLampSelection(values) {
   if (!Array.isArray(values)) {
     return [...LAMP_OPTIONS];
@@ -195,6 +204,23 @@ function normalizeLampSelection(values) {
 
 function normalizeBooleanFilter(value) {
   return value === "yes" || value === "no" ? value : "all";
+}
+
+function normalizeSongDataFilterPair(infValue, acdeleteValue) {
+  const inf = normalizeBooleanFilter(infValue);
+  const acdelete = normalizeBooleanFilter(acdeleteValue);
+  const isSupportedPair = (
+    (inf === "all" && acdelete === "all")
+    || (inf === "all" && acdelete === "no")
+    || (inf === "yes" && acdelete === "all")
+    || (inf === "no" && acdelete === "no")
+    || (inf === "yes" && acdelete === "yes")
+    || (inf === "no" && acdelete === "yes")
+  );
+
+  return isSupportedPair
+    ? { inf, acdelete }
+    : { inf: "all", acdelete: "all" };
 }
 
 function normalizeUnratedFilter(value) {
@@ -310,6 +336,7 @@ function normalizeRangePair(minValue, maxValue) {
 
 function normalizeStoredFilters(filters) {
   const dateRange = normalizeDateRange(filters?.dateStart, filters?.dateEnd);
+  const songDataFilter = normalizeSongDataFilterPair(filters?.inf, filters?.acdelete);
 
   return {
     axisMode: normalizeAxisMode(filters?.axisMode),
@@ -324,9 +351,10 @@ function normalizeStoredFilters(filters) {
     axisLastRanges: normalizeAxisRanges(filters?.axisLastRanges),
     axisSingleReturnValues: normalizeAxisSingleReturnValues(filters?.axisSingleReturnValues),
     recommend: normalizeRecommendSelection(filters?.recommend),
+    chartDifficulties: normalizeChartDifficultySelection(filters?.chartDifficulties),
     lamps: normalizeLampSelection(filters?.lamps),
-    inf: normalizeBooleanFilter(filters?.inf),
-    acdelete: normalizeBooleanFilter(filters?.acdelete),
+    inf: songDataFilter.inf,
+    acdelete: songDataFilter.acdelete,
     includeUnrated: normalizeUnratedFilter(filters?.includeUnrated),
   };
 }
@@ -1133,6 +1161,7 @@ export function createStore() {
       axisLastRanges: normalizeAxisRanges(),
       axisSingleReturnValues: normalizeAxisSingleReturnValues(),
       recommend: [...RECOMMEND_OPTIONS],
+      chartDifficulties: [...CHART_DIFFICULTY_OPTIONS],
       lamps: [...LAMP_OPTIONS],
       inf: "all",
       acdelete: "all",
@@ -1290,6 +1319,7 @@ export function createStore() {
       acdelete: sourceFilters.acdelete,
       includeUnrated: sourceFilters.includeUnrated,
       recommend: [...sourceFilters.recommend],
+      chartDifficulties: [...(sourceFilters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS)],
     };
   }  
 
@@ -1375,6 +1405,10 @@ export function createStore() {
     }
 
     if (filters.axisMode !== "date" && !filters.recommend.includes(entry.recommend)) {
+      return false;
+    }
+
+    if (filters.axisMode !== "date" && !(filters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS).includes(splitTitleAndSuffix(entry.title).suffix)) {
       return false;
     }
 
@@ -1617,11 +1651,17 @@ export function createStore() {
         ? normalizeAxisSingleReturnValues(nextFilters.axisSingleReturnValues)
         : state.filters.axisSingleReturnValues,
       recommend: nextFilters.recommend ? normalizeRecommendSelection(nextFilters.recommend) : state.filters.recommend,
+      chartDifficulties: nextFilters.chartDifficulties
+        ? normalizeChartDifficultySelection(nextFilters.chartDifficulties)
+        : state.filters.chartDifficulties,
       lamps: nextFilters.lamps ? normalizeLampSelection(nextFilters.lamps) : state.filters.lamps,
       inf: nextFilters.inf ? normalizeBooleanFilter(nextFilters.inf) : state.filters.inf,
       acdelete: nextFilters.acdelete ? normalizeBooleanFilter(nextFilters.acdelete) : state.filters.acdelete,
       includeUnrated: normalizeUnratedFilter(nextFilters.includeUnrated ?? state.filters.includeUnrated),
     };
+    const songDataFilter = normalizeSongDataFilterPair(nextStateFilters.inf, nextStateFilters.acdelete);
+    nextStateFilters.inf = songDataFilter.inf;
+    nextStateFilters.acdelete = songDataFilter.acdelete;
 
     if (nextStateFilters.includeUnrated === "unrated" && nextStateFilters.axisMode === "level") {
       nextStateFilters.axisValue = "";
