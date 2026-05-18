@@ -421,6 +421,7 @@ export function renderScoreChart(container, history) {
           { value: theoreticalMax * (8 / 9) },
           { value: theoreticalMax * (7 / 9) },
           { value: theoreticalMax * (6 / 9) },
+          { value: theoreticalMax * (0 / 9) },
         ]
       : [],
   });
