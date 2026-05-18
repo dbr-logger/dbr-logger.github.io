@@ -182,6 +182,12 @@ function buildFormFields(type, entry) {
         </div>
         <small class="proposal-note">※譜面傾向、攻略情報などなんでも（表に反映されます）</small>
       </div>
+      <div class="proposal-field">
+        <div class="proposal-stack-label field"><span>備考（任意）</span>
+          <textarea class="proposal-textarea" name="note_new" rows="3" aria-label="備考（任意）"></textarea>
+        </div>
+        <small class="proposal-note">※提案内容の補足など（表に反映されません）</small>
+      </div>
     `;
   }
 
@@ -340,6 +346,7 @@ async function handleProposalSubmit(formEl, type, entry, today) {
       entry.acdelete ? "○" : "",
       fd.comment_new ?? "",
       infPack,
+      fd.note_new ?? "",
       "new",
     ];
     sheetUrl = "https://docs.google.com/spreadsheets/d/1R-bgS7CZ1BBTzsk4KRKRSmBAZWNotZnQLfWtZFQr-Ek/edit?gid=1709558806#gid=1709558806";
