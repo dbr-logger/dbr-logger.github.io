@@ -359,16 +359,22 @@ function formatBpmTitleSuffix(song) {
   return `BPM${bpm}`;
 }
 
-function formatSortTitleSuffix(song, sortMode) {
+function formatSortTitleSuffix(song, sortMode, axisMode = "") {
+  const suffixes = [];
+
   if (sortMode === "katate") {
-    return formatKatateTitleSuffix(song);
+    suffixes.push(formatKatateTitleSuffix(song));
   }
 
   if (sortMode === "bpm") {
-    return formatBpmTitleSuffix(song);
+    suffixes.push(formatBpmTitleSuffix(song));
   }
 
-  return "";
+  if (axisMode === "katate" && sortMode !== "katate") {
+    suffixes.push(formatKatateTitleSuffix(song));
+  }
+
+  return suffixes.filter(Boolean).map((suffix) => `(${suffix})`).join(" ");
 }
 
 function formatRecommendDisplay(recommend) {
@@ -1363,10 +1369,10 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
   const historyCountBadge = selectedSong.entryCount > 0
     ? badge(`履歴 ${selectedSong.entryCount} 件`, "pill-neutral")
     : "";
-  const katateTitleSuffix = formatSortTitleSuffix(selectedSong, options.sortMode);
+  const katateTitleSuffix = formatSortTitleSuffix(selectedSong, options.sortMode, options.axisMode);
   const katateTitleSuffixHtml = katateTitleSuffix
-    ? `<span class="song-card-title-katate">(${escapeHtml(katateTitleSuffix)})</span>`
-    : "";  
+    ? `<span class="song-card-title-katate">${escapeHtml(katateTitleSuffix)}</span>`
+    : "";
 
   selectedSongContainer.innerHTML = `
     <p class="eyebrow selected-song-eyebrow">Selected Song</p>
@@ -1409,9 +1415,9 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
     const historyCountBadge = song.entryCount > 0
       ? badge(`履歴 ${song.entryCount} 件`, "pill-neutral")
       : "";
-    const katateTitleSuffix = formatSortTitleSuffix(song, options.sortMode);
+    const katateTitleSuffix = formatSortTitleSuffix(song, options.sortMode, options.axisMode);
     const katateTitleSuffixHtml = katateTitleSuffix
-      ? `<span class="song-card-title-katate">(${escapeHtml(katateTitleSuffix)})</span>`
+      ? `<span class="song-card-title-katate">${escapeHtml(katateTitleSuffix)}</span>`
       : "";
 
     if (options.viewMode === "list") {
@@ -1584,7 +1590,11 @@ export function createRenderer(store) {
   }
 
   function getScrollOffset() {
-    return 78;
+    return isMobileViewport() ? 68 : 78;
+  }
+
+  function getFloatingFilterInset() {
+    return isMobileViewport() ? 14 : 16;
   }
 
   function scrollElementIntoView(element, offset = getScrollOffset()) {
@@ -1723,7 +1733,8 @@ export function createRenderer(store) {
 
     const beforeRect = overviewPanel.getBoundingClientRect();
     const isOverviewAboveViewport = beforeRect.top < 0;
-    const shouldPreserve = beforeRect.top < 78;
+    const scrollOffset = getScrollOffset();
+    const shouldPreserve = beforeRect.top < scrollOffset;
 
     store.setDifficultyFilters(nextFilters);
 
@@ -1738,8 +1749,8 @@ export function createRenderer(store) {
       }
 
       const clampedRect = overviewPanel.getBoundingClientRect();
-      if (clampedRect.top > 78 && Math.abs(clampedRect.top - 78) >= 1) {
-        window.scrollBy(0, clampedRect.top - 78);
+      if (clampedRect.top > scrollOffset && Math.abs(clampedRect.top - scrollOffset) >= 1) {
+        window.scrollBy(0, clampedRect.top - scrollOffset);
       }
     }
 
@@ -2120,7 +2131,7 @@ export function createRenderer(store) {
 
     const rect = nodes.floatingAxisFilter.getBoundingClientRect();
     nodes.floatingAxisFilter.style.position = "";
-    nodes.floatingAxisFilter.style.top = `${Math.max(16, rect.top)}px`;
+    nodes.floatingAxisFilter.style.top = `${Math.max(getFloatingFilterInset(), rect.top)}px`;
     nodes.floatingAxisFilter.style.bottom = "auto";
   }
 
@@ -2130,11 +2141,12 @@ export function createRenderer(store) {
     }
 
     const rect = nodes.floatingAxisFilter.getBoundingClientRect();
+    const inset = getFloatingFilterInset();
     nodes.floatingAxisFilter.style.position = "absolute";
     nodes.floatingAxisFilter.style.top = `${window.scrollY + rect.top}px`;
     nodes.floatingAxisFilter.style.bottom = "auto";
-    nodes.floatingAxisFilter.style.left = "16px";
-    nodes.floatingAxisFilter.style.right = "16px";
+    nodes.floatingAxisFilter.style.left = `${inset}px`;
+    nodes.floatingAxisFilter.style.right = `${inset}px`;
     nodes.floatingAxisFilter.style.width = "auto";
   }
 
@@ -4380,6 +4392,7 @@ export function createRenderer(store) {
         viewMode: snapshot.catalogViewMode,
         selectedCatalogKey: snapshot.selectedCatalogKey,
         sortMode: snapshot.sortMode,
+        axisMode: snapshot.filters.axisMode,
       });
       renderPagination(nodes.catalogPaginationTop, snapshot.pagination, {
         showSortDirectionToggle: true,
@@ -4389,6 +4402,7 @@ export function createRenderer(store) {
       renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
       renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs, {
         sortMode: snapshot.sortMode,
+        axisMode: snapshot.filters.axisMode,
       });
       renderProposalButton(
         nodes.selectedSong,

@@ -2502,6 +2502,350 @@ html[data-theme="dark"] .proposal-success-body a {
 
 }
 
+@media (max-width: 720px) {
+  body {
+    font-size: 0.94rem;
+  }
+
+  .app-shell,
+  .layout,
+  .stack,
+  .layout-two-column {
+    gap: 16px;
+  }
+
+  .app-shell {
+    padding: 14px;
+  }
+
+  .panel {
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .panel-header {
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .panel-header > div:first-child {
+    gap: 6px;
+  }
+
+  .eyebrow {
+    font-size: 0.74rem;
+    margin-bottom: 6px;
+  }
+
+  .hero-copy,
+  .hero-note,
+  .chart-note,
+  .catalog-meta,
+  .form-note,
+  .status-banner,
+  .empty-state {
+    font-size: 0.86rem;
+  }
+
+  .theme-toggle-button {
+    height: 40px;
+    min-height: 40px !important;
+    min-width: 40px !important;
+    right: 16px;
+    top: 12px;
+    width: 40px !important;
+  }
+
+  .hero h1 {
+    font-size: clamp(1.8rem, 8vw, 2.4rem);
+    margin-top: 20px;
+  }
+
+  .hero-actions {
+    gap: 8px;
+  }
+
+  .hero-actions .button {
+    min-height: 50px;
+    padding: 8px 12px;
+  }
+
+  .button {
+    padding: 10px 15px;
+  }
+
+  .catalog-header .header-select {
+    gap: 5px;
+  }
+
+  .catalog-header .header-select span,
+  .header-select span {
+    font-size: 0.74rem;
+  }
+
+  .header-select select,
+  .catalog-view-toggle {
+    min-height: 38px;
+    height: 38px;
+  }
+
+  .catalog-view-toggle {
+    width: 38px;
+  }
+
+  .catalog-view-toggle svg {
+    height: 19px;
+    width: 19px;
+  }
+
+  .filters-panel {
+    gap: 14px;
+    margin-top: 14px;
+    padding: 15px;
+  }
+
+  .filters-grid,
+  .form-row,
+  .field-stack {
+    gap: 12px;
+  }
+
+  .filters-footer,
+  .recommend-options,
+  .filters-meta {
+    gap: 10px;
+  }
+
+  .recommend-label,
+  .filters-meta,
+  .pagination-label {
+    font-size: 0.84rem;
+  }
+
+  .recommend-chip span {
+    min-width: 40px;
+    padding: 8px 11px;
+  }
+
+  .field {
+    gap: 6px;
+  }
+
+  .field span {
+    font-size: 0.8rem;
+  }
+
+  .field input,
+  .field select,
+  .floating-filter-search input {
+    height: 42px;
+    line-height: 40px;
+    min-height: 42px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .field-select::after {
+    right: 14px;
+    top: 46px;
+  }
+
+  .entry-bp-split-inputs {
+    gap: 7px;
+  }
+
+  .entry-input-mode-link,
+  .floating-filter-inline-action,
+  .floating-filter-date-clear {
+    font-size: 0.78rem;
+  }
+
+  .floating-axis-filter {
+    left: 14px;
+    right: 14px;
+  }
+
+  .floating-axis-filter.is-docked-top,
+  .floating-axis-filter.is-docked-bottom {
+    top: 14px;
+  }
+
+  .floating-filter-actions:has(.floating-filter-clear) {
+    gap: 8px;
+  }
+
+  .floating-filter-toggle,
+  .floating-filter-clear {
+    font-size: 0.8rem;
+    min-height: 46px;
+    padding-inline: 15px;
+  }
+
+  .floating-filter-panel {
+    border-radius: 22px;
+    gap: 15px;
+    padding: 16px;
+  }
+
+  .floating-filter-panel-header {
+    gap: 12px;
+  }
+
+  .floating-filter-panel-header h3 {
+    font-size: 1.12rem;
+  }
+
+  .floating-filter-slider-block,
+  .floating-filter-search,
+  .floating-filter-date-block,
+  .floating-filter-date-grid {
+    gap: 8px;
+  }
+
+  .floating-filter-search span,
+  .floating-filter-value,
+  .floating-filter-date-summary {
+    font-size: 0.86rem;
+  }
+
+  .summary-panel {
+    gap: 20px;
+  }
+
+  .summary-chart-wrap {
+    gap: 12px;
+  }
+
+  .summary-chart-heading {
+    gap: 8px;
+  }
+
+  .summary-chart-heading span,
+  .summary-filter-caption {
+    font-size: 0.82rem;
+  }
+
+  .summary-chart-heading strong {
+    font-size: 0.98rem;
+  }
+
+  .summary-band-chart {
+    --summary-band-row-gap: 6px;
+    --summary-band-row-height: 18px;
+  }
+
+  .summary-band-row {
+    gap: 10px;
+    grid-template-columns: 56px minmax(0, 1fr) 34px;
+  }
+
+  .summary-band-label,
+  .summary-band-total {
+    font-size: 0.8rem;
+  }
+
+  .summary-band-track {
+    height: 14px;
+  }
+
+  .summary-lamp-item {
+    gap: 8px;
+    padding: 8px 11px;
+  }
+
+  .summary-lamp-label {
+    font-size: 0.84rem;
+  }
+
+  .summary-lamp-values {
+    gap: 7px;
+  }
+
+  .summary-lamp-values strong {
+    font-size: 0.94rem;
+  }
+
+  .summary-lamp-values span {
+    font-size: 0.74rem;
+  }
+
+  .song-card {
+    padding: 14px 14px 14px 18px;
+  }
+
+  .selected-song-card {
+    margin-bottom: 14px;
+    padding: 16px 16px 16px 20px;
+  }
+
+  .song-card-title {
+    font-size: 0.96rem;
+    margin: 12px 0 10px;
+  }
+
+  .selected-song-card h3 {
+    font-size: 1.16rem;
+    margin: 8px 0 10px;
+  }
+
+  .song-card-note,
+  .selected-song-note {
+    font-size: 0.74rem;
+  }
+
+  .song-card-note {
+    margin: -5px 0 10px;
+  }
+
+  .selected-song-card .selected-song-note {
+    margin: -2px 0 10px;
+  }
+
+  .song-card-meta,
+  .selected-song-meta {
+    gap: 7px;
+  }
+
+  .song-card-meta-row,
+  .selected-song-meta-row {
+    gap: 7px;
+  }
+
+  .pill {
+    font-size: 0.76rem;
+    gap: 5px;
+    padding: 5px 9px;
+  }
+
+  .song-grid.is-list-view .song-card {
+    gap: 3px;
+    min-height: 68px;
+    padding: 0 11px 3px 13px;
+  }
+
+  .song-grid.is-list-view .song-card-title {
+    gap: 7px;
+  }
+
+  .song-grid.is-list-view .song-card-note {
+    gap: 0.65em;
+  }
+
+  .pagination-bar {
+    margin-bottom: 12px;
+    margin-top: 12px;
+  }
+
+  .pagination-controls {
+    gap: 5px;
+  }
+
+  .pagination-controls .button {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+}
+
 .manual-page {
   padding: 32px 16px 48px;
 }
@@ -2853,7 +3197,7 @@ html[data-theme="dark"] .pill-proposed {
 @media (max-width: 720px) {
   /* モバイルレイアウトの場合のフローティングボタン領域を確保 */
   .panel-hero {
-    margin-top: 66px;
+    margin-top: 56px;
   }
 }
 
