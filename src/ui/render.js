@@ -4100,6 +4100,7 @@ export function createRenderer(store) {
     if (result.ok) {
       clearEntryBpInputs();
       nodes.scoreInput.value = "";
+      window.alert(result.notificationMessage || "保存しました。");
     } else {
       window.alert(result.message);
     }

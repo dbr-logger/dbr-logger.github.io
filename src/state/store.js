@@ -361,6 +361,30 @@ function getScoreRankInfo(score, songOrRecord) {
   };
 }
 
+function formatSaveScoreChangeValue(score, songOrRecord) {
+  if (!Number.isFinite(score)) {
+    return "-(-)";
+  }
+
+  const rate = getScoreRate(score, songOrRecord);
+  if (rate === null) {
+    return String(score);
+  }
+
+  return `${score}(${(rate * 100).toFixed(2)}%)`;
+}
+
+function formatSaveBpChangeValue(bp) {
+  return Number.isFinite(bp) ? String(bp) : "-";
+}
+
+function buildSaveNotification(lines) {
+  const visibleLines = lines.filter(Boolean);
+  return visibleLines.length
+    ? `保存しました。\n\n${visibleLines.join("\n")}`
+    : "保存しました。";
+}
+
 function normalizeRecommendSelection(values) {
   if (!Array.isArray(values)) {
     return [...RECOMMEND_OPTIONS];
@@ -2431,6 +2455,15 @@ export function createStore() {
       return saveSongNote(normalizedMemo);
     }
 
+    const previousHistory = buildRecordIndex(state.records).get(selectedEntry.title) ?? [];
+    const previousState = deriveSongState(selectedEntry, previousHistory);
+    const notificationLines = [
+      `${previousState.bestLamp} → ${lamp}`,
+      `${formatSaveScoreChangeValue(previousState.bestScore, selectedEntry)} → ${formatSaveScoreChangeValue(normalizedScore, selectedEntry)}`,
+      `BP ${formatSaveBpChangeValue(previousState.bestBp)} → ${formatSaveBpChangeValue(normalizedBp)}`,
+      `メモ：${normalizedMemo}`,
+    ];
+
     if (hasMemo) {
       state.songNotes[selectedEntry.title] = normalizedMemo;
     } else {
@@ -2460,7 +2493,7 @@ export function createStore() {
     invalidateCatalogSnapshot();
     persist();
     emit();
-    return { ok: true, message: state.statusMessage };
+    return { ok: true, message: state.statusMessage, notificationMessage: buildSaveNotification(notificationLines) };
   }
 
   function deleteRecord(recordId) {
@@ -2500,7 +2533,7 @@ export function createStore() {
     invalidateCatalogSnapshot();
     persist();
     emit();
-    return { ok: true, message: state.statusMessage };
+    return { ok: true, message: state.statusMessage, notificationMessage: buildSaveNotification([`メモ：${normalizedMemo}`]) };
   }
 
   function getExportJson() {
