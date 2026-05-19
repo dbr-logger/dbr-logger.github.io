@@ -145,6 +145,15 @@ function attachChartInteraction(svg, points, padding, height, getValue) {
     return;
   }
 
+  const touchDelayMs = 80;
+  let touchFocusState = null;
+
+  const clearTouchFocusTimer = () => {
+    if (touchFocusState?.timer !== null && touchFocusState?.timer !== undefined) {
+      window.clearTimeout(touchFocusState.timer);
+    }
+  };
+
   const toSvgX = (event) => {
     const rect = svg.getBoundingClientRect();
     const viewBox = svg.viewBox.baseVal;
@@ -197,6 +206,8 @@ function attachChartInteraction(svg, points, padding, height, getValue) {
   };
 
   const clearActivePoint = () => {
+    clearTouchFocusTimer();
+    touchFocusState = null;
     svg.classList.remove("is-interacting");
     focusGroup.setAttribute("hidden", "");
     pointLabels.forEach((label) => {
@@ -204,16 +215,47 @@ function attachChartInteraction(svg, points, padding, height, getValue) {
     });
   };
 
-  const handlePointer = (event) => {
-    if (event.pointerType === "mouse" && event.type === "pointerdown") {
-      return;
-    }
-
+  const activateByEvent = (event) => {
     activatePoint(findClosestPointIndex(toSvgX(event)));
   };
 
-  svg.addEventListener("pointermove", handlePointer);
-  svg.addEventListener("pointerdown", handlePointer);
+  const handlePointerMove = (event) => {
+    if (event.pointerType === "touch") {
+      if (!touchFocusState || touchFocusState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      if (!touchFocusState.activated) {
+        return;
+      }
+    }
+
+    activateByEvent(event);
+  };
+
+  const handlePointerDown = (event) => {
+    if (event.pointerType !== "touch") {
+      return;
+    }
+
+    clearTouchFocusTimer();
+    touchFocusState = {
+      pointerId: event.pointerId,
+      activated: false,
+      timer: window.setTimeout(() => {
+        if (!touchFocusState || touchFocusState.pointerId !== event.pointerId) {
+          return;
+        }
+
+        touchFocusState.activated = true;
+        touchFocusState.timer = null;
+        activateByEvent(event);
+      }, touchDelayMs),
+    };
+  };
+
+  svg.addEventListener("pointermove", handlePointerMove);
+  svg.addEventListener("pointerdown", handlePointerDown);
   svg.addEventListener("pointerleave", clearActivePoint);
   svg.addEventListener("pointerup", (event) => {
     if (event.pointerType !== "mouse") {
