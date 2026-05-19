@@ -1008,64 +1008,87 @@ function getDateSummaryRange(filters) {
   return { start: "", end: "", sliceMode: "all", limit: null };
 }
 
-function buildDateSummary(records, baseSongs, filters) {
+function getDateSummarySingleTargetDates(records, visibleTitles, dateSingle) {
+  const selectedDate = normalizeDateValue(dateSingle) || todayIso();
+  const historyDates = [...new Set(records
+    .filter((record) => visibleTitles.has(record.title))
+    .map((record) => getRecordPlayDate(record))
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b));
+
+  const beforeDates = historyDates.filter((date) => date < selectedDate).slice(-7);
+  const afterDates = historyDates.filter((date) => date > selectedDate).slice(0, 7);
+  return new Set([...beforeDates, selectedDate, ...afterDates]);
+}
+
+function buildDateSummary(records, baseSongs, countSongs, filters) {
   const visibleTitles = new Set(baseSongs.map((song) => song.title));
-  const songByTitle = new Map(baseSongs.map((song) => [song.title, song]));
   const isScoreMode = filters.displayMode === "score";
   const countsFactory = isScoreMode ? createScoreRankCounts : createLampCounts;
   const { start, end, sliceMode, limit } = getDateSummaryRange(filters);
+  const singleTargetDates = filters.dateSelectionMode === "single"
+    ? getDateSummarySingleTargetDates(records, visibleTitles, filters.dateSingle)
+    : null;
   const bandMap = new Map();
 
-  // 同日最良値（最高ランプ・最小BP・最高スコア）のみ使用
-  const bestByDateTitle = new Map();
+  const targetDates = new Set();
   records.forEach((record) => {
     if (!visibleTitles.has(record.title)) return;
     const playDate = getRecordPlayDate(record);
-    if (start && playDate < start) return;
-    if (end && playDate > end) return;
-    const key = `${playDate}__${record.title}`;
-    const existing = bestByDateTitle.get(key);
-    if (!existing || getLampRank(record.lamp) > getLampRank(existing.lamp) ||
-        (Number.isFinite(record.bp) && (!Number.isFinite(existing.bp) || record.bp < existing.bp)) ||
-        (Number.isFinite(record.score) && (!Number.isFinite(existing.score) || record.score > existing.score))) {
-      bestByDateTitle.set(key, record);
+    if (singleTargetDates) {
+      if (!singleTargetDates.has(playDate)) return;
+    } else {
+      if (start && playDate < start) return;
+      if (end && playDate > end) return;
     }
+    targetDates.add(playDate);
   });
 
-  bestByDateTitle.forEach((record) => {
-    const lamp = LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY";
-    const scoreRank = getScoreRankInfo(record.score, songByTitle.get(record.title)).label;
-    const scoreFilterRank = scoreRank === "MAX" ? "AAA" : scoreRank;
-    const countKey = isScoreMode ? normalizeScoreRankForSummary(scoreFilterRank) : lamp;
-    if (isScoreMode && !SCORE_RANK_SUMMARY_OPTIONS.includes(countKey)) {
-      return;
-    }
+  [...targetDates].sort((a, b) => a.localeCompare(b)).forEach((playDate) => {
+    const band = {
+      key: playDate,
+      value: playDate,
+      label: formatDateBandLabel(playDate),
+      total: 0,
+      lampCounts: countsFactory(),
+      baseTotal: 0,
+      baseLampCounts: countsFactory(),
+    };
 
-    const playDate = getRecordPlayDate(record);
-    if (!bandMap.has(playDate)) {
-      bandMap.set(playDate, {
-        key: playDate,
-        value: playDate,
-        label: formatDateBandLabel(playDate),
-        total: 0,
-        lampCounts: countsFactory(),
-        baseTotal: 0,
-        baseLampCounts: countsFactory(),
+    baseSongs.forEach((song) => {
+      if (!song.history.some((record) => getRecordPlayDate(record) === playDate)) {
+        return;
+      }
+
+      const dateScopedSong = applyDateScopedDisplayValues(song, {
+        ...filters,
+        axisMode: "date",
+        dateSelectionMode: "single",
+        dateSingle: playDate,
       });
-    }
+      const countKey = isScoreMode
+        ? normalizeScoreRankForSummary(dateScopedSong.scoreFilterRank)
+        : dateScopedSong.bestLamp;
+      if (isScoreMode && !SCORE_RANK_SUMMARY_OPTIONS.includes(countKey)) {
+        return;
+      }
 
-    const band = bandMap.get(playDate);
-    band.baseTotal += 1;
-    band.baseLampCounts[countKey] += 1;
+      band.baseTotal += 1;
+      band.baseLampCounts[countKey] += 1;
 
-    const selectedScoreRanks = filters.scoreRanks ?? SCORE_RANK_OPTIONS;
-    const isSelected = isScoreMode
-      ? selectedScoreRanks.includes(countKey) || (countKey === "F" && selectedScoreRanks.includes("※"))
-      : filters.lamps.includes(countKey);
+      const selectedScoreRanks = filters.scoreRanks ?? SCORE_RANK_OPTIONS;
+      const isSelected = isScoreMode
+        ? selectedScoreRanks.includes(countKey) || (countKey === "F" && selectedScoreRanks.includes("※"))
+        : filters.lamps.includes(countKey);
 
-    if (isSelected) {
-      band.total += 1;
-      band.lampCounts[countKey] += 1;
+      if (isSelected) {
+        band.total += 1;
+        band.lampCounts[countKey] += 1;
+      }
+    });
+
+    if (band.baseTotal > 0) {
+      bandMap.set(playDate, band);
     }
   });
 
@@ -1074,21 +1097,24 @@ function buildDateSummary(records, baseSongs, filters) {
     bands = sliceMode === "first" ? bands.slice(0, limit) : bands.slice(-limit);
   }
 
-  const baseLampCounts = countsFactory();
-  bands.forEach((band) => {
-    (isScoreMode ? SCORE_RANK_SUMMARY_OPTIONS : LAMP_OPTIONS).forEach((key) => {
-      baseLampCounts[key] += band.baseLampCounts[key] ?? 0;
-    });
+  const lampCounts = countsFactory();
+  countSongs.forEach((song) => {
+    const summaryKey = isScoreMode ? normalizeScoreRankForSummary(song.scoreFilterRank) : song.bestLamp;
+    if (isScoreMode && !SCORE_RANK_SUMMARY_OPTIONS.includes(summaryKey)) {
+      return;
+    }
+
+    lampCounts[summaryKey] += 1;
   });
 
   return {
     axisMode: "date",
     bandTotalSongs: bands.reduce((total, band) => total + band.total, 0),
-    totalSongs: bands.reduce((total, band) => total + band.baseTotal, 0),
+    totalSongs: countSongs.length,
     totalLabel: "総記録数",
     totalUnit: "件",
     emptyMessage: "該当する履歴がありません。",
-    lampCounts: baseLampCounts,
+    lampCounts,
     displayMode: isScoreMode ? "score" : "clear",
     bands,
   };
@@ -2602,8 +2628,20 @@ export function createStore() {
 
     const summaryCountSongs = songStates.filter((entry) => matchesFiltersFor(entry, summaryCountFilters));
 
+    const dateSummaryBaseFilters = summaryFilters.axisMode === "date"
+      ? {
+          ...summaryCountFilters,
+          axisMode: "splv",
+          axisValue: "",
+          axisRangeModeByAxis: normalizeAxisRangeModeByAxis(),
+        }
+      : null;
+    const dateSummaryBaseSongs = dateSummaryBaseFilters
+      ? summaryBandBaseSongs.filter((entry) => matchesFiltersFor(entry, dateSummaryBaseFilters))
+      : summaryCountSongs;
+
     const summary = summaryFilters.axisMode === "date"
-      ? buildDateSummary(playDateAdjustedRecords, summaryCountSongs, summaryFilters)
+      ? buildDateSummary(playDateAdjustedRecords, dateSummaryBaseSongs, summaryCountSongs, summaryFilters)
       : buildSummary(summaryBandBaseSongs, summarySongs, summaryCountSongs, summaryFilters.axisMode, summaryFilters.displayMode);
 
     const totalPages = Math.max(1, Math.ceil(visibleSongs.length / PAGE_SIZE));
