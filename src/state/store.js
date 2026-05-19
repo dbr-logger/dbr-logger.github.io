@@ -15,7 +15,7 @@ const SUMMARY_DISPLAY_MODES = ["clear", "score"];
 const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F", "※"];
 const SCORE_RANK_SUMMARY_OPTIONS = SCORE_RANK_OPTIONS.filter((rank) => rank !== "※");
 const PAGE_SIZE = 100;
-const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "bestScore", "latestScore", "latest", "entryCount", "recommend", "memo"];
+const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "bestScore", "latestScore", "latest", "entryCount", "recommend", "memo", "random"];
 const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
 const NUMERIC_AXIS_MODES = ["level", "splv", "katate"];
@@ -507,6 +507,10 @@ function normalizeSortDirection(sortDirection) {
   return sortDirection === "desc" ? "desc" : "asc";
 }
 
+function normalizeRandomSeed(seed) {
+  return Number.isFinite(seed) ? seed : 1;
+}
+
 function normalizeCatalogViewMode(catalogViewMode) {
   return catalogViewMode === "list" ? "list" : "card";
 }
@@ -671,6 +675,7 @@ function normalizeStoredData(stored) {
       [restoredFilters.axisMode]: normalizedSortMode,
     },
     sortDirection: normalizeSortDirection(stored.sortDirection),
+    randomSeed: normalizeRandomSeed(stored.randomSeed),
     catalogViewMode: normalizeCatalogViewMode(stored.catalogViewMode),
     titleSortBase: normalizeSortMode(stored.titleSortBase),
   };
@@ -1195,6 +1200,16 @@ function compareTitleValue(a, b) {
   return compareTitlesWithSuffixOrder(a.title, b.title);
 }
 
+function createRandomSortValue(key, seed) {
+  const source = `${key}:${seed}`;
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 function compareKatateValue(a, b) {
   return (a.katateValue ?? Number.POSITIVE_INFINITY) - (b.katateValue ?? Number.POSITIVE_INFINITY);
 }
@@ -1265,7 +1280,11 @@ function compareScoreRatePrimaryValues(a, b, valueKey, sortDirection) {
   return compareNullablePrimaryValues(a[valueKey], b[valueKey], (aValue, bValue) => aValue - bValue, sortDirection);
 }
 
-function comparePrimarySortValue(a, b, sortMode, sortDirection) {
+function comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed = 1) {
+  if (sortMode === "random") {
+    return createRandomSortValue(getCatalogItemKey(a), randomSeed) - createRandomSortValue(getCatalogItemKey(b), randomSeed);
+  }
+
   if (sortMode === "title") {
     return compareTitlePrimaryValue(a.title, b.title, sortDirection);
   }
@@ -1413,8 +1432,8 @@ function applySortDirectionFallbackIfNoPrimaryEffect(songs, sortMode, sortDirect
   return [...songs].reverse();
 }
 
-function compareCatalogSongs(a, b, sortMode, sortDirection, axisMode) {
-  return comparePrimarySortValue(a, b, sortMode, sortDirection)
+function compareCatalogSongs(a, b, sortMode, sortDirection, axisMode, randomSeed = 1) {
+  return comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed)
     || compareFilterAxisTieBreak(a, b, axisMode)
     || compareSplvValue(a, b)
     || compareTitleValue(a, b);
@@ -1473,6 +1492,7 @@ export function createStore() {
     },
     sortMode: "splv",
     sortDirection: "asc",
+    randomSeed: 1,
     catalogViewMode: "card",
     currentPage: 1,
     selectedTitle: null,
@@ -1513,6 +1533,7 @@ export function createStore() {
       filters: state.filters,
       sortMode: state.sortMode,
       sortDirection: state.sortDirection,
+      randomSeed: state.randomSeed,
       catalogViewMode: state.catalogViewMode,
     });
   }
@@ -1555,6 +1576,7 @@ export function createStore() {
     return JSON.stringify({
       filters: catalogFilters,
       sortMode: state.sortMode,
+      randomSeed: state.randomSeed,
     });
   }
   
@@ -2146,6 +2168,9 @@ export function createStore() {
 
     state.sortMode = normalized;
     state.sortDirection = "asc";
+    if (normalized === "random") {
+      state.randomSeed = nowTimestamp();
+    }
     state.sortModeMemory = {
       ...state.sortModeMemory,
       [state.filters.axisMode]: normalized,
@@ -2158,6 +2183,16 @@ export function createStore() {
   }
 
   function toggleSortDirection() {
+    if (state.sortMode === "random") {
+      state.randomSeed = nowTimestamp();
+      invalidateCatalogVisibleOrder();
+      state.currentPage = 1;
+      persist();
+      ensureSelectedSong();
+      emit();
+      return;
+    }
+
     state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
@@ -2606,6 +2641,7 @@ export function createStore() {
       state.sortMode,
       state.sortDirection,
       state.filters.axisMode,
+      state.randomSeed,
     ));
 
     let filteredVisibleSongs = songStates.filter((entry) => matchesFiltersFor(entry, state.filters));
@@ -2633,6 +2669,7 @@ export function createStore() {
           state.sortMode,
           state.sortDirection,
           state.filters.axisMode,
+          state.randomSeed,
         ));
     }
 

@@ -64,6 +64,7 @@ const CATALOG_SORT_OPTIONS = [
   { value: "entryCount", label: "プレー回数", modes: ["all", "clear", "score"] },
   { value: "recommend", label: "おすすめ", modes: ["all", "clear", "score"] },
   { value: "memo", label: "メモ", modes: ["all", "clear", "score"] },
+  { value: "random", label: "ランダム", modes: ["all", "clear", "score"] },
 ];
 const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F", "※"];
 const SCORE_RANK_SUMMARY_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F"];
@@ -1422,7 +1423,7 @@ function renderPagination(container, pagination, options = {}) {
   const prevDisabled = pagination.currentPage <= 1 ? "disabled" : "";
   const nextDisabled = pagination.currentPage >= pagination.totalPages ? "disabled" : "";
   const sortDirectionButton = options.showSortDirectionToggle
-    ? `<button class="button button-tertiary" type="button" data-sort-direction-toggle aria-label="並び順の昇順降順を切り替え">${options.sortDirection === "desc" ? "▼" : "▲"}</button>`
+    ? `<button class="button button-tertiary" type="button" data-sort-direction-toggle aria-label="${options.sortMode === "random" ? "ランダム順を変更" : "並び順の昇順降順を切り替え"}">${options.sortMode === "random" ? "？" : (options.sortDirection === "desc" ? "▼" : "▲")}</button>`
     : "";
 
   container.innerHTML = `
@@ -4279,6 +4280,7 @@ export function createRenderer(store) {
       renderPagination(nodes.catalogPaginationTop, snapshot.pagination, {
         showSortDirectionToggle: true,
         sortDirection: snapshot.sortDirection,
+        sortMode: snapshot.sortMode,
       });
       renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
       renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs, {
