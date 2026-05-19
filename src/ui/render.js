@@ -52,9 +52,11 @@ const SUMMARY_DISPLAY_MODE_OPTIONS = [
 ];
 const CATALOG_SORT_OPTIONS = [
   { value: "title", label: "曲名", modes: ["all", "clear", "score"] },
+  { value: "version", label: "収録ver.", modes: ["all", "clear", "score"] },
   { value: "splv", label: "SPLv.", modes: ["all", "clear", "score"] },
   { value: "level", label: "DBRLv.", modes: ["all", "clear", "score"] },
   { value: "katate", label: "片手Lv.", modes: ["all", "clear", "score"] },
+  { value: "bpm", label: "BPM", modes: ["all", "clear", "score"] },
   { value: "clear", label: "クリアランプ", modes: ["all", "clear", "score"] },
   { value: "bestBp", label: "最小BP", modes: ["all", "clear"] },
   { value: "latestBp", label: "最新BP", modes: ["all", "clear"] },
@@ -87,6 +89,7 @@ const AXIS_OPTIONS = [
   { value: "splv", label: "SPLv." },
   { value: "level", label: "DBRLv." },
   { value: "katate", label: "片手Lv." },
+  { value: "version", label: "収録ver." },
   { value: "date", label: "プレー日" },
   { value: "title", label: "曲名" },
   { value: "memo", label: "メモ" },
@@ -95,11 +98,50 @@ const AXIS_SHORTCUT_KEYS = {
   f: "level",
   w: "splv",
   e: "katate",
+  v: "version",
   r: "date",
   s: "title",
   t: "memo",
 };
-const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "date"]);
+const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "version", "date"]);
+const VERSION_ORDER_VALUES = ["0", "1", "s", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33"];
+const VERSION_LABELS = new Map([
+  ["0", "CS/INFINITAS"],
+  ["1", "1st style"],
+  ["s", "substream"],
+  ["2", "2nd style"],
+  ["3", "3rd style"],
+  ["4", "4th style"],
+  ["5", "5th style"],
+  ["6", "6th style"],
+  ["7", "7th style"],
+  ["8", "8th style"],
+  ["9", "9th style"],
+  ["10", "10th style"],
+  ["11", "RED"],
+  ["12", "HAPPY SKY"],
+  ["13", "DistorteD"],
+  ["14", "GOLD"],
+  ["15", "DJ TROOPERS"],
+  ["16", "EMPRESS"],
+  ["17", "SIRIUS"],
+  ["18", "Resort Anthem"],
+  ["19", "Lincle"],
+  ["20", "tricoro"],
+  ["21", "SPADA"],
+  ["22", "PENDUAL"],
+  ["23", "copula"],
+  ["24", "SINOBUZ"],
+  ["25", "CANNON BALLERS"],
+  ["26", "Rootage"],
+  ["27", "HEROIC VERSE"],
+  ["28", "BISTROVER"],
+  ["29", "CastHour"],
+  ["30", "RESIDENT"],
+  ["31", "EPOLIS"],
+  ["32", "Pinky Crush"],
+  ["33", "Sparkle Shower"],
+]);
 
 // DBR IR送信
 const DBR_IR_IMPORT_TEST_URL = "https://dbr-difficulty.github.io/dbr_ir_from_logger.html";
@@ -172,7 +214,7 @@ function isDateAxisMode(axisMode) {
 }
 
 function isNumericAxisMode(axisMode) {
-  return axisMode === "level" || axisMode === "splv" || axisMode === "katate";
+  return axisMode === "level" || axisMode === "splv" || axisMode === "katate" || axisMode === "version";
 }
 
 function getSongDataFilterOption(value) {
@@ -308,6 +350,27 @@ function formatKatateTitleSuffix(song) {
   return label ? `片手☆${label}` : "";
 }
 
+function formatBpmTitleSuffix(song) {
+  const bpm = String(song?.bpm ?? "").trim();
+  if (!bpm) {
+    return "";
+  }
+
+  return `BPM${bpm}`;
+}
+
+function formatSortTitleSuffix(song, sortMode) {
+  if (sortMode === "katate") {
+    return formatKatateTitleSuffix(song);
+  }
+
+  if (sortMode === "bpm") {
+    return formatBpmTitleSuffix(song);
+  }
+
+  return "";
+}
+
 function formatRecommendDisplay(recommend) {
   const normalized = String(recommend ?? "").trim();
   return normalized || "－";
@@ -370,15 +433,15 @@ function getSupplementalBadges(song, sortMode = "") {
     : "";
 
   if (sortMode === "bestBp" || sortMode === "latestBp") {
-    badges.push(bpBadge, scoreBadge, historyBadge, dateBadge);
+    badges.push(bpBadge, scoreBadge, dateBadge, historyBadge);
   } else if (sortMode === "bestScore" || sortMode === "latestScore") {
-    badges.push(scoreBadge, bpBadge, historyBadge, dateBadge);
+    badges.push(scoreBadge, bpBadge, dateBadge, historyBadge);
   } else if (sortMode === "latest") {
     badges.push(song.latestDate ? dateBadge : "", bpBadge, scoreBadge, historyBadge, song.latestDate ? "" : dateBadge);
   } else if (sortMode === "entryCount") {
     badges.push(historyBadge || dateBadge, bpBadge, scoreBadge, historyBadge ? dateBadge : "");
   } else {
-    badges.push(bpBadge, scoreBadge, historyBadge, dateBadge);
+    badges.push(bpBadge, scoreBadge, dateBadge, historyBadge);
   }
 
   return badges.filter(Boolean).join("");
@@ -431,12 +494,12 @@ function getBpOrScoreMetaTextBySort(song, sortMode = "") {
   const values = sortMode === "bestBp" || sortMode === "latestBp"
     ? [bpText, scoreText, dateText, historyText]
     : sortMode === "bestScore" || sortMode === "latestScore"
-      ? [scoreText, bpText, dateText, historyText]
+          ? [scoreText, bpText, dateText, historyText]
         : sortMode === "latest"
           ? [song.latestDate ? dateText : "", bpText, scoreText, historyText, song.latestDate ? "" : dateText]
           : sortMode === "entryCount"
             ? [historyText || dateText, bpText, scoreText, historyText ? dateText : ""]
-          : [bpText, scoreText, historyText, dateText];
+          : [bpText, scoreText, dateText, historyText];
 
   return values.filter(Boolean).join(", ");
 }
@@ -675,9 +738,11 @@ function deriveFilterBounds(songStates) {
   const levelValues = songStates.map((song) => song.levelValue).filter((value) => value !== null);
   const splvValues = songStates.map((song) => song.splvValue).filter((value) => value !== null);
   const katateValues = songStates.map((song) => song.katateValue).filter((value) => value !== null);
+  const versionValues = new Set(songStates.map((song) => String(song.version ?? "")).filter((value) => VERSION_LABELS.has(value)));
   const uniqueLevelValues = [...new Set(levelValues)].sort((a, b) => a - b);
   const uniqueSplvValues = [...new Set(splvValues)].sort((a, b) => a - b);
   const uniqueKatateValues = [...new Set(katateValues)].sort((a, b) => a - b);
+  const uniqueVersionValues = VERSION_ORDER_VALUES.filter((value) => versionValues.has(value));
 
   return {
     level: {
@@ -697,6 +762,12 @@ function deriveFilterBounds(songStates) {
       max: katateValues.length ? Math.max(...katateValues) : 13,
       step: 0.1,
       values: uniqueKatateValues,
+    },
+    version: {
+      min: 0,
+      max: uniqueVersionValues.length ? uniqueVersionValues.length - 1 : 0,
+      step: 1,
+      values: uniqueVersionValues,
     },
   };
 }
@@ -732,6 +803,10 @@ function getAxisValues(bounds, axisMode) {
     return bounds.katate.values ?? [];
   }
 
+  if (axisMode === "version") {
+    return bounds.version.values ?? [];
+  }
+
   return [];
 }
 
@@ -750,6 +825,10 @@ function formatAxisValue(axisMode, value) {
 
   if (axisMode === "katate") {
     return `☆${formatKatateFilterValue(value)}`;
+  }
+
+  if (axisMode === "version") {
+    return VERSION_LABELS.get(String(value)) ?? String(value);
   }
 
   return String(value);
@@ -957,8 +1036,8 @@ function renderSummaryBands(summary) {
   return `
     <div class="summary-chart-wrap">
       <div class="summary-chart-heading">
-        <span>${escapeHtml(summary.totalLabel ?? "総曲数")}</span>
-        <strong>${summary.bandTotalSongs ?? summary.totalSongs} ${escapeHtml(summary.totalUnit ?? "曲")}</strong>
+        <span>${escapeHtml(summary.totalLabel ?? "総譜面数")}</span>
+        <strong>${summary.bandTotalSongs ?? summary.totalSongs} ${escapeHtml(summary.totalUnit ?? "譜面")}</strong>
       </div>
       <div class="summary-band-chart${scrollableClass}">
         ${rows}
@@ -1282,9 +1361,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
   const historyCountBadge = selectedSong.entryCount > 0
     ? badge(`履歴 ${selectedSong.entryCount} 件`, "pill-neutral")
     : "";
-  const katateTitleSuffix = options.showKatateTitleSuffix
-    ? formatKatateTitleSuffix(selectedSong)
-    : "";
+  const katateTitleSuffix = formatSortTitleSuffix(selectedSong, options.sortMode);
   const katateTitleSuffixHtml = katateTitleSuffix
     ? `<span class="song-card-title-katate">(${escapeHtml(katateTitleSuffix)})</span>`
     : "";  
@@ -1330,9 +1407,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
     const historyCountBadge = song.entryCount > 0
       ? badge(`履歴 ${song.entryCount} 件`, "pill-neutral")
       : "";
-    const katateTitleSuffix = options.showKatateTitleSuffix
-      ? formatKatateTitleSuffix(song)
-      : "";
+    const katateTitleSuffix = formatSortTitleSuffix(song, options.sortMode);
     const katateTitleSuffixHtml = katateTitleSuffix
       ? `<span class="song-card-title-katate">(${escapeHtml(katateTitleSuffix)})</span>`
       : "";
@@ -1445,6 +1520,7 @@ export function createRenderer(store) {
     level: { min: 0, max: 15, step: 0.01, values: [] },
     splv: { min: 1, max: 12, step: 1, values: [] },
     katate: { min: 11, max: 13, step: 0.1, values: [] },
+    version: { min: 0, max: 0, step: 1, values: [] },
   };
   let latestHistoryDates = [];
   let latestVisibleCount = 0;
@@ -1471,11 +1547,13 @@ export function createRenderer(store) {
     level: "",
     splv: "",
     katate: "",
+    version: "",
   };
   let floatingAxisRangeActiveHandleByAxis = {
     level: "end",
     splv: "end",
     katate: "end",
+    version: "end",
   };
   let floatingQuerySelection = null;
   let floatingQueryComposing = false;
@@ -1739,7 +1817,7 @@ export function createRenderer(store) {
   }
 
   function isNumericAxisMode(axisMode) {
-    return axisMode === "level" || axisMode === "splv" || axisMode === "katate";
+    return axisMode === "level" || axisMode === "splv" || axisMode === "katate" || axisMode === "version";
   }
 
   function hasAxisValue(axisMode, value) {
@@ -4272,7 +4350,6 @@ export function createRenderer(store) {
       }
       floatingQuerySelection = null;
       renderCatalog(nodes.catalog, snapshot.pagedSongs, snapshot.selectedSong?.title ?? null, {
-        showKatateTitleSuffix: snapshot.sortMode === "katate" || snapshot.filters.axisMode === "katate",
         viewMode: snapshot.catalogViewMode,
         selectedCatalogKey: snapshot.selectedCatalogKey,
         sortMode: snapshot.sortMode,
@@ -4284,7 +4361,6 @@ export function createRenderer(store) {
       });
       renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
       renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs, {
-        showKatateTitleSuffix: snapshot.sortMode === "katate" || snapshot.filters.axisMode === "katate",
         sortMode: snapshot.sortMode,
       });
       renderProposalButton(

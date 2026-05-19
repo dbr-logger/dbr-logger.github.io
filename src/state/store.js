@@ -15,16 +15,56 @@ const SUMMARY_DISPLAY_MODES = ["clear", "score"];
 const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F", "※"];
 const SCORE_RANK_SUMMARY_OPTIONS = SCORE_RANK_OPTIONS.filter((rank) => rank !== "※");
 const PAGE_SIZE = 100;
-const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "bestScore", "latestScore", "latest", "entryCount", "recommend", "memo", "random"];
-const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
-const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
-const NUMERIC_AXIS_MODES = ["level", "splv", "katate"];
+const SORT_OPTIONS = ["version", "title", "level", "splv", "katate", "bpm", "clear", "bestBp", "latestBp", "bestScore", "latestScore", "latest", "entryCount", "recommend", "memo", "random"];
+const AXIS_MODES = ["level", "splv", "katate", "version", "title", "memo", "date"];
+const AXIS_MEMORY_MODES = ["level", "splv", "katate", "version"];
+const NUMERIC_AXIS_MODES = ["level", "splv", "katate", "version"];
+const VERSION_ORDER_VALUES = ["0", "1", "s", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33"];
+const VERSION_ORDER = new Map(VERSION_ORDER_VALUES.map((value, index) => [value, index]));
+const VERSION_LABELS = new Map([
+  ["0", "CS/INFINITAS"],
+  ["1", "1st style"],
+  ["s", "substream"],
+  ["2", "2nd style"],
+  ["3", "3rd style"],
+  ["4", "4th style"],
+  ["5", "5th style"],
+  ["6", "6th style"],
+  ["7", "7th style"],
+  ["8", "8th style"],
+  ["9", "9th style"],
+  ["10", "10th style"],
+  ["11", "RED"],
+  ["12", "HAPPY SKY"],
+  ["13", "DistorteD"],
+  ["14", "GOLD"],
+  ["15", "DJ TROOPERS"],
+  ["16", "EMPRESS"],
+  ["17", "SIRIUS"],
+  ["18", "Resort Anthem"],
+  ["19", "Lincle"],
+  ["20", "tricoro"],
+  ["21", "SPADA"],
+  ["22", "PENDUAL"],
+  ["23", "copula"],
+  ["24", "SINOBUZ"],
+  ["25", "CANNON BALLERS"],
+  ["26", "Rootage"],
+  ["27", "HEROIC VERSE"],
+  ["28", "BISTROVER"],
+  ["29", "CastHour"],
+  ["30", "RESIDENT"],
+  ["31", "EPOLIS"],
+  ["32", "Pinky Crush"],
+  ["33", "Sparkle Shower"],
+]);
 const PLAY_DATE_RESET_HOUR = 5;
 const PLAY_DATE_CHAIN_THRESHOLD_MS = 60 * 60 * 1000;
 const DEFAULT_SORT_MODE_BY_AXIS = {
   level: "level",
   splv: "splv",
   katate: "katate",
+  version: "version",
   title: "title",
   memo: "memo",
   date: "latest",
@@ -191,6 +231,47 @@ function parseOptionalNumber(value) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseBpmSortValue(value) {
+  const normalized = String(value ?? "").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  const values = normalized
+    .match(/\d+(?:\.\d+)?/g)
+    ?.map(Number)
+    .filter(Number.isFinite) ?? [];
+
+  return values.length ? Math.max(...values) : null;
+}
+
+function normalizeVersionValue(value) {
+  return String(value ?? "").trim();
+}
+
+function getVersionOrderValue(value) {
+  const normalized = normalizeVersionValue(value);
+  return VERSION_ORDER.has(normalized) ? VERSION_ORDER.get(normalized) : null;
+}
+
+function getVersionDisplayLabel(value) {
+  const normalized = normalizeVersionValue(value);
+  return VERSION_LABELS.get(normalized) ?? (normalized || "不明");
+}
+
+function getVersionBandLabel(value) {
+  const normalized = normalizeVersionValue(value);
+  if (normalized === "0") {
+    return "CS/INF";
+  }
+
+  if (normalized === "s") {
+    return "sub";
+  }
+
+  return normalized || "-";
 }
 
 function getScoreMax(songOrRecord) {
@@ -361,6 +442,7 @@ function normalizeAxisMemory(axisMemory) {
     level: typeof axisMemory?.level === "string" ? axisMemory.level : "",
     splv: typeof axisMemory?.splv === "string" ? axisMemory.splv : "",
     katate: typeof axisMemory?.katate === "string" ? axisMemory.katate : "",
+    version: typeof axisMemory?.version === "string" ? axisMemory.version : "",
   };
 }
 
@@ -369,6 +451,7 @@ function normalizeAxisRangeModeByAxis(rangeModeByAxis) {
     level: Boolean(rangeModeByAxis?.level),
     splv: Boolean(rangeModeByAxis?.splv),
     katate: Boolean(rangeModeByAxis?.katate),
+    version: Boolean(rangeModeByAxis?.version),
   };
 }
 
@@ -382,11 +465,24 @@ function normalizeAxisRangePair(range) {
   };
 }
 
+function normalizeVersionRangePair(range) {
+  const start = typeof range?.start === "string" ? range.start : "";
+  const end = typeof range?.end === "string" ? range.end : "";
+  const startOrder = getVersionOrderValue(start);
+  const endOrder = getVersionOrderValue(end);
+  if (startOrder !== null && endOrder !== null && startOrder > endOrder) {
+    return { start: end, end: start };
+  }
+
+  return { start, end };
+}
+
 function normalizeAxisRanges(axisRanges) {
   return {
     level: normalizeAxisRangePair(axisRanges?.level),
     splv: normalizeAxisRangePair(axisRanges?.splv),
     katate: normalizeAxisRangePair(axisRanges?.katate),
+    version: normalizeVersionRangePair(axisRanges?.version),
   };
 }
 
@@ -395,6 +491,7 @@ function normalizeAxisSingleReturnValues(axisSingleReturnValues) {
     level: typeof axisSingleReturnValues?.level === "string" ? axisSingleReturnValues.level : "",
     splv: typeof axisSingleReturnValues?.splv === "string" ? axisSingleReturnValues.splv : "",
     katate: typeof axisSingleReturnValues?.katate === "string" ? axisSingleReturnValues.katate : "",
+    version: typeof axisSingleReturnValues?.version === "string" ? axisSingleReturnValues.version : "",
   };
 }
 
@@ -874,6 +971,10 @@ function createDifficultyCatalogEntries(difficultyTable) {
     splvValue: parseOptionalNumber(entry.splv),
     katate: entry.katate,
     katateValue: parseOptionalNumber(entry.katate),
+    version: normalizeVersionValue(entry.ver),
+    versionOrder: getVersionOrderValue(entry.ver),
+    bpm: entry.bpm,
+    bpmValue: parseBpmSortValue(entry.bpm),
     recommend: entry.recommend,
     inf: entry.inf,
     infAvailable: entry.inf === "○",
@@ -915,10 +1016,18 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode,
       return song.katateValue;
     }
 
+    if (axisMode === "version") {
+      return song.versionOrder;
+    }
+
     return song.levelValue;
   }
 
   function formatBandLabel(value) {
+    if (axisMode === "version") {
+      return value === null ? "-" : getVersionBandLabel(VERSION_ORDER_VALUES[value] ?? "");
+    }
+
     if (value === null) {
       return "☆-";
     }
@@ -936,6 +1045,18 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode,
     }
 
     return `☆${String(value)}`;
+  }
+
+  if (axisMode === "version") {
+    VERSION_ORDER_VALUES.forEach((version, index) => {
+      bandMap.set(String(index), {
+        key: String(index),
+        value: index,
+        label: getVersionBandLabel(version),
+        total: 0,
+        lampCounts: countsFactory(),
+      });
+    });
   }
 
   allSongStates.forEach((song) => {
@@ -1301,6 +1422,14 @@ function comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed = 1) 
     return compareNullablePrimaryValues(a.katateValue, b.katateValue, (aValue, bValue) => aValue - bValue, sortDirection);
   }
 
+  if (sortMode === "version") {
+    return compareNullablePrimaryValues(a.versionOrder, b.versionOrder, (aValue, bValue) => aValue - bValue, sortDirection);
+  }
+
+  if (sortMode === "bpm") {
+    return compareNullablePrimaryValues(a.bpmValue, b.bpmValue, (aValue, bValue) => aValue - bValue, sortDirection);
+  }
+
   if (sortMode === "latest") {
     const compared = compareLatestTimestampValue(a, b);
     return sortDirection === "desc" ? -compared : compared;
@@ -1393,6 +1522,10 @@ function compareFilterAxisTieBreak(a, b, axisMode) {
     return compareKatateValue(a, b);
   }
 
+  if (axisMode === "version") {
+    return compareNullablePrimaryValues(a.versionOrder, b.versionOrder, (aValue, bValue) => aValue - bValue, "asc");
+  }
+
   if (axisMode === "title") {
     return compareTitleValue(a, b);
   }
@@ -1462,6 +1595,7 @@ export function createStore() {
       level: "",
       splv: "",
       katate: "",
+      version: "",
     },
     sortModeMemory: {},
     textQueryMemory: {
@@ -1747,10 +1881,18 @@ export function createStore() {
         ? entry.levelValue
         : filters.axisMode === "splv"
           ? entry.splvValue
-          : entry.katateValue;
+          : filters.axisMode === "katate"
+            ? entry.katateValue
+            : entry.versionOrder;
 
-      if (start !== null && end !== null && (entryValue === null || entryValue < start || entryValue > end)) {
-        return false;
+      if (filters.axisMode === "version") {
+        const startOrder = getVersionOrderValue(range.start);
+        const endOrder = getVersionOrderValue(range.end);
+        if (startOrder !== null && endOrder !== null && (entryValue === null || entryValue < startOrder || entryValue > endOrder)) {
+          return false;
+        }
+      } else if (start !== null && end !== null && (entryValue === null || entryValue < start || entryValue > end)) {
+          return false;
       }
     } else if (filters.axisMode === "level") {
       const selectedLevel = parseOptionalNumber(filters.axisValue);
@@ -1765,6 +1907,11 @@ export function createStore() {
     } else if (filters.axisMode === "katate") {
       const selectedKatate = parseOptionalNumber(filters.axisValue);
       if (selectedKatate !== null && entry.katateValue !== selectedKatate) {
+        return false;
+      }
+    } else if (filters.axisMode === "version") {
+      const selectedVersion = normalizeVersionValue(filters.axisValue);
+      if (selectedVersion && entry.version !== selectedVersion) {
         return false;
       }
     }
