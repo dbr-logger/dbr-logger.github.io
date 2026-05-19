@@ -11,6 +11,7 @@ const { getSearchTextMatchRank, matchesSearchText } = await import(`../utils/sea
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const CHART_DIFFICULTY_OPTIONS = ["B", "N", "H", "A", "L"];
 const DISPLAY_MODES = ["clear", "score", "all"];
+const SUMMARY_DISPLAY_MODES = ["clear", "score"];
 const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F", "※"];
 const SCORE_RANK_SUMMARY_OPTIONS = SCORE_RANK_OPTIONS.filter((rank) => rank !== "※");
 const PAGE_SIZE = 100;
@@ -297,12 +298,25 @@ function normalizeDisplayMode(value) {
   return DISPLAY_MODES.includes(value) ? value : "all";
 }
 
+function normalizeSummaryDisplayMode(value) {
+  return SUMMARY_DISPLAY_MODES.includes(value) ? value : "clear";
+}
+
 function isScoreDisplayMode(displayMode) {
   return displayMode === "score";
 }
 
 function isClearSummaryMode(displayMode) {
   return displayMode === "clear" || displayMode === "all";
+}
+
+function getEffectiveSummaryDisplayMode(filters) {
+  const displayMode = normalizeDisplayMode(filters?.displayMode);
+  if (displayMode === "clear" || displayMode === "score") {
+    return displayMode;
+  }
+
+  return normalizeSummaryDisplayMode(filters?.summaryDisplayMode);
 }
 
 function normalizeSongDataFilterPair(infValue, acdeleteValue) {
@@ -450,6 +464,7 @@ function normalizeStoredFilters(filters) {
     axisLastRanges: normalizeAxisRanges(filters?.axisLastRanges),
     axisSingleReturnValues: normalizeAxisSingleReturnValues(filters?.axisSingleReturnValues),
     displayMode: normalizeDisplayMode(filters?.displayMode),
+    summaryDisplayMode: normalizeSummaryDisplayMode(filters?.summaryDisplayMode),
     recommend: normalizeRecommendSelection(filters?.recommend),
     chartDifficulties: normalizeChartDifficultySelection(filters?.chartDifficulties),
     lamps: normalizeLampSelection(filters?.lamps),
@@ -789,6 +804,11 @@ function shouldUseRecordScopedCatalog(filters, sortMode) {
 function createRecordScopedCatalogItem(songState, record) {
   const recordLamp = LAMP_OPTIONS.includes(record?.lamp) ? record.lamp : "NO PLAY";
   const recordScoreRank = getScoreRankInfo(record.score, songState);
+  const fullBestScore = songState.history.reduce((best, historyRecord) => (
+    historyRecord.score === null || historyRecord.score === undefined ? best : Math.max(best, historyRecord.score)
+  ), Number.NEGATIVE_INFINITY);
+  const bestScore = Number.isFinite(fullBestScore) ? fullBestScore : null;
+  const bestScoreRank = getScoreRankInfo(bestScore, songState);
 
   return {
     ...songState,
@@ -799,6 +819,11 @@ function createRecordScopedCatalogItem(songState, record) {
     latestLamp: recordLamp,
     bestLamp: recordLamp,
     currentBp: Number.isFinite(record.bp) ? record.bp : null,
+    bestScore,
+    bestScoreRate: bestScoreRank.rate,
+    bestScoreLabel: bestScoreRank.display,
+    scoreRank: bestScoreRank.label,
+    scoreFilterRank: bestScoreRank.label === "MAX" ? "AAA" : bestScoreRank.label,
     currentScore: Number.isFinite(record.score) ? record.score : null,
     currentScoreRate: recordScoreRank.rate,
     currentScoreLabel: recordScoreRank.display,
@@ -1208,6 +1233,20 @@ function compareNullablePrimaryValues(aValue, bValue, compareValues, sortDirecti
 }
 
 function compareScoreRatePrimaryValues(a, b, valueKey, sortDirection) {
+  const getScoreSortGroup = (entry) => {
+    if (!entry.entryCount) {
+      return 2;
+    }
+
+    return entry.scoreFilterRank === "※" ? 1 : 0;
+  };
+  const aGroup = getScoreSortGroup(a);
+  const bGroup = getScoreSortGroup(b);
+
+  if (aGroup !== bGroup) {
+    return aGroup - bGroup;
+  }
+
   const aUnknownScore = a.scoreFilterRank === "※";
   const bUnknownScore = b.scoreFilterRank === "※";
 
@@ -1423,6 +1462,7 @@ export function createStore() {
       axisLastRanges: normalizeAxisRanges(),
       axisSingleReturnValues: normalizeAxisSingleReturnValues(),
       displayMode: "all",
+      summaryDisplayMode: "clear",
       recommend: [...RECOMMEND_OPTIONS],
       chartDifficulties: [...CHART_DIFFICULTY_OPTIONS],
       lamps: [...LAMP_OPTIONS],
@@ -1511,8 +1551,9 @@ export function createStore() {
   }
   
   function createCatalogVisibleSignature() {
+    const { summaryDisplayMode, ...catalogFilters } = state.filters;
     return JSON.stringify({
-      filters: state.filters,
+      filters: catalogFilters,
       sortMode: state.sortMode,
     });
   }
@@ -1618,6 +1659,7 @@ export function createStore() {
       acdelete: sourceFilters.acdelete,
       includeUnrated: sourceFilters.includeUnrated,
       displayMode: sourceFilters.displayMode,
+      summaryDisplayMode: sourceFilters.summaryDisplayMode,
       recommend: [...sourceFilters.recommend],
       chartDifficulties: [...(sourceFilters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS)],
       scoreRanks: [...(sourceFilters.scoreRanks ?? SCORE_RANK_OPTIONS)],
@@ -1857,6 +1899,8 @@ export function createStore() {
     const previousFilters = state.filters;
     const nextAxisMode = normalizeAxisMode(nextFilters.axisMode ?? state.filters.axisMode);
     const nextDisplayMode = normalizeDisplayMode(nextFilters.displayMode ?? state.filters.displayMode);
+    const requestedSummaryDisplayMode = normalizeSummaryDisplayMode(nextFilters.summaryDisplayMode ?? state.filters.summaryDisplayMode);
+    const nextSummaryDisplayMode = nextDisplayMode === "all" ? requestedSummaryDisplayMode : nextDisplayMode;
     const axisModeChanged = nextAxisMode !== previousFilters.axisMode;
     const nextAxisMemory = { ...state.axisMemory };
     const nextSortModeMemory = { ...state.sortModeMemory };
@@ -1962,6 +2006,7 @@ export function createStore() {
         ? normalizeAxisSingleReturnValues(nextFilters.axisSingleReturnValues)
         : state.filters.axisSingleReturnValues,
       displayMode: nextDisplayMode,
+      summaryDisplayMode: nextSummaryDisplayMode,
       recommend: nextFilters.recommend ? normalizeRecommendSelection(nextFilters.recommend) : state.filters.recommend,
       chartDifficulties: nextFilters.chartDifficulties
         ? normalizeChartDifficultySelection(nextFilters.chartDifficulties)
@@ -2609,26 +2654,32 @@ export function createStore() {
     const summaryFilters = isTextAxisMode(state.filters.axisMode) && state.titleFilterBase
       ? state.titleFilterBase
       : state.filters;
+    const summaryDisplayMode = getEffectiveSummaryDisplayMode(state.filters);
+    const summaryGraphFilters = {
+      ...summaryFilters,
+      summaryDisplayMode,
+      displayMode: summaryDisplayMode,
+    };
 
-    const summaryScopeFilters = isTextAxisMode(summaryFilters.axisMode)
-      ? { ...summaryFilters }
-      : { ...summaryFilters, axisValue: "", axisRangeModeByAxis: normalizeAxisRangeModeByAxis() };
+    const summaryScopeFilters = isTextAxisMode(summaryGraphFilters.axisMode)
+      ? { ...summaryGraphFilters }
+      : { ...summaryGraphFilters, axisValue: "", axisRangeModeByAxis: normalizeAxisRangeModeByAxis() };
 
-    const summaryBandBaseSongs = summaryFilters.axisMode === "katate"
+    const summaryBandBaseSongs = summaryGraphFilters.axisMode === "katate"
       ? songStates.filter((entry) => entry.katateValue !== null)
       : songStates;
 
     const summarySongs = summaryBandBaseSongs.filter((entry) => matchesFiltersFor(entry, summaryScopeFilters));
 
     const summaryCountFilters = {
-      ...summaryFilters,
+      ...summaryGraphFilters,
       lamps: [...LAMP_OPTIONS],
       scoreRanks: [...SCORE_RANK_OPTIONS],
     };
 
     const summaryCountSongs = songStates.filter((entry) => matchesFiltersFor(entry, summaryCountFilters));
 
-    const dateSummaryBaseFilters = summaryFilters.axisMode === "date"
+    const dateSummaryBaseFilters = summaryGraphFilters.axisMode === "date"
       ? {
           ...summaryCountFilters,
           axisMode: "splv",
@@ -2640,9 +2691,9 @@ export function createStore() {
       ? summaryBandBaseSongs.filter((entry) => matchesFiltersFor(entry, dateSummaryBaseFilters))
       : summaryCountSongs;
 
-    const summary = summaryFilters.axisMode === "date"
-      ? buildDateSummary(playDateAdjustedRecords, dateSummaryBaseSongs, summaryCountSongs, summaryFilters)
-      : buildSummary(summaryBandBaseSongs, summarySongs, summaryCountSongs, summaryFilters.axisMode, summaryFilters.displayMode);
+    const summary = summaryGraphFilters.axisMode === "date"
+      ? buildDateSummary(playDateAdjustedRecords, dateSummaryBaseSongs, summaryCountSongs, summaryGraphFilters)
+      : buildSummary(summaryBandBaseSongs, summarySongs, summaryCountSongs, summaryGraphFilters.axisMode, summaryGraphFilters.displayMode);
 
     const totalPages = Math.max(1, Math.ceil(visibleSongs.length / PAGE_SIZE));
     const currentPage = Math.max(1, Math.min(state.currentPage, totalPages));

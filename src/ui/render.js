@@ -46,6 +46,10 @@ const DISPLAY_MODE_OPTIONS = [
   { value: "clear", label: "クリア" },
   { value: "score", label: "スコア" },
 ];
+const SUMMARY_DISPLAY_MODE_OPTIONS = [
+  { value: "clear", label: "クリア" },
+  { value: "score", label: "スコア" },
+];
 const CATALOG_SORT_OPTIONS = [
   { value: "title", label: "曲名", modes: ["all", "clear", "score"] },
   { value: "splv", label: "SPLv.", modes: ["all", "clear", "score"] },
@@ -54,7 +58,7 @@ const CATALOG_SORT_OPTIONS = [
   { value: "clear", label: "クリアランプ", modes: ["all", "clear", "score"] },
   { value: "bestBp", label: "最小BP", modes: ["all", "clear"] },
   { value: "latestBp", label: "最新BP", modes: ["all", "clear"] },
-  { value: "bestScore", label: "自己ベスト", modes: ["all", "score"] },
+  { value: "bestScore", label: "最高スコア", modes: ["all", "score"] },
   { value: "latestScore", label: "最新スコア", modes: ["all", "score"] },
   { value: "latest", label: "最終プレー", modes: ["all", "clear", "score"] },
   { value: "entryCount", label: "プレー回数", modes: ["all", "clear", "score"] },
@@ -338,6 +342,48 @@ function formatScoreRankDisplay(value) {
 }
 
 function getPrimaryResultBadge(song) {
+  const lampBadge = song?.displayMode !== "score"
+    ? badge(song.bestLamp, "pill-lamp")
+    : "";
+  const scoreBadge = song?.displayMode === "score" || song?.displayMode === "all"
+    ? badge(formatScoreRankDisplay(song.scoreRank), "pill-lamp")
+    : "";
+  return [lampBadge, scoreBadge].filter(Boolean).join("");
+}
+
+function getSupplementalBadges(song, sortMode = "") {
+  const badges = [];
+  const bpBadge = song?.displayMode !== "score"
+    ? badge(`BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`, "pill-neutral")
+    : "";
+  const scoreBadge = song?.displayMode === "score" || song?.displayMode === "all"
+    ? (() => {
+        const bestScoreLabel = formatScoreRankDisplay(song.bestScoreLabel);
+        const currentScoreLabel = formatScoreRankDisplay(song.currentScoreLabel);
+        return badge(bestScoreLabel === "※" ? "※" : `${bestScoreLabel}/${currentScoreLabel}`, "pill-neutral");
+      })()
+    : "";
+  const dateBadge = badge(song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし", "pill-neutral");
+  const historyBadge = song.entryCount > 0
+    ? badge(`履歴 ${song.entryCount} 件`, "pill-neutral")
+    : "";
+
+  if (sortMode === "bestBp" || sortMode === "latestBp") {
+    badges.push(bpBadge, scoreBadge, historyBadge, dateBadge);
+  } else if (sortMode === "bestScore" || sortMode === "latestScore") {
+    badges.push(scoreBadge, bpBadge, historyBadge, dateBadge);
+  } else if (sortMode === "latest") {
+    badges.push(song.latestDate ? dateBadge : "", bpBadge, scoreBadge, historyBadge, song.latestDate ? "" : dateBadge);
+  } else if (sortMode === "entryCount") {
+    badges.push(historyBadge || dateBadge, bpBadge, scoreBadge, historyBadge ? dateBadge : "");
+  } else {
+    badges.push(bpBadge, scoreBadge, historyBadge, dateBadge);
+  }
+
+  return badges.filter(Boolean).join("");
+}
+
+function getPrimaryResultBadgeLegacy(song) {
   const badges = [];
   if (song?.displayMode !== "score") {
     badges.push(badge(song.bestLamp, "pill-lamp"));
@@ -365,25 +411,39 @@ function getBpOrScoreBadge(song) {
 }
 
 function getBpOrScoreMetaText(song) {
-  const values = [];
+  return getBpOrScoreMetaTextBySort(song);
+}
 
-  if (song?.displayMode !== "score") {
-    values.push(`BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`);
-  }
+function getBpOrScoreMetaTextBySort(song, sortMode = "") {
+  const bpText = song?.displayMode !== "score"
+    ? `BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`
+    : "";
+  const scoreText = song?.displayMode === "score" || song?.displayMode === "all"
+    ? (() => {
+        const bestScoreLabel = formatScoreRankDisplay(song.bestScoreLabel);
+        const currentScoreLabel = formatScoreRankDisplay(song.currentScoreLabel);
+        return bestScoreLabel === "※" ? "※" : `${bestScoreLabel}/${currentScoreLabel}`;
+      })()
+    : "";
+  const dateText = song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし";
+  const historyText = song.entryCount > 0 ? `履歴 ${song.entryCount} 件` : "";
+  const values = sortMode === "bestBp" || sortMode === "latestBp"
+    ? [bpText, scoreText, dateText, historyText]
+    : sortMode === "bestScore" || sortMode === "latestScore"
+      ? [scoreText, bpText, dateText, historyText]
+        : sortMode === "latest"
+          ? [song.latestDate ? dateText : "", bpText, scoreText, historyText, song.latestDate ? "" : dateText]
+          : sortMode === "entryCount"
+            ? [historyText || dateText, bpText, scoreText, historyText ? dateText : ""]
+          : [bpText, scoreText, historyText, dateText];
 
-  if (song?.displayMode === "score" || song?.displayMode === "all") {
-    const bestScoreLabel = formatScoreRankDisplay(song.bestScoreLabel);
-    const currentScoreLabel = formatScoreRankDisplay(song.currentScoreLabel);
-    values.push(bestScoreLabel === "※" ? "※" : `${bestScoreLabel}/${currentScoreLabel}`);
-  }
-
-  return values.join(", ");
+  return values.filter(Boolean).join(", ");
 }
 
 function formatScorePlaceholder(selectedSong) {
   const best = formatScore(selectedSong.bestScore);
   const latest = formatScore(selectedSong.currentScore);
-  return `自己ベスト ${best} / 現在値 ${latest}`;
+  return `最高値 ${best} / 現在値 ${latest}`;
 }
 
 function formatPercent(value, total) {
@@ -812,6 +872,14 @@ function isDefaultDateRange(filters, dateDefaultRange) {
   return filters.dateStart === dateDefaultRange?.dateStart && filters.dateEnd === dateDefaultRange?.dateEnd;
 }
 
+function getEffectiveSummaryDisplayMode(filters) {
+  if (filters.displayMode === "clear" || filters.displayMode === "score") {
+    return filters.displayMode;
+  }
+
+  return filters.summaryDisplayMode === "score" ? "score" : "clear";
+}
+
 function findClosestValue(values, rawValue, fallbackValue) {
   if (!values.length) {
     return fallbackValue;
@@ -900,7 +968,7 @@ function renderSummaryBands(summary) {
 
 function renderSummary(summaryContainer, summary, filters) {
   const lampFilterDisabled = isTextAxisMode(filters.axisMode);
-  const isScoreMode = filters.displayMode === "score";
+  const isScoreMode = summary.displayMode === "score";
   const legendOptions = isScoreMode ? SCORE_RANK_FILTER_OPTIONS : LAMP_OPTIONS;
   const selectedValues = isScoreMode
     ? (filters.scoreRanks ?? SCORE_RANK_OPTIONS)
@@ -1234,10 +1302,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
     <p class="selected-song-note">${escapeHtml(formatSongMemoDisplay(selectedSong))}</p>
     <div class="selected-song-meta">
       <div class="selected-song-meta-row">
-        ${getBpOrScoreBadge(selectedSong)}
-        <!-- ${badge(`Latest ${formatBp(selectedSong.currentBp)}`, "pill-neutral")} -->
-        ${badge(selectedSong.latestDate ? formatIsoDate(selectedSong.latestDate).slice(5) : "履歴なし", "pill-neutral")}
-        ${historyCountBadge}
+        ${getSupplementalBadges(selectedSong, options.sortMode)}
       </div>
     </div>
   `;
@@ -1272,13 +1337,9 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
       : "";
 
     if (options.viewMode === "list") {
-      const listMetaText = [
-        // song.isProposed ? "新規提案中" : "",
-        formatSplvLabel(song),
-        getBpOrScoreMetaText(song),
-        song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし",
-        song.entryCount > 0 ? `履歴 ${song.entryCount} 件` : "",
-      ].filter(Boolean).join(", ");
+      const listMetaCore = getBpOrScoreMetaTextBySort(song, options.sortMode);
+      const splvMeta = formatSplvLabel(song);
+      const listMetaText = [splvMeta, listMetaCore].filter(Boolean).join(", ");
 
       return `
         <button class="song-card ${selectedClass} ${proposedClass} ${deletedRecordClass}" type="button" data-title="${encodedTitle}" data-catalog-key="${encodedCatalogItemKey}" style="--card-lamp-color:${escapeHtml(lampColor)}">
@@ -1310,10 +1371,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
         <p class="song-card-note">${escapeHtml(formatSongMemoDisplay(song))}</p>
         <div class="song-card-meta">
           <div class="song-card-meta-row">
-            ${getBpOrScoreBadge(song)}
-            <!-- ${badge(`Latest ${formatBp(song.currentBp)}`, "pill-neutral")} -->
-            ${badge(song.latestDate ? formatIsoDate(song.latestDate).slice(5) : "履歴なし", "pill-neutral")}
-            ${historyCountBadge}
+            ${getSupplementalBadges(song, options.sortMode)}
           </div>
         </div>
       </button>
@@ -2103,6 +2161,7 @@ export function createRenderer(store) {
   const nodes = {
     summaryPanel: document.querySelector("#summary-cards")?.closest(".panel"),
     summary: document.querySelector("#summary-cards"),
+    summaryDisplaySelect: document.querySelector("#summary-display-select"),
     summaryFiltersToggle: document.querySelector("#summary-filters-toggle"),
     summaryFiltersPanel: document.querySelector("#summary-filters-panel"),
     floatingAxisFilter: document.querySelector("#floating-axis-filter"),
@@ -2343,6 +2402,7 @@ export function createRenderer(store) {
       axisLastRanges: currentFilters.axisLastRanges,
       axisSingleReturnValues: currentFilters.axisSingleReturnValues,
       displayMode: readSelectFilter("displayMode", "all"),
+      summaryDisplayMode: currentFilters.summaryDisplayMode ?? "clear",
       inf: songDataFilter.inf,
       acdelete: songDataFilter.acdelete,
       recommend: selectedRecommend,
@@ -2734,7 +2794,7 @@ export function createRenderer(store) {
       nodes.summaryFiltersToggle.setAttribute("aria-expanded", summaryFiltersOpen ? "true" : "false");
       const label = nodes.summaryFiltersToggle.querySelector(".summary-filters-toggle-label");
       if (label) {
-        label.textContent = summaryFiltersOpen ? "フィルタを閉じる" : "フィルタを表示";
+        label.textContent = summaryFiltersOpen ? "環境設定を閉じる" : "環境設定を開く";
       }
     }
   }
@@ -2742,6 +2802,21 @@ export function createRenderer(store) {
   nodes.summaryFiltersToggle?.addEventListener("click", () => {
     summaryFiltersOpen = !summaryFiltersOpen;
     renderFilterDraftPanel();
+  });
+
+  nodes.summaryDisplaySelect?.addEventListener("change", () => {
+    if (nodes.summaryDisplaySelect.disabled) {
+      return;
+    }
+
+    const nextSummaryDisplayMode = SUMMARY_DISPLAY_MODE_OPTIONS.some((option) => option.value === nodes.summaryDisplaySelect.value)
+      ? nodes.summaryDisplaySelect.value
+      : "clear";
+    filterDraft = {
+      ...(filterDraft ?? store.getSnapshot().filters),
+      summaryDisplayMode: nextSummaryDisplayMode,
+    };
+    applyDifficultyFilters({ summaryDisplayMode: nextSummaryDisplayMode }, { scrollToCatalog: false });
   });
 
   nodes.summaryFiltersPanel.addEventListener("input", (event) => {
@@ -2786,6 +2861,7 @@ export function createRenderer(store) {
       dateStart: filterDraft?.dateStart ?? "",
       dateEnd: filterDraft?.dateEnd ?? "",
       displayMode: "all",
+      summaryDisplayMode: filterDraft?.summaryDisplayMode ?? "clear",
       inf: "all",
       acdelete: "all",
       recommend: ["", "△", "○", "◎", "☆"],
@@ -3316,7 +3392,7 @@ export function createRenderer(store) {
   function applySummaryLampVisualState(activeLamps) {
     const activeSet = new Set(activeLamps);
     const filters = filterDraft ?? store.getSnapshot().filters;
-    const isScoreMode = filters.displayMode === "score";
+    const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
   
     nodes.summary.querySelectorAll("[data-summary-lamp]").forEach((button) => {
       const lamp = button.dataset.summaryLamp;
@@ -3332,7 +3408,7 @@ export function createRenderer(store) {
 
   function getActiveSummaryFilterConfig() {
     const filters = filterDraft ?? store.getSnapshot().filters;
-    const isScoreMode = filters.displayMode === "score";
+    const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
     return {
       key: isScoreMode ? "scoreRanks" : "lamps",
       options: isScoreMode ? SCORE_RANK_SUMMARY_OPTIONS : LAMP_OPTIONS,
@@ -3387,7 +3463,7 @@ export function createRenderer(store) {
   function toggleSummaryLampFilter(lamp) {
     const { key, options } = getActiveSummaryFilterConfig();
     const filters = filterDraft ?? store.getSnapshot().filters;
-    const isScoreMode = filters.displayMode === "score";
+    const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
     const allValues = isScoreMode ? SCORE_RANK_OPTIONS : options;
     const currentLamps = filterDraft?.[key] ? [...filterDraft[key]] : [...allValues];
     const isActive = isScoreMode && lamp === "F"
@@ -3415,7 +3491,7 @@ export function createRenderer(store) {
   function soloSummaryLampFilter(lamp) {
     const { key } = getActiveSummaryFilterConfig();
     const filters = filterDraft ?? store.getSnapshot().filters;
-    const isScoreMode = filters.displayMode === "score";
+    const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
     const nextLamps = isScoreMode && lamp === "F" ? ["F", "※"] : [lamp];
     filterDraft = {
       ...(filterDraft ?? store.getSnapshot().filters),
@@ -3429,7 +3505,7 @@ export function createRenderer(store) {
     const { key } = getActiveSummaryFilterConfig();
     if (lastSummaryLampClick.lamp === lamp && timestamp - lastSummaryLampClick.timestamp <= SUMMARY_LAMP_DOUBLE_CLICK_MS) {
       const filters = filterDraft ?? store.getSnapshot().filters;
-      const isScoreMode = filters.displayMode === "score";
+      const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
       const nextLamps = isScoreMode && lamp === "F" ? ["F", "※"] : [lamp];
       filterDraft = {
         ...(filterDraft ?? store.getSnapshot().filters),
@@ -4173,6 +4249,13 @@ export function createRenderer(store) {
       latestFilterBounds = deriveFilterBounds(snapshot.songStates);
       latestHistoryDates = deriveHistoryDates(snapshot.songStates);
       latestVisibleCount = snapshot.visibleSongs.length;
+      if (nodes.summaryDisplaySelect) {
+        const effectiveSummaryDisplayMode = getEffectiveSummaryDisplayMode(snapshot.filters);
+        nodes.summaryDisplaySelect.disabled = snapshot.filters.displayMode !== "all";
+        if (nodes.summaryDisplaySelect.value !== effectiveSummaryDisplayMode) {
+          nodes.summaryDisplaySelect.value = effectiveSummaryDisplayMode;
+        }
+      }
       renderFilterDraftPanel();
       renderFloatingFilterShell();
       syncFloatingDockClass();
@@ -4191,6 +4274,7 @@ export function createRenderer(store) {
         showKatateTitleSuffix: snapshot.sortMode === "katate" || snapshot.filters.axisMode === "katate",
         viewMode: snapshot.catalogViewMode,
         selectedCatalogKey: snapshot.selectedCatalogKey,
+        sortMode: snapshot.sortMode,
       });
       renderPagination(nodes.catalogPaginationTop, snapshot.pagination, {
         showSortDirectionToggle: true,
@@ -4199,6 +4283,7 @@ export function createRenderer(store) {
       renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
       renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs, {
         showKatateTitleSuffix: snapshot.sortMode === "katate" || snapshot.filters.axisMode === "katate",
+        sortMode: snapshot.sortMode,
       });
       renderProposalButton(
         nodes.selectedSong,

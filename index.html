@@ -66,13 +66,20 @@
       </header>
       <main class="layout">
         <section class="panel">
-          <div class="panel-header">
+          <div class="panel-header catalog-header">
             <div class="section-heading-group">
               <div class="section-toggle-row">
                 <p class="eyebrow">Overview</p>
               </div>
               <h2>全体サマリー</h2>
             </div>
+            <label class="header-select">
+              <span>グラフ表示</span>
+              <select id="summary-display-select">
+                <option value="clear">クリア</option>
+                <option value="score">スコア</option>
+              </select>
+            </label>
           </div>
           <div id="summary-content" class="summary-content">
             <div id="summary-cards" class="summary-grid"></div>
@@ -82,7 +89,7 @@
                   <path d="M7.25 4.75L13.25 10L7.25 15.25" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
                 </svg>
               </span>
-              <span class="summary-filters-toggle-label">フィルタを表示</span>
+              <span class="summary-filters-toggle-label">環境設定を開く</span>
             </button>
             <div id="summary-filters-panel" class="filters-panel"></div>
           </div>
@@ -105,7 +112,7 @@
                   <option value="clear">クリアランプ</option>
                   <option value="bestBp">最小BP</option>
                   <option value="latestBp">最新BP</option>
-                  <option value="bestScore">自己ベスト</option>
+                  <option value="bestScore">最高スコア</option>
                   <option value="latestScore">最新スコア</option>
                   <option value="latest">最終プレー</option>
                   <option value="entryCount">プレー回数</option>
