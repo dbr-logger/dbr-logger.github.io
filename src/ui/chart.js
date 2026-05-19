@@ -118,6 +118,111 @@ function chooseLabelPlacement(points, index, role, padding, innerHeight) {
   };
 }
 
+function chooseFocusLabelPlacement(point, padding, height) {
+  const upperY = Math.max(padding.top + 14, point.y - 16);
+  const lowerY = Math.min(height - padding.bottom - 14, point.y + 16);
+  const hasUpperRoom = point.y - padding.top >= 32;
+
+  return {
+    x: point.x,
+    y: hasUpperRoom ? upperY : lowerY,
+    dominantBaseline: "middle",
+  };
+}
+
+function attachChartInteraction(svg, points, padding, height, getValue) {
+  if (!svg || !points.length) {
+    return;
+  }
+
+  const focusGroup = svg.querySelector("[data-chart-focus]");
+  const focusLine = svg.querySelector("[data-chart-focus-line]");
+  const focusPoint = svg.querySelector("[data-chart-focus-point]");
+  const focusValue = svg.querySelector("[data-chart-focus-value]");
+  const focusDate = svg.querySelector("[data-chart-focus-date]");
+  const pointLabels = Array.from(svg.querySelectorAll("[data-chart-point-label-index]"));
+  if (!focusGroup || !focusLine || !focusPoint || !focusValue || !focusDate) {
+    return;
+  }
+
+  const toSvgX = (event) => {
+    const rect = svg.getBoundingClientRect();
+    const viewBox = svg.viewBox.baseVal;
+    if (!rect.width) {
+      return 0;
+    }
+
+    return viewBox.x + ((event.clientX - rect.left) / rect.width) * viewBox.width;
+  };
+
+  const findClosestPointIndex = (x) => {
+    let closestIndex = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+    points.forEach((point, index) => {
+      const distance = Math.abs(point.x - x);
+      if (distance < closestDistance) {
+        closestDistance = distance;
+        closestIndex = index;
+      }
+    });
+    return closestIndex;
+  };
+
+  const activatePoint = (index) => {
+    const point = points[index];
+    if (!point) {
+      return;
+    }
+
+    const placement = chooseFocusLabelPlacement(point, padding, height);
+    svg.classList.add("is-interacting");
+    focusGroup.removeAttribute("hidden");
+    focusLine.setAttribute("x1", String(point.x));
+    focusLine.setAttribute("x2", String(point.x));
+    focusLine.setAttribute("y1", String(padding.top));
+    focusLine.setAttribute("y2", String(height - padding.bottom));
+    focusPoint.setAttribute("cx", String(point.x));
+    focusPoint.setAttribute("cy", String(point.y));
+    focusValue.setAttribute("x", String(placement.x));
+    focusValue.setAttribute("y", String(placement.y));
+    focusValue.setAttribute("dominant-baseline", placement.dominantBaseline);
+    focusValue.textContent = String(getValue(point));
+    focusDate.setAttribute("x", String(point.x));
+    focusDate.setAttribute("y", String(height - 46));
+    focusDate.textContent = formatIsoDate(point.date).slice(5);
+
+    pointLabels.forEach((label) => {
+      label.classList.toggle("is-active", label.dataset.chartPointLabelIndex === String(index));
+    });
+  };
+
+  const clearActivePoint = () => {
+    svg.classList.remove("is-interacting");
+    focusGroup.setAttribute("hidden", "");
+    pointLabels.forEach((label) => {
+      label.classList.remove("is-active");
+    });
+  };
+
+  const handlePointer = (event) => {
+    if (event.pointerType === "mouse" && event.type === "pointerdown") {
+      return;
+    }
+
+    activatePoint(findClosestPointIndex(toSvgX(event)));
+  };
+
+  svg.addEventListener("pointermove", handlePointer);
+  svg.addEventListener("pointerdown", handlePointer);
+  svg.addEventListener("pointerleave", clearActivePoint);
+  svg.addEventListener("pointerup", (event) => {
+    if (event.pointerType !== "mouse") {
+      clearActivePoint();
+    }
+  });
+  svg.addEventListener("pointercancel", clearActivePoint);
+}
+
 // データポイントの位置に合わせて年の区切りを描画する
 function isJanuaryFirst(date) {
   return typeof date === "string" && /^\d{4}-01-01$/.test(date);
@@ -215,6 +320,8 @@ function renderTrendChart(container, history, options) {
 
   const width = Math.max(Math.floor(container.clientWidth), 280);
   const height = width < 420 ? 260 : 300;
+  const isMobileLayout = window.matchMedia("(max-width: 720px)").matches;
+  const pointRadius = isMobileLayout ? 4.8 : 5.4;
   const padding = width < 420
     ? { top: 24, right: 16, bottom: 72, left: 40 }
     : { top: 24, right: 24, bottom: 72, left: 40 };
@@ -341,8 +448,8 @@ function renderTrendChart(container, history, options) {
 
     return `
     <g>
-      <circle class="chart-point" cx="${point.x}" cy="${point.y}" r="6" />
-      ${shouldShowLabel ? `<text class="chart-point-label" x="${placement.x}" y="${placement.y}" dominant-baseline="${placement.dominantBaseline}" text-anchor="middle">${options.getValue(point)}</text>` : ""}
+      <circle class="chart-point" cx="${point.x}" cy="${point.y}" r="${pointRadius}" />
+      ${shouldShowLabel ? `<text class="chart-point-label" data-chart-point-label-index="${index}" x="${placement.x}" y="${placement.y}" dominant-baseline="${placement.dominantBaseline}" text-anchor="middle">${options.getValue(point)}</text>` : ""}
     </g>
   `;
   }).join("");
@@ -356,8 +463,16 @@ function renderTrendChart(container, history, options) {
       <path class="chart-line" d="${linePath}" />
       ${xLabels}
       ${pointMarkup}
+      <rect class="chart-hit-layer" x="0" y="0" width="${width}" height="${height}" />
+      <g class="chart-focus" data-chart-focus hidden>
+        <line class="chart-focus-line" data-chart-focus-line x1="0" x2="0" y1="${padding.top}" y2="${height - padding.bottom}" />
+        <circle class="chart-focus-point" data-chart-focus-point cx="0" cy="0" r="${pointRadius + 1.2}" />
+        <text class="chart-focus-label" data-chart-focus-value x="0" y="0" dominant-baseline="middle" text-anchor="middle"></text>
+        <text class="chart-focus-date-label" data-chart-focus-date x="0" y="${height - 46}" dominant-baseline="hanging" text-anchor="middle"></text>
+      </g>
     </svg>
   `;
+  attachChartInteraction(container.querySelector(".chart"), points, padding, height, options.getValue);
 }
 
 export function renderBpChart(container, history) {

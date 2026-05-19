@@ -1934,6 +1934,12 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
   display: block;
   max-width: 100%;
   overflow: visible;
+  touch-action: pan-y;
+}
+
+.chart-hit-layer {
+  fill: transparent;
+  pointer-events: all;
 }
 
 .chart-grid-line {
@@ -1966,7 +1972,7 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
   stroke: var(--accent);
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 4;
+  stroke-width: 3.4;
 }
 
 .chart-area {
@@ -1976,7 +1982,53 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
 .chart-point {
   fill: var(--warm);
   stroke: white;
-  stroke-width: 3;
+  stroke-width: 2.5;
+}
+
+.chart-focus {
+  display: none;
+  pointer-events: none;
+}
+
+.chart.is-interacting .chart-focus {
+  display: block;
+}
+
+.chart-focus-line {
+  stroke: var(--accent-strong);
+  stroke-dasharray: 4 5;
+  stroke-width: 1;
+}
+
+.chart-focus-point {
+  fill: var(--warm);
+  stroke: white;
+  stroke-width: 2.5;
+}
+
+.chart-focus-label,
+.chart-focus-date-label {
+  fill: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 12px;
+}
+
+.chart.is-interacting .chart-area,
+.chart.is-interacting .chart-line,
+.chart.is-interacting .chart-point,
+.chart.is-interacting .chart-grid-line,
+.chart.is-interacting .chart-year-line,
+.chart.is-interacting .chart-year-label,
+.chart.is-interacting .chart-axis-text {
+  opacity: 0.38;
+}
+
+.chart.is-interacting .chart-point-label:not(.is-active) {
+  display: none;
+}
+
+.chart.is-interacting .chart-point-label.is-active {
+  opacity: 0;
 }
 
 .table-wrap {
@@ -2181,6 +2233,19 @@ html[data-theme="dark"] .chart-area {
 
 html[data-theme="dark"] .chart-point {
   stroke: #ffffff;
+}
+
+html[data-theme="dark"] .chart-focus-line {
+  stroke: var(--accent-strong);
+}
+
+html[data-theme="dark"] .chart-focus-point {
+  stroke: #ffffff;
+}
+
+html[data-theme="dark"] .chart-focus-label,
+html[data-theme="dark"] .chart-focus-date-label {
+  fill: var(--text);
 }
 
 html[data-theme="dark"] th,
@@ -2746,6 +2811,14 @@ html[data-theme="dark"] .proposal-success-body a {
 
   .summary-band-track {
     height: 14px;
+  }
+
+  .chart-line {
+    stroke-width: 3;
+  }
+
+  .chart-point {
+    stroke-width: 2.3;
   }
 
   .summary-lamp-item {
