@@ -48,8 +48,8 @@ const DISPLAY_MODE_OPTIONS = [
 ];
 const CATALOG_SORT_OPTIONS = [
   { value: "title", label: "曲名", modes: ["all", "clear", "score"] },
-  { value: "level", label: "Lv.", modes: ["all", "clear", "score"] },
   { value: "splv", label: "SPLv.", modes: ["all", "clear", "score"] },
+  { value: "level", label: "DBRLv.", modes: ["all", "clear", "score"] },
   { value: "katate", label: "片手Lv.", modes: ["all", "clear", "score"] },
   { value: "clear", label: "クリアランプ", modes: ["all", "clear", "score"] },
   { value: "bestBp", label: "最小BP", modes: ["all", "clear"] },
@@ -79,8 +79,8 @@ const THEME_STORAGE_KEY = "dbr-theme";
 const ENTRY_BP_INPUT_MODE_STORAGE_KEY = "dbr-entry-bp-input-mode";
 const ENTRY_BP_INPUT_MODES = new Set(["bp", "split"]);
 const AXIS_OPTIONS = [
-  { value: "level", label: "Lv." },
   { value: "splv", label: "SPLv." },
+  { value: "level", label: "DBRLv." },
   { value: "katate", label: "片手Lv." },
   { value: "date", label: "プレー日" },
   { value: "title", label: "曲名" },
@@ -655,7 +655,7 @@ function deriveHistoryDates(songStates) {
 }
 
 function getAxisLabel(axisMode) {
-  return AXIS_OPTIONS.find((option) => option.value === axisMode)?.label ?? "Lv.";
+  return AXIS_OPTIONS.find((option) => option.value === axisMode)?.label ?? "DBRLv.";
 }
 
 function getAxisValues(bounds, axisMode) {
@@ -1037,7 +1037,7 @@ function renderCatalogSortOptions(select, displayMode, sortMode) {
   `).join("");
   select.value = options.some((option) => option.value === sortMode)
     ? sortMode
-    : options[0]?.value ?? "level";
+    : options[0]?.value ?? "splv";
 }
 
 function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewState = null, dateDefaultRange = null) {
@@ -2331,7 +2331,7 @@ export function createRenderer(store) {
         };
 
     return {
-      axisMode: currentFilters.axisMode ?? "level",
+      axisMode: currentFilters.axisMode ?? "splv",
       axisValue: currentFilters.axisValue ?? "",
       titleQuery: currentFilters.titleQuery ?? "",
       dateSelectionMode: currentFilters.dateSelectionMode ?? "single",
@@ -2342,7 +2342,7 @@ export function createRenderer(store) {
       axisRanges: currentFilters.axisRanges,
       axisLastRanges: currentFilters.axisLastRanges,
       axisSingleReturnValues: currentFilters.axisSingleReturnValues,
-      displayMode: readSelectFilter("displayMode", "clear"),
+      displayMode: readSelectFilter("displayMode", "all"),
       inf: songDataFilter.inf,
       acdelete: songDataFilter.acdelete,
       recommend: selectedRecommend,
@@ -2778,14 +2778,14 @@ export function createRenderer(store) {
     }
 
     filterDraft = {
-      axisMode: filterDraft?.axisMode ?? "level",
+      axisMode: filterDraft?.axisMode ?? "splv",
       axisValue: filterDraft?.axisValue ?? "",
       titleQuery: filterDraft?.titleQuery ?? "",
       dateSelectionMode: filterDraft?.dateSelectionMode ?? "single",
       dateSingle: filterDraft?.dateSingle ?? todayIso(),
       dateStart: filterDraft?.dateStart ?? "",
       dateEnd: filterDraft?.dateEnd ?? "",
-      displayMode: "clear",
+      displayMode: "all",
       inf: "all",
       acdelete: "all",
       recommend: ["", "△", "○", "◎", "☆"],

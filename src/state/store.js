@@ -294,7 +294,7 @@ function normalizeBooleanFilter(value) {
 }
 
 function normalizeDisplayMode(value) {
-  return DISPLAY_MODES.includes(value) ? value : "clear";
+  return DISPLAY_MODES.includes(value) ? value : "all";
 }
 
 function isScoreDisplayMode(displayMode) {
@@ -327,7 +327,7 @@ function normalizeUnratedFilter(value) {
 }
 
 function normalizeAxisMode(value) {
-  return AXIS_MODES.includes(value) ? value : "level";
+  return AXIS_MODES.includes(value) ? value : "splv";
 }
 
 function isTextAxisMode(axisMode) {
@@ -399,7 +399,7 @@ function normalizeDateRangeMemory(dateRangeMemory) {
 }
 
 function getDefaultSortModeForAxis(axisMode) {
-  return DEFAULT_SORT_MODE_BY_AXIS[axisMode] ?? "level";
+  return DEFAULT_SORT_MODE_BY_AXIS[axisMode] ?? "splv";
 }
 
 function normalizeDateValue(value) {
@@ -461,7 +461,7 @@ function normalizeStoredFilters(filters) {
 }
 
 function normalizeSortMode(sortMode) {
-  return SORT_OPTIONS.includes(sortMode) ? sortMode : "level";
+  return SORT_OPTIONS.includes(sortMode) ? sortMode : "splv";
 }
 
 function normalizeSortModeForDisplay(sortMode, displayMode) {
@@ -613,7 +613,7 @@ function normalizeStoredData(stored) {
   const restoredFilters = isTextAxisMode(normalizedFilters.axisMode)
     ? (normalizedTitleFilterBase ? { ...normalizedTitleFilterBase } : {
       ...normalizedFilters,
-      axisMode: "level",
+      axisMode: "splv",
       axisValue: "",
       titleQuery: "",
     })
@@ -1119,7 +1119,7 @@ function getDateFilterReturnBase(previousFilters, titleFilterBase) {
   if (!isValidReturnAxis(previousFilters.axisMode)) {
     return {
       ...previousFilters,
-      axisMode: "level",
+      axisMode: "splv",
       axisValue: "",
       titleQuery: "",
       dateSelectionMode: "single",
@@ -1373,7 +1373,7 @@ export function createStore() {
       dateStart: "",
       dateEnd: "",
     },
-    titleSortBase: "level",
+    titleSortBase: "splv",
     axisMemory: {
       level: "",
       splv: "",
@@ -1385,7 +1385,7 @@ export function createStore() {
       memo: "",
     },
     filters: {
-      axisMode: "level",
+      axisMode: "splv",
       axisValue: "",
       titleQuery: "",
       dateSelectionMode: "single",
@@ -1396,7 +1396,7 @@ export function createStore() {
       axisRanges: normalizeAxisRanges(),
       axisLastRanges: normalizeAxisRanges(),
       axisSingleReturnValues: normalizeAxisSingleReturnValues(),
-      displayMode: "clear",
+      displayMode: "all",
       recommend: [...RECOMMEND_OPTIONS],
       chartDifficulties: [...CHART_DIFFICULTY_OPTIONS],
       lamps: [...LAMP_OPTIONS],
@@ -1405,7 +1405,7 @@ export function createStore() {
       acdelete: "all",
       includeUnrated: "all",
     },
-    sortMode: "level",
+    sortMode: "splv",
     sortDirection: "asc",
     catalogViewMode: "card",
     currentPage: 1,
@@ -2028,7 +2028,7 @@ export function createStore() {
       ? { ...state.dateFilterBase }
       : {
         ...state.filters,
-        axisMode: "level",
+        axisMode: "splv",
         axisValue: "",
         titleQuery: "",
         dateSelectionMode: "single",
