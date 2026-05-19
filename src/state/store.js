@@ -10,10 +10,11 @@ const { getSearchTextMatchRank, matchesSearchText } = await import(`../utils/sea
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
 const CHART_DIFFICULTY_OPTIONS = ["B", "N", "H", "A", "L"];
-const DISPLAY_MODES = ["clear", "score"];
-const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F"];
+const DISPLAY_MODES = ["clear", "score", "all"];
+const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F", "※"];
+const SCORE_RANK_SUMMARY_OPTIONS = SCORE_RANK_OPTIONS.filter((rank) => rank !== "※");
 const PAGE_SIZE = 100;
-const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "latest", "entryCount", "recommend", "memo"];
+const SORT_OPTIONS = ["title", "level", "splv", "katate", "clear", "bestBp", "latestBp", "bestScore", "latestScore", "latest", "entryCount", "recommend", "memo"];
 const AXIS_MODES = ["level", "splv", "katate", "title", "memo", "date"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate"];
 const NUMERIC_AXIS_MODES = ["level", "splv", "katate"];
@@ -192,8 +193,13 @@ function parseOptionalNumber(value) {
 }
 
 function getScoreMax(songOrRecord) {
+  const rawScratch = songOrRecord?.scratch;
+  if (rawScratch === null || rawScratch === undefined || rawScratch === "") {
+    return null;
+  }
+
   const notes = Number(songOrRecord?.notes);
-  const scratch = Number(songOrRecord?.scratch);
+  const scratch = Number(rawScratch);
   if (!Number.isFinite(notes) || notes <= 0 || !Number.isFinite(scratch)) {
     return null;
   }
@@ -273,6 +279,13 @@ function normalizeScoreRankSelection(values) {
     return [...SCORE_RANK_OPTIONS];
   }
 
+  const oldAllSelected = SCORE_RANK_OPTIONS
+    .filter((rank) => rank !== "※")
+    .every((rank) => values.includes(rank));
+  if (oldAllSelected && !values.includes("※")) {
+    return [...SCORE_RANK_OPTIONS];
+  }
+
   return SCORE_RANK_OPTIONS.filter((rank) => values.includes(rank));
 }
 
@@ -282,6 +295,14 @@ function normalizeBooleanFilter(value) {
 
 function normalizeDisplayMode(value) {
   return DISPLAY_MODES.includes(value) ? value : "clear";
+}
+
+function isScoreDisplayMode(displayMode) {
+  return displayMode === "score";
+}
+
+function isClearSummaryMode(displayMode) {
+  return displayMode === "clear" || displayMode === "all";
 }
 
 function normalizeSongDataFilterPair(infValue, acdeleteValue) {
@@ -444,7 +465,27 @@ function normalizeSortMode(sortMode) {
 }
 
 function normalizeSortModeForDisplay(sortMode, displayMode) {
-  return displayMode === "score" && sortMode === "clear" ? "bestBp" : normalizeSortMode(sortMode);
+  if (displayMode === "score") {
+    if (sortMode === "bestBp") {
+      return "bestScore";
+    }
+
+    if (sortMode === "latestBp") {
+      return "latestScore";
+    }
+  }
+
+  if (displayMode === "clear") {
+    if (sortMode === "bestScore") {
+      return "bestBp";
+    }
+
+    if (sortMode === "latestScore") {
+      return "latestBp";
+    }
+  }
+
+  return normalizeSortMode(sortMode);
 }
 
 function normalizeSortDirection(sortDirection) {
@@ -825,11 +866,12 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode,
   const lampCounts = countsFactory();
 
   targetSongStates.forEach((song) => {
-    if (countsFactory === createScoreRankCounts && !SCORE_RANK_OPTIONS.includes(song[countKey])) {
+    const summaryKey = isScoreMode ? normalizeScoreRankForSummary(song[countKey]) : song[countKey];
+    if (isScoreMode && !SCORE_RANK_SUMMARY_OPTIONS.includes(summaryKey)) {
       return;
     }
 
-    lampCounts[song[countKey]] += 1;
+    lampCounts[summaryKey] += 1;
   });
 
   const bandMap = new Map();
@@ -881,7 +923,8 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode,
   });
 
   bandSongStates.forEach((song) => {
-    if (countsFactory === createScoreRankCounts && !SCORE_RANK_OPTIONS.includes(song[countKey])) {
+    const summaryKey = isScoreMode ? normalizeScoreRankForSummary(song[countKey]) : song[countKey];
+    if (isScoreMode && !SCORE_RANK_SUMMARY_OPTIONS.includes(summaryKey)) {
       return;
     }
 
@@ -889,7 +932,7 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode,
     const key = value === null ? "null" : String(value);
     const band = bandMap.get(key);
     band.total += 1;
-    band.lampCounts[song[countKey]] += 1;
+    band.lampCounts[summaryKey] += 1;
   });
 
   const bands = [...bandMap.values()].sort((a, b) => {
@@ -908,10 +951,10 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode,
   return {
     axisMode,
     bandTotalSongs: isScoreMode
-      ? bandSongStates.filter((song) => SCORE_RANK_OPTIONS.includes(song[countKey])).length
+      ? bandSongStates.filter((song) => SCORE_RANK_SUMMARY_OPTIONS.includes(normalizeScoreRankForSummary(song[countKey]))).length
       : bandSongStates.length,
     totalSongs: isScoreMode
-      ? targetSongStates.filter((song) => SCORE_RANK_OPTIONS.includes(song[countKey])).length
+      ? targetSongStates.filter((song) => SCORE_RANK_SUMMARY_OPTIONS.includes(normalizeScoreRankForSummary(song[countKey]))).length
       : targetSongStates.length,
     lampCounts,
     displayMode: isScoreMode ? "score" : "clear",
@@ -927,10 +970,14 @@ function createLampCounts() {
 }
 
 function createScoreRankCounts() {
-  return SCORE_RANK_OPTIONS.reduce((counts, rank) => {
+  return SCORE_RANK_SUMMARY_OPTIONS.reduce((counts, rank) => {
     counts[rank] = 0;
     return counts;
   }, {});
+}
+
+function normalizeScoreRankForSummary(scoreRank) {
+  return scoreRank === "※" ? "F" : scoreRank;
 }
 
 function formatDateBandLabel(date) {
@@ -989,8 +1036,8 @@ function buildDateSummary(records, baseSongs, filters) {
     const lamp = LAMP_OPTIONS.includes(record.lamp) ? record.lamp : "NO PLAY";
     const scoreRank = getScoreRankInfo(record.score, songByTitle.get(record.title)).label;
     const scoreFilterRank = scoreRank === "MAX" ? "AAA" : scoreRank;
-    const countKey = isScoreMode ? scoreFilterRank : lamp;
-    if (isScoreMode && !SCORE_RANK_OPTIONS.includes(countKey)) {
+    const countKey = isScoreMode ? normalizeScoreRankForSummary(scoreFilterRank) : lamp;
+    if (isScoreMode && !SCORE_RANK_SUMMARY_OPTIONS.includes(countKey)) {
       return;
     }
 
@@ -1011,7 +1058,12 @@ function buildDateSummary(records, baseSongs, filters) {
     band.baseTotal += 1;
     band.baseLampCounts[countKey] += 1;
 
-    if ((isScoreMode ? filters.scoreRanks : filters.lamps).includes(countKey)) {
+    const selectedScoreRanks = filters.scoreRanks ?? SCORE_RANK_OPTIONS;
+    const isSelected = isScoreMode
+      ? selectedScoreRanks.includes(countKey) || (countKey === "F" && selectedScoreRanks.includes("※"))
+      : filters.lamps.includes(countKey);
+
+    if (isSelected) {
       band.total += 1;
       band.lampCounts[countKey] += 1;
     }
@@ -1024,7 +1076,7 @@ function buildDateSummary(records, baseSongs, filters) {
 
   const baseLampCounts = countsFactory();
   bands.forEach((band) => {
-    (isScoreMode ? SCORE_RANK_OPTIONS : LAMP_OPTIONS).forEach((key) => {
+    (isScoreMode ? SCORE_RANK_SUMMARY_OPTIONS : LAMP_OPTIONS).forEach((key) => {
       baseLampCounts[key] += band.baseLampCounts[key] ?? 0;
     });
   });
@@ -1129,6 +1181,25 @@ function compareNullablePrimaryValues(aValue, bValue, compareValues, sortDirecti
   return sortDirection === "desc" ? -compared : compared;
 }
 
+function compareScoreRatePrimaryValues(a, b, valueKey, sortDirection) {
+  const aUnknownScore = a.scoreFilterRank === "※";
+  const bUnknownScore = b.scoreFilterRank === "※";
+
+  if (aUnknownScore && bUnknownScore) {
+    return 0;
+  }
+
+  if (aUnknownScore) {
+    return 1;
+  }
+
+  if (bUnknownScore) {
+    return -1;
+  }
+
+  return compareNullablePrimaryValues(a[valueKey], b[valueKey], (aValue, bValue) => aValue - bValue, sortDirection);
+}
+
 function comparePrimarySortValue(a, b, sortMode, sortDirection) {
   if (sortMode === "title") {
     return compareTitlePrimaryValue(a.title, b.title, sortDirection);
@@ -1157,25 +1228,24 @@ function comparePrimarySortValue(a, b, sortMode, sortDirection) {
   }  
 
   if (sortMode === "clear") {
-    if (a.displayMode === "score" || b.displayMode === "score") {
-      return 0;
-    }
     const compared = getLampRank(a.bestLamp) - getLampRank(b.bestLamp);
     return sortDirection === "desc" ? -compared : compared;
   }
 
   if (sortMode === "bestBp") {
-    if (a.displayMode === "score" || b.displayMode === "score") {
-      return compareNullablePrimaryValues(a.bestScoreRate, b.bestScoreRate, (aValue, bValue) => aValue - bValue, sortDirection);
-    }
     return compareNullablePrimaryValues(a.bestBp, b.bestBp, (aValue, bValue) => aValue - bValue, sortDirection);
   }
 
   if (sortMode === "latestBp") {
-    if (a.displayMode === "score" || b.displayMode === "score") {
-      return compareNullablePrimaryValues(a.currentScoreRate, b.currentScoreRate, (aValue, bValue) => aValue - bValue, sortDirection);
-    }
     return compareNullablePrimaryValues(a.currentBp, b.currentBp, (aValue, bValue) => aValue - bValue, sortDirection);
+  }
+
+  if (sortMode === "bestScore") {
+    return compareScoreRatePrimaryValues(a, b, "bestScoreRate", sortDirection);
+  }
+
+  if (sortMode === "latestScore") {
+    return compareScoreRatePrimaryValues(a, b, "currentScoreRate", sortDirection);
   }
 
   if (sortMode === "recommend") {
@@ -1617,7 +1687,9 @@ export function createStore() {
       return false;
     }
 
-    if (filters.displayMode === "score" && !(filters.scoreRanks ?? SCORE_RANK_OPTIONS).includes(entry.scoreFilterRank)) {
+    const scoreRanks = filters.scoreRanks ?? SCORE_RANK_OPTIONS;
+    const scoreFilterRank = entry.scoreFilterRank === "※" ? "F" : entry.scoreFilterRank;
+    if (filters.displayMode === "score" && !scoreRanks.includes(scoreFilterRank)) {
       return false;
     }
 
@@ -1878,9 +1950,12 @@ export function createStore() {
     nextStateFilters.inf = songDataFilter.inf;
     nextStateFilters.acdelete = songDataFilter.acdelete;
 
-    if (nextStateFilters.displayMode === "score" && state.sortMode === "clear") {
-      state.sortMode = "bestBp";
-      nextSortModeMemory[nextAxisMode] = state.sortMode;
+    if (!axisModeChanged) {
+      const normalizedSortMode = normalizeSortModeForDisplay(state.sortMode, nextStateFilters.displayMode);
+      if (normalizedSortMode !== state.sortMode) {
+        state.sortMode = normalizedSortMode;
+        nextSortModeMemory[nextStateFilters.axisMode] = normalizedSortMode;
+      }
     }
 
     if (nextStateFilters.includeUnrated === "unrated" && nextStateFilters.axisMode === "level") {
@@ -1993,9 +2068,7 @@ export function createStore() {
   }
 
   function setSortMode(nextSortMode) {
-    const normalized = state.filters.displayMode === "score" && nextSortMode === "clear"
-      ? "bestBp"
-      : normalizeSortMode(nextSortMode);
+    const normalized = normalizeSortMode(nextSortMode);
     if (normalized === state.sortMode) {
       return;
     }

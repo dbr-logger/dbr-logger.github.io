@@ -27,10 +27,12 @@ const SCORE_RANK_COLORS = {
   D: "var(--lamp-assist)",
   E: "var(--lamp-failed)",
   F: "var(--lamp-no-play)",
+  "※": "var(--lamp-no-play)",
 };
 const getScoreRankColor = (rank) => SCORE_RANK_COLORS[rank] ?? "transparent";
 const getSummaryBandLampColor = (lamp) => getLampColor(lamp);
 const getCardLampColor = (lamp) => lamp === "NO PLAY" ? "transparent" : getLampColor(lamp);
+const getScoreRankSummaryLabel = (rank) => rank === "F" ? "F/※" : rank;
 const RECOMMEND_OPTIONS = [
   { value: "", label: "－" },
   { value: "△", label: "△" },
@@ -40,10 +42,27 @@ const RECOMMEND_OPTIONS = [
 ];
 const CHART_DIFFICULTY_OPTIONS = ["B", "N", "H", "A", "L"];
 const DISPLAY_MODE_OPTIONS = [
+  { value: "all", label: "すべて" },
   { value: "clear", label: "クリア" },
   { value: "score", label: "スコア" },
 ];
-const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F"];
+const CATALOG_SORT_OPTIONS = [
+  { value: "title", label: "曲名", modes: ["all", "clear", "score"] },
+  { value: "level", label: "Lv.", modes: ["all", "clear", "score"] },
+  { value: "splv", label: "SPLv.", modes: ["all", "clear", "score"] },
+  { value: "katate", label: "片手Lv.", modes: ["all", "clear", "score"] },
+  { value: "clear", label: "クリアランプ", modes: ["all", "clear", "score"] },
+  { value: "bestBp", label: "最小BP", modes: ["all", "clear"] },
+  { value: "latestBp", label: "最新BP", modes: ["all", "clear"] },
+  { value: "bestScore", label: "自己ベスト", modes: ["all", "score"] },
+  { value: "latestScore", label: "最新スコア", modes: ["all", "score"] },
+  { value: "latest", label: "最終プレー", modes: ["all", "clear", "score"] },
+  { value: "entryCount", label: "プレー回数", modes: ["all", "clear", "score"] },
+  { value: "recommend", label: "おすすめ", modes: ["all", "clear", "score"] },
+  { value: "memo", label: "メモ", modes: ["all", "clear", "score"] },
+];
+const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F", "※"];
+const SCORE_RANK_SUMMARY_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F"];
 const SCORE_RANK_FILTER_OPTIONS = ["F", "E", "D", "C", "B", "A", "AA", "AAA"];
 const SONG_DATA_FILTER_OPTIONS = [
   { value: "all", label: "すべて", inf: "all", acdelete: "all" },
@@ -319,21 +338,46 @@ function formatScoreRankDisplay(value) {
 }
 
 function getPrimaryResultBadge(song) {
-  return song?.displayMode === "score"
-    ? badge(formatScoreRankDisplay(song.scoreRank), "pill-lamp")
-    : badge(song.bestLamp, "pill-lamp");
+  const badges = [];
+  if (song?.displayMode !== "score") {
+    badges.push(badge(song.bestLamp, "pill-lamp"));
+  }
+  if (song?.displayMode === "score" || song?.displayMode === "all") {
+    badges.push(badge(formatScoreRankDisplay(song.scoreRank), "pill-lamp"));
+  }
+  return badges.join("");
 }
 
 function getBpOrScoreBadge(song) {
-  return song?.displayMode === "score"
-    ? badge(`${formatScoreRankDisplay(song.bestScoreLabel)}/${formatScoreRankDisplay(song.currentScoreLabel)}`, "pill-neutral")
-    : badge(`BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`, "pill-neutral");
+  const badges = [];
+
+  if (song?.displayMode !== "score") {
+    badges.push(badge(`BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`, "pill-neutral"));
+  }
+
+  if (song?.displayMode === "score" || song?.displayMode === "all") {
+    const bestScoreLabel = formatScoreRankDisplay(song.bestScoreLabel);
+    const currentScoreLabel = formatScoreRankDisplay(song.currentScoreLabel);
+    badges.push(badge(bestScoreLabel === "※" ? "※" : `${bestScoreLabel}/${currentScoreLabel}`, "pill-neutral"));
+  }
+
+  return badges.join("");
 }
 
 function getBpOrScoreMetaText(song) {
-  return song?.displayMode === "score"
-    ? `${formatScoreRankDisplay(song.bestScoreLabel)}/${formatScoreRankDisplay(song.currentScoreLabel)}`
-    : `BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`;
+  const values = [];
+
+  if (song?.displayMode !== "score") {
+    values.push(`BP ${formatBp(song.bestBp)}/${formatBp(song.currentBp)}`);
+  }
+
+  if (song?.displayMode === "score" || song?.displayMode === "all") {
+    const bestScoreLabel = formatScoreRankDisplay(song.bestScoreLabel);
+    const currentScoreLabel = formatScoreRankDisplay(song.currentScoreLabel);
+    values.push(bestScoreLabel === "※" ? "※" : `${bestScoreLabel}/${currentScoreLabel}`);
+  }
+
+  return values.join(", ");
 }
 
 function formatScorePlaceholder(selectedSong) {
@@ -808,7 +852,7 @@ function renderSummaryBands(summary) {
   }
 
   const rows = summary.bands.map((band) => {
-    const categoryOptions = summary.displayMode === "score" ? SCORE_RANK_OPTIONS : LAMP_OPTIONS;
+    const categoryOptions = summary.displayMode === "score" ? SCORE_RANK_SUMMARY_OPTIONS : LAMP_OPTIONS;
     const segmentOrder = summary.displayMode === "score" ? categoryOptions : [...categoryOptions].reverse();
     const emptyKey = summary.displayMode === "score" ? "F" : "NO PLAY";
     const getColor = summary.displayMode === "score" ? getScoreRankColor : getSummaryBandLampColor;
@@ -863,24 +907,31 @@ function renderSummary(summaryContainer, summary, filters) {
     : filters.lamps;
   const getLegendColor = isScoreMode ? getScoreRankColor : getLampColor;
 
-  const legend = legendOptions.map((lamp) => `
-    <button
-      class="summary-lamp-item ${selectedValues.includes(lamp) ? "is-active" : "is-inactive"}"
-      type="button"
-      data-summary-lamp="${escapeHtml(lamp)}"
-      aria-pressed="${selectedValues.includes(lamp) ? "true" : "false"}"
-      ${lampFilterDisabled ? "disabled aria-disabled=\"true\"" : ""}
-    >
-      <div class="summary-lamp-main">
-        <span class="summary-lamp-dot" style="background:${getLegendColor(lamp)}"></span>
-        <span class="summary-lamp-label">${escapeHtml(lamp)}</span>
-      </div>
-      <div class="summary-lamp-values">
-        <strong>${summary.lampCounts[lamp] ?? 0}</strong>
-        <span>${formatPercent(summary.lampCounts[lamp] ?? 0, summary.totalSongs)}</span>
-      </div>
-    </button>
-  `).join("");
+  const legend = legendOptions.map((lamp) => {
+    const isActive = isScoreMode && lamp === "F"
+      ? selectedValues.includes("F") || selectedValues.includes("※")
+      : selectedValues.includes(lamp);
+    const label = isScoreMode ? getScoreRankSummaryLabel(lamp) : lamp;
+
+    return `
+      <button
+        class="summary-lamp-item ${isActive ? "is-active" : "is-inactive"}"
+        type="button"
+        data-summary-lamp="${escapeHtml(lamp)}"
+        aria-pressed="${isActive ? "true" : "false"}"
+        ${lampFilterDisabled ? "disabled aria-disabled=\"true\"" : ""}
+      >
+        <div class="summary-lamp-main">
+          <span class="summary-lamp-dot" style="background:${getLegendColor(lamp)}"></span>
+          <span class="summary-lamp-label">${escapeHtml(label)}</span>
+        </div>
+        <div class="summary-lamp-values">
+          <strong>${summary.lampCounts[lamp] ?? 0}</strong>
+          <span>${formatPercent(summary.lampCounts[lamp] ?? 0, summary.totalSongs)}</span>
+        </div>
+      </button>
+    `;
+  }).join("");
 
   summaryContainer.innerHTML = `
     <div class="summary-panel">
@@ -975,6 +1026,18 @@ function renderDifficultyFilters(container, filters) {
       </div> -->
     </div>
   `;
+}
+
+function renderCatalogSortOptions(select, displayMode, sortMode) {
+  const mode = displayMode === "all" || displayMode === "score" ? displayMode : "clear";
+  const options = CATALOG_SORT_OPTIONS.filter((option) => option.modes.includes(mode));
+
+  select.innerHTML = options.map((option) => `
+    <option value="${escapeHtml(option.value)}" ${option.value === sortMode ? "selected" : ""}>${escapeHtml(option.label)}</option>
+  `).join("");
+  select.value = options.some((option) => option.value === sortMode)
+    ? sortMode
+    : options[0]?.value ?? "level";
 }
 
 function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewState = null, dateDefaultRange = null) {
@@ -3252,10 +3315,14 @@ export function createRenderer(store) {
 
   function applySummaryLampVisualState(activeLamps) {
     const activeSet = new Set(activeLamps);
+    const filters = filterDraft ?? store.getSnapshot().filters;
+    const isScoreMode = filters.displayMode === "score";
   
     nodes.summary.querySelectorAll("[data-summary-lamp]").forEach((button) => {
       const lamp = button.dataset.summaryLamp;
-      const isActive = activeSet.has(lamp);
+      const isActive = isScoreMode && lamp === "F"
+        ? activeSet.has("F") || activeSet.has("※")
+        : activeSet.has(lamp);
   
       button.classList.toggle("is-active", isActive);
       button.classList.toggle("is-inactive", !isActive);
@@ -3268,7 +3335,7 @@ export function createRenderer(store) {
     const isScoreMode = filters.displayMode === "score";
     return {
       key: isScoreMode ? "scoreRanks" : "lamps",
-      options: isScoreMode ? SCORE_RANK_OPTIONS : LAMP_OPTIONS,
+      options: isScoreMode ? SCORE_RANK_SUMMARY_OPTIONS : LAMP_OPTIONS,
     };
   }
   
@@ -3319,13 +3386,22 @@ export function createRenderer(store) {
 
   function toggleSummaryLampFilter(lamp) {
     const { key, options } = getActiveSummaryFilterConfig();
-    const currentLamps = filterDraft?.[key] ? [...filterDraft[key]] : [...options];
-    let nextLamps = currentLamps.includes(lamp)
-      ? currentLamps.filter((value) => value !== lamp)
-      : [...currentLamps, lamp];
+    const filters = filterDraft ?? store.getSnapshot().filters;
+    const isScoreMode = filters.displayMode === "score";
+    const allValues = isScoreMode ? SCORE_RANK_OPTIONS : options;
+    const currentLamps = filterDraft?.[key] ? [...filterDraft[key]] : [...allValues];
+    const isActive = isScoreMode && lamp === "F"
+      ? currentLamps.includes("F") || currentLamps.includes("※")
+      : currentLamps.includes(lamp);
+    let nextLamps = isActive
+      ? currentLamps.filter((value) => (
+        isScoreMode && lamp === "F" ? value !== "F" && value !== "※" : value !== lamp
+      ))
+      : [...currentLamps, lamp, ...(isScoreMode && lamp === "F" ? ["※"] : [])];
+    nextLamps = [...new Set(nextLamps)];
 
     if (nextLamps.length === 0) {
-      nextLamps = [...options];
+      nextLamps = [...allValues];
     }
 
     filterDraft = {
@@ -3338,23 +3414,29 @@ export function createRenderer(store) {
 
   function soloSummaryLampFilter(lamp) {
     const { key } = getActiveSummaryFilterConfig();
+    const filters = filterDraft ?? store.getSnapshot().filters;
+    const isScoreMode = filters.displayMode === "score";
+    const nextLamps = isScoreMode && lamp === "F" ? ["F", "※"] : [lamp];
     filterDraft = {
       ...(filterDraft ?? store.getSnapshot().filters),
-      [key]: [lamp],
+      [key]: nextLamps,
     };
-    applySummaryLampVisualState([lamp]);
-    deferDifficultyFilters({ [key]: [lamp] }, { scrollToCatalog: false });
+    applySummaryLampVisualState(nextLamps);
+    deferDifficultyFilters({ [key]: nextLamps }, { scrollToCatalog: false });
   }
 
   function handleSummaryLampActivation(lamp, timestamp = performance.now()) {
     const { key } = getActiveSummaryFilterConfig();
     if (lastSummaryLampClick.lamp === lamp && timestamp - lastSummaryLampClick.timestamp <= SUMMARY_LAMP_DOUBLE_CLICK_MS) {
+      const filters = filterDraft ?? store.getSnapshot().filters;
+      const isScoreMode = filters.displayMode === "score";
+      const nextLamps = isScoreMode && lamp === "F" ? ["F", "※"] : [lamp];
       filterDraft = {
         ...(filterDraft ?? store.getSnapshot().filters),
-        [key]: [lamp],
+        [key]: nextLamps,
       };
-      applySummaryLampVisualState([lamp]);
-      deferDifficultyFilters({ [key]: [lamp] }, { scrollToCatalog: false });
+      applySummaryLampVisualState(nextLamps);
+      deferDifficultyFilters({ [key]: nextLamps }, { scrollToCatalog: false });
       lastSummaryLampClick = { lamp: "", timestamp: 0 };
       return;
     }
@@ -4215,21 +4297,7 @@ export function createRenderer(store) {
         nodes.backToCardButton.disabled = !selectedCardExists;
       }
       if (nodes.catalogSortSelect) {
-        const isScoreMode = snapshot.filters.displayMode === "score";
-        const clearSortOption = nodes.catalogSortSelect.querySelector('option[value="clear"]');
-        const bestBpSortOption = nodes.catalogSortSelect.querySelector('option[value="bestBp"]');
-        const latestBpSortOption = nodes.catalogSortSelect.querySelector('option[value="latestBp"]');
-        if (clearSortOption instanceof HTMLOptionElement) {
-          clearSortOption.hidden = isScoreMode;
-          clearSortOption.disabled = isScoreMode;
-        }
-        if (bestBpSortOption instanceof HTMLOptionElement) {
-          bestBpSortOption.textContent = isScoreMode ? "自己ベスト" : "最小BP";
-        }
-        if (latestBpSortOption instanceof HTMLOptionElement) {
-          latestBpSortOption.textContent = isScoreMode ? "最新スコア" : "最新BP";
-        }
-        nodes.catalogSortSelect.value = snapshot.sortMode;
+        renderCatalogSortOptions(nodes.catalogSortSelect, snapshot.filters.displayMode, snapshot.sortMode);
       }
       if (nodes.catalogViewToggle) {
         const isListView = snapshot.catalogViewMode === "list";
