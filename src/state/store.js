@@ -58,6 +58,43 @@ const VERSION_LABELS = new Map([
   ["32", "Pinky Crush"],
   ["33", "Sparkle Shower"],
 ]);
+const VERSION_BAND_LABELS = new Map([
+  ["0", "CS/INF"],
+  ["1", "1st"],
+  ["s", "sub"],
+  ["2", "2nd"],
+  ["3", "3rd"],
+  ["4", "4th"],
+  ["5", "5th"],
+  ["6", "6th"],
+  ["7", "7th"],
+  ["8", "8th"],
+  ["9", "9th"],
+  ["10", "10th"],
+  ["11", "RED"],
+  ["12", "SKY"],
+  ["13", "DD"],
+  ["14", "GOLD"],
+  ["15", "DJT"],
+  ["16", "EMP"],
+  ["17", "SIR"],
+  ["18", "RA"],
+  ["19", "LC"],
+  ["20", "tri"],
+  ["21", "SPA"],
+  ["22", "PEN"],
+  ["23", "cop"],
+  ["24", "SINO"],
+  ["25", "CAN"],
+  ["26", "Root"],
+  ["27", "HERO"],
+  ["28", "BIS"],
+  ["29", "Cast"],
+  ["30", "RESI"],
+  ["31", "EPO"],
+  ["32", "Pink"],
+  ["33", "SPS"],
+]);
 const PLAY_DATE_RESET_HOUR = 5;
 const PLAY_DATE_CHAIN_THRESHOLD_MS = 60 * 60 * 1000;
 const DEFAULT_SORT_MODE_BY_AXIS = {
@@ -263,15 +300,7 @@ function getVersionDisplayLabel(value) {
 
 function getVersionBandLabel(value) {
   const normalized = normalizeVersionValue(value);
-  if (normalized === "0") {
-    return "CS/INF";
-  }
-
-  if (normalized === "s") {
-    return "sub";
-  }
-
-  return normalized || "-";
+  return VERSION_BAND_LABELS.get(normalized) ?? (normalized || "-");
 }
 
 function getScoreMax(songOrRecord) {
@@ -1262,8 +1291,8 @@ function buildDateSummary(records, baseSongs, countSongs, filters) {
     axisMode: "date",
     bandTotalSongs: bands.reduce((total, band) => total + band.total, 0),
     totalSongs: countSongs.length,
-    totalLabel: "総記録数",
-    totalUnit: "件",
+    totalLabel: "総曲数",
+    totalUnit: "曲",
     emptyMessage: "該当する履歴がありません。",
     lampCounts,
     displayMode: isScoreMode ? "score" : "clear",

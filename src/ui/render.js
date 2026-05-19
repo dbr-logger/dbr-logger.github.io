@@ -52,7 +52,7 @@ const SUMMARY_DISPLAY_MODE_OPTIONS = [
 ];
 const CATALOG_SORT_OPTIONS = [
   { value: "title", label: "曲名", modes: ["all", "clear", "score"] },
-  { value: "version", label: "収録ver.", modes: ["all", "clear", "score"] },
+  { value: "version", label: "バージョン", modes: ["all", "clear", "score"] },
   { value: "splv", label: "SPLv.", modes: ["all", "clear", "score"] },
   { value: "level", label: "DBRLv.", modes: ["all", "clear", "score"] },
   { value: "katate", label: "片手Lv.", modes: ["all", "clear", "score"] },
@@ -89,7 +89,7 @@ const AXIS_OPTIONS = [
   { value: "splv", label: "SPLv." },
   { value: "level", label: "DBRLv." },
   { value: "katate", label: "片手Lv." },
-  { value: "version", label: "収録ver." },
+  { value: "version", label: "バージョン" },
   { value: "date", label: "プレー日" },
   { value: "title", label: "曲名" },
   { value: "memo", label: "メモ" },
@@ -1036,8 +1036,8 @@ function renderSummaryBands(summary) {
   return `
     <div class="summary-chart-wrap">
       <div class="summary-chart-heading">
-        <span>${escapeHtml(summary.totalLabel ?? "総譜面数")}</span>
-        <strong>${summary.bandTotalSongs ?? summary.totalSongs} ${escapeHtml(summary.totalUnit ?? "譜面")}</strong>
+        <span>${escapeHtml(summary.totalLabel ?? "総曲数")}</span>
+        <strong>${summary.bandTotalSongs ?? summary.totalSongs} ${escapeHtml(summary.totalUnit ?? "曲")}</strong>
       </div>
       <div class="summary-band-chart${scrollableClass}">
         ${rows}
@@ -1046,8 +1046,8 @@ function renderSummaryBands(summary) {
   `;
 }
 
-function renderSummary(summaryContainer, summary, filters) {
-  const lampFilterDisabled = isTextAxisMode(filters.axisMode);
+function renderSummary(summaryContainer, summary, filters, bounds, activeFilters = filters) {
+  const lampFilterDisabled = isTextAxisMode(activeFilters.axisMode);
   const isScoreMode = summary.displayMode === "score";
   const legendOptions = isScoreMode ? SCORE_RANK_FILTER_OPTIONS : LAMP_OPTIONS;
   const selectedValues = isScoreMode
@@ -1080,10 +1080,12 @@ function renderSummary(summaryContainer, summary, filters) {
       </button>
     `;
   }).join("");
+  const summaryFilterCaption = summarizeAxisFilter(filters, bounds);
 
   summaryContainer.innerHTML = `
     <div class="summary-panel">
       ${renderSummaryBands(summary)}
+      <div class="summary-filter-caption">${escapeHtml(summaryFilterCaption)}</div>
       <div class="summary-legend">
         ${legend}
       </div>
@@ -3493,6 +3495,10 @@ export function createRenderer(store) {
       options: isScoreMode ? SCORE_RANK_SUMMARY_OPTIONS : LAMP_OPTIONS,
     };
   }
+
+  function isSummaryLampFilterInteractionDisabled() {
+    return isTextAxisMode(store.getSnapshot().filters.axisMode);
+  }
   
   function deferDifficultyFilters(nextFilters, options = {}) {
     deferredFilterRevision += 1;
@@ -3540,6 +3546,10 @@ export function createRenderer(store) {
   }
 
   function toggleSummaryLampFilter(lamp) {
+    if (isSummaryLampFilterInteractionDisabled()) {
+      return;
+    }
+
     const { key, options } = getActiveSummaryFilterConfig();
     const filters = filterDraft ?? store.getSnapshot().filters;
     const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
@@ -3568,6 +3578,10 @@ export function createRenderer(store) {
   }
 
   function soloSummaryLampFilter(lamp) {
+    if (isSummaryLampFilterInteractionDisabled()) {
+      return;
+    }
+
     const { key } = getActiveSummaryFilterConfig();
     const filters = filterDraft ?? store.getSnapshot().filters;
     const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
@@ -3581,6 +3595,10 @@ export function createRenderer(store) {
   }
 
   function handleSummaryLampActivation(lamp, timestamp = performance.now()) {
+    if (isSummaryLampFilterInteractionDisabled()) {
+      return;
+    }
+
     const { key } = getActiveSummaryFilterConfig();
     if (lastSummaryLampClick.lamp === lamp && timestamp - lastSummaryLampClick.timestamp <= SUMMARY_LAMP_DOUBLE_CLICK_MS) {
       const filters = filterDraft ?? store.getSnapshot().filters;
@@ -3640,6 +3658,11 @@ export function createRenderer(store) {
   }
 
   nodes.summary.addEventListener("pointerdown", (event) => {
+    if (isSummaryLampFilterInteractionDisabled()) {
+      summaryLampPointerState = null;
+      return;
+    }
+
     if (event.button !== undefined && event.button !== 0) {
       return;
     }
@@ -3768,6 +3791,10 @@ export function createRenderer(store) {
   });
 
   nodes.summary.addEventListener("click", (event) => {
+    if (isSummaryLampFilterInteractionDisabled()) {
+      return;
+    }
+
     if (event.detail !== 0) {
       return;
     }
@@ -4319,13 +4346,13 @@ export function createRenderer(store) {
         appliedFilterSignature = snapshotFilterSignature;
       }
 
+      latestFilterBounds = deriveFilterBounds(snapshot.songStates);
       const summaryBandScrollTop = nodes.summary?.querySelector(".summary-band-chart")?.scrollTop ?? 0;
-      renderSummary(nodes.summary, snapshot.summary, snapshot.filters);
+      renderSummary(nodes.summary, snapshot.summary, snapshot.summaryFilters, latestFilterBounds, snapshot.filters);
       const summaryBandChart = nodes.summary?.querySelector(".summary-band-chart");
       if (summaryBandChart) {
         summaryBandChart.scrollTop = summaryBandScrollTop;
       }
-      latestFilterBounds = deriveFilterBounds(snapshot.songStates);
       latestHistoryDates = deriveHistoryDates(snapshot.songStates);
       latestVisibleCount = snapshot.visibleSongs.length;
       if (nodes.summaryDisplaySelect) {
