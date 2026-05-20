@@ -2268,6 +2268,7 @@ export function createRenderer(store) {
     themeToggleButton: document.querySelector("#theme-toggle-button"),
     selectedSong: document.querySelector("#selected-song"),
     recordForm: document.querySelector("#record-form"),
+    recordSubmitButton: document.querySelector("#record-submit-button"),
     recordDate: document.querySelector("#record-date"),
     lampInput: document.querySelector("#lamp-input"),
     bpInput: document.querySelector("#bp-input"),
@@ -4084,25 +4085,42 @@ export function createRenderer(store) {
 
   nodes.recordForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const bpResult = getEntryBpValue();
-    if (!bpResult.ok) {
-      window.alert(bpResult.message);
+    if (nodes.recordSubmitButton?.disabled) {
       return;
     }
 
-    const result = store.saveRecord({
-      lamp: nodes.lampInput.value,
-      bp: bpResult.value,
-      score: nodes.scoreInput.value,
-      memo: nodes.memoInput.value,
-    });
+    if (nodes.recordSubmitButton) {
+      nodes.recordSubmitButton.disabled = true;
+    }
 
-    if (result.ok) {
-      clearEntryBpInputs();
-      nodes.scoreInput.value = "";
-      window.alert(result.notificationMessage || "保存しました。");
-    } else {
-      window.alert(result.message);
+    const bpResult = getEntryBpValue();
+    if (!bpResult.ok) {
+      window.alert(bpResult.message);
+      if (nodes.recordSubmitButton) {
+        nodes.recordSubmitButton.disabled = false;
+      }
+      return;
+    }
+
+    try {
+      const result = store.saveRecord({
+        lamp: nodes.lampInput.value,
+        bp: bpResult.value,
+        score: nodes.scoreInput.value,
+        memo: nodes.memoInput.value,
+      });
+
+      if (result.ok) {
+        clearEntryBpInputs();
+        nodes.scoreInput.value = "";
+        window.alert(result.notificationMessage || "保存しました。");
+      } else {
+        window.alert(result.message);
+      }
+    } finally {
+      if (nodes.recordSubmitButton) {
+        nodes.recordSubmitButton.disabled = false;
+      }
     }
   });
 
