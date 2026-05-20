@@ -119,13 +119,9 @@ function chooseLabelPlacement(points, index, role, padding, innerHeight) {
 }
 
 function chooseFocusLabelPlacement(point, padding, height) {
-  const upperY = Math.max(padding.top + 14, point.y - 16);
-  const lowerY = Math.min(height - padding.bottom - 14, point.y + 16);
-  const hasUpperRoom = point.y - padding.top >= 32;
-
   return {
     x: point.x,
-    y: hasUpperRoom ? upperY : lowerY,
+    y: point.y - 16,
     dominantBaseline: "middle",
   };
 }
@@ -145,13 +141,10 @@ function attachChartInteraction(svg, points, padding, height, getValue) {
     return;
   }
 
-  const touchDelayMs = 80;
   let touchFocusState = null;
 
-  const clearTouchFocusTimer = () => {
-    if (touchFocusState?.timer !== null && touchFocusState?.timer !== undefined) {
-      window.clearTimeout(touchFocusState.timer);
-    }
+  const isPointHitTarget = (target) => {
+    return target instanceof Element && Boolean(target.closest(".chart-point-hit"));
   };
 
   const toSvgX = (event) => {
@@ -206,7 +199,9 @@ function attachChartInteraction(svg, points, padding, height, getValue) {
   };
 
   const clearActivePoint = () => {
-    clearTouchFocusTimer();
+    if (touchFocusState?.captured) {
+      svg.releasePointerCapture?.(touchFocusState.pointerId);
+    }
     touchFocusState = null;
     svg.classList.remove("is-interacting");
     focusGroup.setAttribute("hidden", "");
@@ -228,6 +223,10 @@ function attachChartInteraction(svg, points, padding, height, getValue) {
       if (!touchFocusState.activated) {
         return;
       }
+
+      if (touchFocusState.captured) {
+        event.preventDefault();
+      }
     }
 
     activateByEvent(event);
@@ -238,31 +237,48 @@ function attachChartInteraction(svg, points, padding, height, getValue) {
       return;
     }
 
-    clearTouchFocusTimer();
+    if (!isPointHitTarget(event.target)) {
+      touchFocusState = null;
+      return;
+    }
+
+    event.preventDefault();
+    svg.setPointerCapture?.(event.pointerId);
     touchFocusState = {
       pointerId: event.pointerId,
-      activated: false,
-      timer: window.setTimeout(() => {
-        if (!touchFocusState || touchFocusState.pointerId !== event.pointerId) {
-          return;
-        }
-
-        touchFocusState.activated = true;
-        touchFocusState.timer = null;
-        activateByEvent(event);
-      }, touchDelayMs),
+      activated: true,
+      captured: true,
     };
+    activateByEvent(event);
   };
 
-  svg.addEventListener("pointermove", handlePointerMove);
-  svg.addEventListener("pointerdown", handlePointerDown);
-  svg.addEventListener("pointerleave", clearActivePoint);
+  const handleTouchStart = (event) => {
+    if (isPointHitTarget(event.target)) {
+      event.preventDefault();
+    }
+  };
+
+  const handleTouchMove = (event) => {
+    if (touchFocusState?.captured) {
+      event.preventDefault();
+    }
+  };
+
+  svg.addEventListener("pointermove", handlePointerMove, { passive: false });
+  svg.addEventListener("pointerdown", handlePointerDown, { passive: false });
+  svg.addEventListener("pointerleave", (event) => {
+    if (event.pointerType === "mouse") {
+      clearActivePoint();
+    }
+  });
   svg.addEventListener("pointerup", (event) => {
     if (event.pointerType !== "mouse") {
       clearActivePoint();
     }
   });
   svg.addEventListener("pointercancel", clearActivePoint);
+  svg.addEventListener("touchstart", handleTouchStart, { passive: false });
+  svg.addEventListener("touchmove", handleTouchMove, { passive: false });
 }
 
 // データポイントの位置に合わせて年の区切りを描画する
@@ -495,6 +511,11 @@ function renderTrendChart(container, history, options) {
     </g>
   `;
   }).join("");
+  const pointHitRadiusX = Math.max(14, pointRadius + 8);
+  const pointHitRadiusY = pointHitRadiusX + 8;
+  const pointHitMarkup = points.map((point) => `
+    <ellipse class="chart-point-hit" cx="${point.x}" cy="${point.y + 8}" rx="${pointHitRadiusX}" ry="${pointHitRadiusY}" />
+  `).join("");
 
   container.innerHTML = `
     <svg class="chart" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${options.ariaLabel}">
@@ -506,6 +527,7 @@ function renderTrendChart(container, history, options) {
       ${xLabels}
       ${pointMarkup}
       <rect class="chart-hit-layer" x="0" y="0" width="${width}" height="${height}" />
+      ${pointHitMarkup}
       <g class="chart-focus" data-chart-focus hidden>
         <line class="chart-focus-line" data-chart-focus-line x1="0" x2="0" y1="${padding.top}" y2="${height - padding.bottom}" />
         <circle class="chart-focus-point" data-chart-focus-point cx="0" cy="0" r="${pointRadius + 1.2}" />

@@ -1947,6 +1947,13 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
 .chart-hit-layer {
   fill: transparent;
   pointer-events: all;
+  touch-action: pan-y;
+}
+
+.chart-point-hit {
+  fill: transparent;
+  pointer-events: all;
+  touch-action: none;
 }
 
 .chart-grid-line {
