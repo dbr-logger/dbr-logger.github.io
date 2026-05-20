@@ -1541,6 +1541,8 @@ export function createRenderer(store) {
   let dateFilterCommitTimer = null;
   let dateFilterKeyboardEditUntil = 0;
   let entryBpInputMode = loadEntryBpInputMode();
+  let recordSubmitLocked = false;
+  let recordSubmitUnlockTimer = null;
   let summaryFiltersOpen = true;
   let floatingFilterOpen = false;
   let floatingAxisPreviewMode = null;
@@ -4085,24 +4087,23 @@ export function createRenderer(store) {
 
   nodes.recordForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (nodes.recordSubmitButton?.disabled) {
+    if (recordSubmitLocked) {
       return;
     }
 
-    if (nodes.recordSubmitButton) {
-      nodes.recordSubmitButton.disabled = true;
+    if (recordSubmitUnlockTimer !== null) {
+      window.clearTimeout(recordSubmitUnlockTimer);
+      recordSubmitUnlockTimer = null;
     }
-
-    const bpResult = getEntryBpValue();
-    if (!bpResult.ok) {
-      window.alert(bpResult.message);
-      if (nodes.recordSubmitButton) {
-        nodes.recordSubmitButton.disabled = false;
-      }
-      return;
-    }
+    recordSubmitLocked = true;
 
     try {
+      const bpResult = getEntryBpValue();
+      if (!bpResult.ok) {
+        window.alert(bpResult.message);
+        return;
+      }
+
       const result = store.saveRecord({
         lamp: nodes.lampInput.value,
         bp: bpResult.value,
@@ -4118,9 +4119,10 @@ export function createRenderer(store) {
         window.alert(result.message);
       }
     } finally {
-      if (nodes.recordSubmitButton) {
-        nodes.recordSubmitButton.disabled = false;
-      }
+      recordSubmitUnlockTimer = window.setTimeout(() => {
+        recordSubmitLocked = false;
+        recordSubmitUnlockTimer = null;
+      }, 700);
     }
   });
 
