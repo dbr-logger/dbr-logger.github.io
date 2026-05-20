@@ -1172,7 +1172,7 @@ function renderDifficultyFilters(container, filters) {
     </div>
     <div class="filters-footer">
       <div class="recommend-group ${fixedFilterDisabled.recommend ? "is-disabled" : ""}">
-        <span class="recommend-label">おすすめ</span>
+        <span class="recommend-label">おすすめ度</span>
         <div class="recommend-options">
           ${recommendMarkup}
         </div>
