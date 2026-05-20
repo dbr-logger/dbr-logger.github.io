@@ -32,6 +32,11 @@ const SCORE_RANK_COLORS = {
 const getScoreRankColor = (rank) => SCORE_RANK_COLORS[rank] ?? "transparent";
 const getSummaryBandLampColor = (lamp) => getLampColor(lamp);
 const getCardLampColor = (lamp) => lamp === "NO PLAY" ? "transparent" : getLampColor(lamp);
+const getCardBandColor = (song, summaryDisplayMode = "clear") => (
+  summaryDisplayMode === "score"
+    ? (song?.currentScore === null || song?.currentScore === undefined ? "transparent" : getScoreRankColor(song?.scoreFilterRank ?? "F"))
+    : getCardLampColor(song?.bestLamp)
+);
 const getScoreRankSummaryLabel = (rank) => rank === "F" ? "F/※" : rank;
 const RECOMMEND_OPTIONS = [
   { value: "", label: "－" },
@@ -108,7 +113,16 @@ const AXIS_SHORTCUT_KEYS = {
   t: "memo",
 };
 const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "version", "bpm", "date"]);
-const RANGE_ONLY_AXIS_MODES = new Set(["bpm"]);
+const RANGE_ONLY_AXIS_MODES = new Set();
+const BPM_BUCKETS = [
+  { value: "lt120", label: "min-119" },
+  ...Array.from({ length: 10 }, (_, index) => {
+    const bpm = 120 + index * 10;
+    return { value: String(bpm), label: `${bpm}-${bpm + 9}` };
+  }),
+  { value: "220", label: "220-249" },
+  { value: "250", label: "250-max" },
+];
 const BPM_RANGE_POINTS = [
   { value: "min", startLabel: "min", endLabel: "min" },
   ...Array.from({ length: 11 }, (_, index) => {
@@ -840,10 +854,22 @@ function getAxisValues(bounds, axisMode) {
   }
 
   if (axisMode === "bpm") {
-    return BPM_RANGE_POINTS.map((point) => point.value);
+    return BPM_BUCKETS.map((bucket) => bucket.value);
   }
 
   return [];
+}
+
+function getAxisRangeValues(bounds, axisMode) {
+  if (axisMode === "bpm") {
+    return BPM_RANGE_POINTS.map((point) => point.value);
+  }
+
+  return getAxisValues(bounds, axisMode);
+}
+
+function getBpmBucket(value) {
+  return BPM_BUCKETS.find((bucket) => bucket.value === String(value));
 }
 
 function getBpmRangePoint(value) {
@@ -878,7 +904,7 @@ function formatAxisValue(axisMode, value) {
   }
 
   if (axisMode === "bpm") {
-    return getBpmRangePoint(value)?.startLabel ?? String(value);
+    return getBpmBucket(value)?.label ?? String(value);
   }
 
   return String(value);
@@ -988,7 +1014,7 @@ function summarizeAxisFilter(filters, bounds) {
   }
 
   if (isAxisRangeMode(filters)) {
-    return `${getAxisLabel(filters.axisMode)} ${formatAxisRangeValue(filters.axisMode, getNormalizedAxisRange(filters, getAxisValues(bounds, filters.axisMode)))}`;
+    return `${getAxisLabel(filters.axisMode)} ${formatAxisRangeValue(filters.axisMode, getNormalizedAxisRange(filters, getAxisRangeValues(bounds, filters.axisMode)))}`;
   }
 
   return `${getAxisLabel(filters.axisMode)} ${formatAxisValue(filters.axisMode, filters.axisValue)}`;
@@ -1020,7 +1046,7 @@ function summarizeSummaryFilterCaption(filters, bounds) {
   }
 
   const versionLabel = isAxisRangeMode(filters)
-    ? formatAxisRangeValue(filters.axisMode, getNormalizedAxisRange(filters, getAxisValues(bounds, filters.axisMode)))
+    ? formatAxisRangeValue(filters.axisMode, getNormalizedAxisRange(filters, getAxisRangeValues(bounds, filters.axisMode)))
     : formatAxisValue(filters.axisMode, filters.axisValue);
 
   const selectedChartDifficulties = getActiveChartDifficultiesForSummary(filters);
@@ -1316,13 +1342,14 @@ function renderCatalogSortOptions(select, displayMode, sortMode) {
 
 function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewState = null, dateDefaultRange = null) {
   const axisValues = getAxisValues(bounds, filters.axisMode);
+  const rangeAxisValues = getAxisRangeValues(bounds, filters.axisMode);
   const sliderStops = ["", ...axisValues];
   const previewValue = previewState?.mode === filters.axisMode ? previewState.value : null;
   const previewRange = previewState?.rangeMode === filters.axisMode ? previewState.range : null;
   const rangeMode = isAxisRangeMode(filters);
   const effectiveAxisValue = previewValue !== null ? previewValue : filters.axisValue;
   const sliderValueIndex = Math.max(0, sliderStops.findIndex((value) => String(value) === String(effectiveAxisValue)));
-  const effectiveRange = previewRange ?? getNormalizedAxisRange(filters, axisValues);
+  const effectiveRange = previewRange ?? getNormalizedAxisRange(filters, rangeAxisValues);
   const currentAxisValue = isTextAxisMode(filters.axisMode)
     ? filters.titleQuery
     : formatAxisValue(filters.axisMode, effectiveAxisValue);
@@ -1387,28 +1414,28 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
         </div>
         <div
           class="floating-filter-range-wrap is-start-active"
-          data-range-max="${Math.max(axisValues.length - 1, 1)}"
-          style="--range-start:${axisValues.length ? (effectiveRange.startIndex / Math.max(axisValues.length - 1, 1)) * 100 : 0}%;--range-end:${axisValues.length ? (effectiveRange.endIndex / Math.max(axisValues.length - 1, 1)) * 100 : 0}%"
+          data-range-max="${Math.max(rangeAxisValues.length - 1, 1)}"
+          style="--range-start:${rangeAxisValues.length ? (effectiveRange.startIndex / Math.max(rangeAxisValues.length - 1, 1)) * 100 : 0}%;--range-end:${rangeAxisValues.length ? (effectiveRange.endIndex / Math.max(rangeAxisValues.length - 1, 1)) * 100 : 0}%"
         >
           <input
             class="filter-slider floating-filter-slider floating-filter-range-slider"
             type="range"
             step="1"
             min="0"
-            max="${Math.max(axisValues.length - 1, 0)}"
+            max="${Math.max(rangeAxisValues.length - 1, 0)}"
             value="${Math.max(effectiveRange.startIndex, 0)}"
             data-axis-range-start
-            ${axisValues.length ? "" : "disabled"}
+            ${rangeAxisValues.length ? "" : "disabled"}
           />
           <input
             class="filter-slider floating-filter-slider floating-filter-range-slider"
             type="range"
             step="1"
             min="0"
-            max="${Math.max(axisValues.length - 1, 0)}"
+            max="${Math.max(rangeAxisValues.length - 1, 0)}"
             value="${Math.max(effectiveRange.endIndex, 0)}"
             data-axis-range-end
-            ${axisValues.length ? "" : "disabled"}
+            ${rangeAxisValues.length ? "" : "disabled"}
           />
         </div>
       </div>
@@ -1482,7 +1509,7 @@ function renderSelectedSong(selectedSongContainer, selectedSong, songs, options 
   }
 
   selectedSongContainer.classList.toggle("is-proposed", Boolean(selectedSong.isProposed));
-  selectedSongContainer.style.setProperty("--card-lamp-color", getCardLampColor(selectedSong.bestLamp));
+  selectedSongContainer.style.setProperty("--card-lamp-color", getCardBandColor(selectedSong, options.summaryDisplayMode));
 
   const historyCountBadge = selectedSong.entryCount > 0
     ? badge(`履歴 ${selectedSong.entryCount} 件`, "pill-neutral")
@@ -1529,7 +1556,7 @@ function renderCatalog(catalogContainer, songs, selectedTitle, options = {}) {
     const deletedRecordClass = song.isDeletedRecordScopedCard ? "is-deleted-record" : "";
     const encodedTitle = encodeURIComponent(song.title);
     const encodedCatalogItemKey = encodeURIComponent(catalogItemKey);
-    const lampColor = getCardLampColor(song.bestLamp);
+    const lampColor = getCardBandColor(song, options.summaryDisplayMode);
     const historyCountBadge = song.entryCount > 0
       ? badge(`履歴 ${song.entryCount} 件`, "pill-neutral")
       : "";
@@ -1668,8 +1695,7 @@ export function createRenderer(store) {
   let dateFilterCommitTimer = null;
   let dateFilterKeyboardEditUntil = 0;
   let entryBpInputMode = loadEntryBpInputMode();
-  let recordSubmitLocked = false;
-  let recordSubmitUnlockTimer = null;
+  let entryFormDirty = false;
   let summaryFiltersOpen = true;
   let floatingFilterOpen = false;
   let floatingAxisPreviewMode = null;
@@ -1982,7 +2008,7 @@ export function createRenderer(store) {
   }
 
   function getActiveAxisRange(filters = filterDraft ?? store.getSnapshot().filters) {
-    const axisValues = getAxisValues(latestFilterBounds, filters.axisMode);
+    const axisValues = getAxisRangeValues(latestFilterBounds, filters.axisMode);
     return getNormalizedAxisRange(filters, axisValues);
   }
 
@@ -2104,7 +2130,7 @@ export function createRenderer(store) {
       return false;
     }
 
-    const axisValues = getAxisValues(latestFilterBounds, activeFilters.axisMode);
+    const axisValues = getAxisRangeValues(latestFilterBounds, activeFilters.axisMode);
     if (!axisValues.length) {
       return false;
     }
@@ -2135,7 +2161,7 @@ export function createRenderer(store) {
 
   function previewFloatingAxisRangeToIndex(axisMode, targetIndex, handle) {
     const activeFilters = filterDraft ?? store.getSnapshot().filters;
-    const axisValues = getAxisValues(latestFilterBounds, axisMode);
+    const axisValues = getAxisRangeValues(latestFilterBounds, axisMode);
     if (!axisValues.length) {
       return false;
     }
@@ -2403,6 +2429,7 @@ export function createRenderer(store) {
     catalogPaginationTop: document.querySelector("#catalog-pagination-top"),
     catalogPaginationBottom: document.querySelector("#catalog-pagination-bottom"),
     catalog: document.querySelector("#song-catalog"),
+    analyticsPanel: document.querySelector(".analytics-panel"),
     themeToggleButton: document.querySelector("#theme-toggle-button"),
     selectedSong: document.querySelector("#selected-song"),
     recordForm: document.querySelector("#record-form"),
@@ -2452,6 +2479,29 @@ export function createRenderer(store) {
     entryBpInputMode = mode;
     persistEntryBpInputMode(entryBpInputMode);
     syncEntryBpInputMode();
+  }
+
+  function syncEntrySubmitButton() {
+    if (nodes.recordSubmitButton) {
+      nodes.recordSubmitButton.disabled = !entryFormDirty;
+    }
+  }
+
+  function setEntryFormDirty(dirty) {
+    entryFormDirty = Boolean(dirty);
+    syncEntrySubmitButton();
+  }
+
+  function syncAnalyticsChartOrder(summaryDisplayMode) {
+    const bpBlock = nodes.chart?.closest(".analytics-block");
+    const scoreBlock = nodes.scoreChart?.closest(".analytics-block");
+    if (!(bpBlock instanceof HTMLElement) || !(scoreBlock instanceof HTMLElement)) {
+      return;
+    }
+
+    const scoreFirst = summaryDisplayMode === "score";
+    bpBlock.style.order = scoreFirst ? "3" : "2";
+    scoreBlock.style.order = scoreFirst ? "2" : "3";
   }
 
   function clearEntryBpInputs() {
@@ -2754,14 +2804,8 @@ export function createRenderer(store) {
     floatingAxisPreviewValue = null;
 
     const nextFilters = { axisMode };
-    if (isRangeOnlyAxisMode(axisMode)) {
-      nextFilters.axisRangeModeByAxis = {
-        ...filters.axisRangeModeByAxis,
-        [axisMode]: true,
-      };
-    }
     if (isNumericAxisMode(axisMode) && isAxisRangeMode({ ...filters, axisMode })) {
-      const axisValues = getAxisValues(latestFilterBounds, axisMode);
+      const axisValues = getAxisRangeValues(latestFilterBounds, axisMode);
       const rawRange = filters.axisRanges?.[axisMode] ?? { start: "", end: "" };
       const startIndex = axisValues.findIndex((value) => String(value) === String(rawRange.start));
       const endIndex = axisValues.findIndex((value) => String(value) === String(rawRange.end));
@@ -2787,7 +2831,7 @@ export function createRenderer(store) {
     }
 
     const { filters } = store.getSnapshot();
-    const axisValues = getAxisValues(latestFilterBounds, axisMode);
+    const axisValues = getAxisRangeValues(latestFilterBounds, axisMode);
     if (!axisValues.length) {
       return false;
     }
@@ -3328,7 +3372,7 @@ export function createRenderer(store) {
       && (target.hasAttribute("data-axis-range-start") || target.hasAttribute("data-axis-range-end"))
     ) {
       const activeFilters = filterDraft ?? store.getSnapshot().filters;
-      const axisValues = getAxisValues(latestFilterBounds, activeFilters.axisMode);
+      const axisValues = getAxisRangeValues(latestFilterBounds, activeFilters.axisMode);
       const currentRange = floatingAxisRangePreviewMode === activeFilters.axisMode && floatingAxisRangePreviewValue
         ? floatingAxisRangePreviewValue
         : getActiveAxisRange(activeFilters);
@@ -3448,7 +3492,7 @@ export function createRenderer(store) {
           };
         }
         if (isNumericAxisMode(nextAxisMode) && isAxisRangeMode({ ...currentFilters, axisMode: nextAxisMode })) {
-          const axisValues = getAxisValues(latestFilterBounds, nextAxisMode);
+          const axisValues = getAxisRangeValues(latestFilterBounds, nextAxisMode);
           const rawRange = currentFilters.axisRanges?.[nextAxisMode] ?? { start: "", end: "" };
           const startIndex = axisValues.findIndex((value) => String(value) === String(rawRange.start));
           const endIndex = axisValues.findIndex((value) => String(value) === String(rawRange.end));
@@ -4295,44 +4339,41 @@ export function createRenderer(store) {
     }
   });
 
+  nodes.recordForm.addEventListener("input", () => {
+    setEntryFormDirty(true);
+  });
+
+  nodes.recordForm.addEventListener("change", () => {
+    setEntryFormDirty(true);
+  });
+
   nodes.recordForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (recordSubmitLocked) {
+    if (!entryFormDirty) {
       return;
     }
 
-    if (recordSubmitUnlockTimer !== null) {
-      window.clearTimeout(recordSubmitUnlockTimer);
-      recordSubmitUnlockTimer = null;
+    const bpResult = getEntryBpValue();
+    if (!bpResult.ok) {
+      window.alert(bpResult.message);
+      return;
     }
-    recordSubmitLocked = true;
 
-    try {
-      const bpResult = getEntryBpValue();
-      if (!bpResult.ok) {
-        window.alert(bpResult.message);
-        return;
-      }
+    setEntryFormDirty(false);
 
-      const result = store.saveRecord({
-        lamp: nodes.lampInput.value,
-        bp: bpResult.value,
-        score: nodes.scoreInput.value,
-        memo: nodes.memoInput.value,
-      });
+    const result = store.saveRecord({
+      lamp: nodes.lampInput.value,
+      bp: bpResult.value,
+      score: nodes.scoreInput.value,
+      memo: nodes.memoInput.value,
+    });
 
-      if (result.ok) {
-        clearEntryBpInputs();
-        nodes.scoreInput.value = "";
-        window.alert(result.notificationMessage || "保存しました。");
-      } else {
-        window.alert(result.message);
-      }
-    } finally {
-      recordSubmitUnlockTimer = window.setTimeout(() => {
-        recordSubmitLocked = false;
-        recordSubmitUnlockTimer = null;
-      }, 700);
+    if (result.ok) {
+      clearEntryBpInputs();
+      nodes.scoreInput.value = "";
+    } else {
+      setEntryFormDirty(true);
+      window.alert(result.message);
     }
   });
 
@@ -4607,6 +4648,8 @@ export function createRenderer(store) {
           nodes.summaryDisplaySelect.value = effectiveSummaryDisplayMode;
         }
       }
+      const effectiveSummaryDisplayMode = getEffectiveSummaryDisplayMode(snapshot.filters);
+      syncAnalyticsChartOrder(effectiveSummaryDisplayMode);
       renderFilterDraftPanel();
       renderFloatingFilterShell();
       syncFloatingDockClass();
@@ -4626,6 +4669,7 @@ export function createRenderer(store) {
         selectedCatalogKey: snapshot.selectedCatalogKey,
         sortMode: snapshot.sortMode,
         axisMode: snapshot.filters.axisMode,
+        summaryDisplayMode: effectiveSummaryDisplayMode,
       });
       renderPagination(nodes.catalogPaginationTop, snapshot.pagination, {
         showSortDirectionToggle: true,
@@ -4638,6 +4682,7 @@ export function createRenderer(store) {
       renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs, {
         sortMode: snapshot.sortMode,
         axisMode: snapshot.filters.axisMode,
+        summaryDisplayMode: effectiveSummaryDisplayMode,
       });
       renderProposalButton(
         nodes.selectedSong,
@@ -4700,6 +4745,7 @@ export function createRenderer(store) {
           if (nodes.scoreInput.value !== "") {
             nodes.scoreInput.value = "";
           }
+          setEntryFormDirty(false);
         }
 
         if (nodes.bpInput.placeholder !== nextBpPlaceholder) {
@@ -4730,6 +4776,7 @@ export function createRenderer(store) {
         if (nodes.memoInput.value !== "") {
           nodes.memoInput.value = "";
         }
+        setEntryFormDirty(false);
       }
 
       if (nodes.backToCardButton) {

@@ -612,7 +612,7 @@ function normalizeAxisRangeModeByAxis(rangeModeByAxis) {
     splv: Boolean(rangeModeByAxis?.splv),
     katate: Boolean(rangeModeByAxis?.katate),
     version: Boolean(rangeModeByAxis?.version),
-    bpm: rangeModeByAxis?.bpm === undefined ? true : Boolean(rangeModeByAxis.bpm),
+    bpm: Boolean(rangeModeByAxis?.bpm),
   };
 }
 
@@ -1885,6 +1885,7 @@ export function createStore() {
       splv: "",
       katate: "",
       version: "",
+      bpm: "",
     },
     sortModeMemory: {},
     chartDifficultySortHead: CHART_DIFFICULTY_OPTIONS[0],
@@ -2215,6 +2216,11 @@ export function createStore() {
     } else if (filters.axisMode === "katate") {
       const selectedKatate = parseOptionalNumber(filters.axisValue);
       if (selectedKatate !== null && entry.katateValue !== selectedKatate) {
+        return false;
+      }
+    } else if (filters.axisMode === "bpm") {
+      const selectedBpmBucket = String(filters.axisValue ?? "");
+      if (selectedBpmBucket && getBpmBucketValue(entry.bpmValue) !== selectedBpmBucket) {
         return false;
       }
     } else if (filters.axisMode === "version") {
@@ -3299,8 +3305,6 @@ export function createStore() {
           ...summaryGraphFilters,
           axisValue: "",
           axisRangeModeByAxis: normalizeAxisRangeModeByAxis(AXIS_RANGE_MODE_DISABLED),
-          // lamps: [...LAMP_OPTIONS],
-          // scoreRanks: [...SCORE_RANK_OPTIONS],
         };
 
     const summaryBandBaseSongs = summaryGraphFilters.axisMode === "katate"
