@@ -17,9 +17,26 @@ const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F", "※"];
 const SCORE_RANK_SUMMARY_OPTIONS = SCORE_RANK_OPTIONS.filter((rank) => rank !== "※");
 const PAGE_SIZE = 100;
 const SORT_OPTIONS = ["title", "version", "chartDifficulty", "splv", "level", "katate", "bpm", "recommend", "clear", "bestBp", "latestBp", "bestScore", "latestScore", "latest", "entryCount", "memo", "random"];
-const AXIS_MODES = ["level", "splv", "katate", "version", "title", "memo", "date"];
-const AXIS_MEMORY_MODES = ["level", "splv", "katate", "version"];
-const NUMERIC_AXIS_MODES = ["level", "splv", "katate", "version"];
+const AXIS_MODES = ["level", "splv", "katate", "version", "bpm", "title", "memo", "date"];
+const AXIS_MEMORY_MODES = ["level", "splv", "katate", "version", "bpm"];
+const NUMERIC_AXIS_MODES = ["level", "splv", "katate", "version", "bpm"];
+const BPM_BUCKETS = [
+  { value: "lt120", label: "min-119", min: -Infinity, max: 119.999 },
+  ...Array.from({ length: 10 }, (_, index) => {
+    const min = 120 + index * 10;
+    return { value: String(min), label: `${min}-${min + 9}`, min, max: min + 9.999 };
+  }),
+  { value: "220", label: "220-249", min: 220, max: 249.999 },
+  { value: "250", label: "250-MAX", min: 250, max: Infinity },
+];
+const BPM_BUCKET_ORDER = new Map(BPM_BUCKETS.map((bucket, index) => [bucket.value, index]));
+const BPM_RANGE_POINTS = [
+  "min",
+  ...Array.from({ length: 11 }, (_, index) => String(120 + index * 10)),
+  "250",
+  "MAX",
+];
+const BPM_RANGE_POINT_ORDER = new Map(BPM_RANGE_POINTS.map((value, index) => [value, index]));
 const VERSION_ORDER_VALUES = ["0", "1", "s", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33"];
 const VERSION_ORDER = new Map(VERSION_ORDER_VALUES.map((value, index) => [value, index]));
 const VERSION_LABELS = new Map([
@@ -98,11 +115,19 @@ const VERSION_BAND_LABELS = new Map([
 ]);
 const PLAY_DATE_RESET_HOUR = 5;
 const PLAY_DATE_CHAIN_THRESHOLD_MS = 60 * 60 * 1000;
+const AXIS_RANGE_MODE_DISABLED = {
+  level: false,
+  splv: false,
+  katate: false,
+  version: false,
+  bpm: false,
+};
 const DEFAULT_SORT_MODE_BY_AXIS = {
   level: "level",
   splv: "splv",
   katate: "katate",
   version: "version",
+  bpm: "bpm",
   title: "title",
   memo: "memo",
   date: "latest",
@@ -278,6 +303,27 @@ function parseBpmSortValue(value) {
   return values.length ? Math.max(...values) : null;
 }
 
+function getBpmBucketValue(bpmValue) {
+  if (!Number.isFinite(bpmValue)) {
+    return "";
+  }
+
+  const bucket = BPM_BUCKETS.find((candidate) => bpmValue >= candidate.min && bpmValue <= candidate.max);
+  return bucket?.value ?? "";
+}
+
+function getBpmBucketOrderValue(value) {
+  return BPM_BUCKET_ORDER.has(value) ? BPM_BUCKET_ORDER.get(value) : null;
+}
+
+function getBpmBucketLabel(value) {
+  return BPM_BUCKETS.find((bucket) => bucket.value === value)?.label ?? "-";
+}
+
+function getBpmRangePointOrderValue(value) {
+  return BPM_RANGE_POINT_ORDER.has(value) ? BPM_RANGE_POINT_ORDER.get(value) : null;
+}
+
 function normalizeVersionValue(value) {
   return String(value ?? "").trim();
 }
@@ -436,6 +482,20 @@ function normalizeChartDifficultySortHeadForChoices(value, choices) {
   return choices.includes(value) ? value : (choices[0] ?? normalizeChartDifficultySortHead(value));
 }
 
+function getChartDifficultyRotationState(songs, head) {
+  const choices = getChartDifficultySortChoicesFromSongs(songs);
+  const effectiveHead = choices.length > 0
+    ? normalizeChartDifficultySortHeadForChoices(head, choices)
+    : normalizeChartDifficultySortHead(head);
+  const direction = choices.length > 0 && effectiveHead === choices[choices.length - 1] ? "desc" : "asc";
+
+  return {
+    choices,
+    head: effectiveHead,
+    direction,
+  };
+}
+
 function normalizeChartDifficultySortHeadMemory(memory) {
   const normalized = {};
   AXIS_MODES.forEach((axisMode) => {
@@ -542,6 +602,7 @@ function normalizeAxisMemory(axisMemory) {
     splv: typeof axisMemory?.splv === "string" ? axisMemory.splv : "",
     katate: typeof axisMemory?.katate === "string" ? axisMemory.katate : "",
     version: typeof axisMemory?.version === "string" ? axisMemory.version : "",
+    bpm: typeof axisMemory?.bpm === "string" ? axisMemory.bpm : "",
   };
 }
 
@@ -551,6 +612,7 @@ function normalizeAxisRangeModeByAxis(rangeModeByAxis) {
     splv: Boolean(rangeModeByAxis?.splv),
     katate: Boolean(rangeModeByAxis?.katate),
     version: Boolean(rangeModeByAxis?.version),
+    bpm: rangeModeByAxis?.bpm === undefined ? true : Boolean(rangeModeByAxis.bpm),
   };
 }
 
@@ -576,12 +638,28 @@ function normalizeVersionRangePair(range) {
   return { start, end };
 }
 
+function normalizeBpmRangePair(range) {
+  const start = typeof range?.start === "string" ? range.start : "";
+  const end = typeof range?.end === "string" ? range.end : "";
+  const startOrder = getBpmRangePointOrderValue(start);
+  const endOrder = getBpmRangePointOrderValue(end);
+  if (startOrder !== null && endOrder !== null && startOrder === endOrder) {
+    return { start: BPM_RANGE_POINTS[0], end: BPM_RANGE_POINTS[BPM_RANGE_POINTS.length - 1] };
+  }
+  if (startOrder !== null && endOrder !== null && startOrder > endOrder) {
+    return { start: end, end: start };
+  }
+
+  return { start, end };
+}
+
 function normalizeAxisRanges(axisRanges) {
   return {
     level: normalizeAxisRangePair(axisRanges?.level),
     splv: normalizeAxisRangePair(axisRanges?.splv),
     katate: normalizeAxisRangePair(axisRanges?.katate),
     version: normalizeVersionRangePair(axisRanges?.version),
+    bpm: normalizeBpmRangePair(axisRanges?.bpm),
   };
 }
 
@@ -591,6 +669,7 @@ function normalizeAxisSingleReturnValues(axisSingleReturnValues) {
     splv: typeof axisSingleReturnValues?.splv === "string" ? axisSingleReturnValues.splv : "",
     katate: typeof axisSingleReturnValues?.katate === "string" ? axisSingleReturnValues.katate : "",
     version: typeof axisSingleReturnValues?.version === "string" ? axisSingleReturnValues.version : "",
+    bpm: typeof axisSingleReturnValues?.bpm === "string" ? axisSingleReturnValues.bpm : "",
   };
 }
 
@@ -663,6 +742,7 @@ function normalizeStoredFilters(filters) {
     summaryDisplayMode: normalizeSummaryDisplayMode(filters?.summaryDisplayMode),
     recommend: normalizeRecommendSelection(filters?.recommend),
     chartDifficulties: normalizeChartDifficultySelection(filters?.chartDifficulties),
+    versionChartDifficulties: normalizeChartDifficultySelection(filters?.versionChartDifficulties),
     lamps: normalizeLampSelection(filters?.lamps),
     scoreRanks: normalizeScoreRankSelection(filters?.scoreRanks),
     inf: songDataFilter.inf,
@@ -1131,12 +1211,21 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode,
       return song.versionOrder;
     }
 
+    if (axisMode === "bpm") {
+      const bucketValue = getBpmBucketValue(song.bpmValue);
+      return bucketValue ? getBpmBucketOrderValue(bucketValue) : null;
+    }
+
     return song.levelValue;
   }
 
   function formatBandLabel(value) {
     if (axisMode === "version") {
       return value === null ? "-" : getVersionBandLabel(VERSION_ORDER_VALUES[value] ?? "");
+    }
+
+    if (axisMode === "bpm") {
+      return value === null ? "-" : getBpmBucketLabel(BPM_BUCKETS[value]?.value ?? "");
     }
 
     if (value === null) {
@@ -1164,6 +1253,18 @@ function buildSummary(allSongStates, bandSongStates, targetSongStates, axisMode,
         key: String(index),
         value: index,
         label: getVersionBandLabel(version),
+        total: 0,
+        lampCounts: countsFactory(),
+      });
+    });
+  }
+
+  if (axisMode === "bpm") {
+    BPM_BUCKETS.forEach((bucket, index) => {
+      bandMap.set(String(index), {
+        key: String(index),
+        value: index,
+        label: bucket.label,
         total: 0,
         lampCounts: countsFactory(),
       });
@@ -1520,6 +1621,7 @@ function comparePrimarySortValue(
   randomSeed = 1,
   chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0],
   recommendSortHead = RECOMMEND_SORT_OPTIONS[0],
+  chartDifficultySortDirection = null,
 ) {
   if (sortMode === "random") {
     return createRandomSortValue(getCatalogItemKey(a), randomSeed) - createRandomSortValue(getCatalogItemKey(b), randomSeed);
@@ -1546,7 +1648,8 @@ function comparePrimarySortValue(
   }
 
   if (sortMode === "chartDifficulty") {
-    return compareChartDifficultyPrimaryValue(a.title, b.title, sortDirection, chartDifficultySortHead);
+    const effectiveDirection = chartDifficultySortDirection ?? "asc";
+    return compareChartDifficultyPrimaryValue(a.title, b.title, effectiveDirection, chartDifficultySortHead);
   }
 
   if (sortMode === "bpm") {
@@ -1585,7 +1688,7 @@ function comparePrimarySortValue(
   }
 
   if (sortMode === "recommend") {
-    return compareRecommendPrimaryValue(a.recommend, b.recommend, sortDirection, recommendSortHead);
+    return compareRecommendPrimaryValue(a.recommend, b.recommend, "asc", recommendSortHead);
   }
 
   if (sortMode === "memo") {
@@ -1726,6 +1829,10 @@ function applySortDirectionFallbackIfNoPrimaryEffect(
   chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0],
   recommendSortHead = RECOMMEND_SORT_OPTIONS[0],
 ) {
+  if (sortMode === "chartDifficulty" || sortMode === "recommend") {
+    return songs;
+  }
+
   if (sortDirection !== "desc" || songs.length <= 1) {
     return songs;
   }
@@ -1746,8 +1853,9 @@ function compareCatalogSongs(
   randomSeed = 1,
   chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0],
   recommendSortHead = RECOMMEND_SORT_OPTIONS[0],
+  chartDifficultySortDirection = null,
 ) {
-  return comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed, chartDifficultySortHead, recommendSortHead)
+  return comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed, chartDifficultySortHead, recommendSortHead, chartDifficultySortDirection)
     || compareFilterAxisTieBreak(a, b, axisMode)
     || compareSplvValue(a, b)
     || compareTitleValue(a, b);
@@ -1803,6 +1911,7 @@ export function createStore() {
       summaryDisplayMode: "clear",
       recommend: [...RECOMMEND_OPTIONS],
       chartDifficulties: [...CHART_DIFFICULTY_OPTIONS],
+      versionChartDifficulties: [...CHART_DIFFICULTY_OPTIONS],
       lamps: [...LAMP_OPTIONS],
       scoreRanks: [...SCORE_RANK_OPTIONS],
       inf: "all",
@@ -2074,12 +2183,20 @@ export function createStore() {
           ? entry.splvValue
           : filters.axisMode === "katate"
             ? entry.katateValue
-            : entry.versionOrder;
+            : filters.axisMode === "bpm"
+              ? getBpmBucketOrderValue(getBpmBucketValue(entry.bpmValue))
+              : entry.versionOrder;
 
       if (filters.axisMode === "version") {
         const startOrder = getVersionOrderValue(range.start);
         const endOrder = getVersionOrderValue(range.end);
         if (startOrder !== null && endOrder !== null && (entryValue === null || entryValue < startOrder || entryValue > endOrder)) {
+          return false;
+        }
+      } else if (filters.axisMode === "bpm") {
+        const startOrder = getBpmRangePointOrderValue(range.start);
+        const endOrder = getBpmRangePointOrderValue(range.end);
+        if (startOrder !== null && endOrder !== null && (entryValue === null || entryValue < startOrder || entryValue >= endOrder)) {
           return false;
         }
       } else if (start !== null && end !== null && (entryValue === null || entryValue < start || entryValue > end)) {
@@ -2111,17 +2228,22 @@ export function createStore() {
       return false;
     }
 
-    if (filters.axisMode !== "date" && !(filters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS).includes(splitTitleAndSuffix(entry.title).suffix)) {
+    const activeChartDifficulties = filters.axisMode === "version"
+      ? (filters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS)
+        .filter((option) => (filters.versionChartDifficulties ?? CHART_DIFFICULTY_OPTIONS).includes(option))
+      : (filters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS);
+    if (filters.axisMode !== "date" && !activeChartDifficulties.includes(splitTitleAndSuffix(entry.title).suffix)) {
       return false;
     }
 
+    const activeSummaryFilterMode = getEffectiveSummaryDisplayMode(filters);
     const scoreRanks = filters.scoreRanks ?? SCORE_RANK_OPTIONS;
     const scoreFilterRank = entry.scoreFilterRank === "※" ? "F" : entry.scoreFilterRank;
-    if (filters.displayMode === "score" && !scoreRanks.includes(scoreFilterRank)) {
+    if (activeSummaryFilterMode === "score" && !scoreRanks.includes(scoreFilterRank)) {
       return false;
     }
 
-    if (filters.displayMode !== "score" && !filters.lamps.includes(entry.bestLamp)) {
+    if (activeSummaryFilterMode !== "score" && !filters.lamps.includes(entry.bestLamp)) {
       return false;
     }
 
@@ -2383,6 +2505,9 @@ export function createStore() {
       chartDifficulties: nextFilters.chartDifficulties
         ? normalizeChartDifficultySelection(nextFilters.chartDifficulties)
         : state.filters.chartDifficulties,
+      versionChartDifficulties: nextFilters.versionChartDifficulties
+        ? normalizeChartDifficultySelection(nextFilters.versionChartDifficulties)
+        : state.filters.versionChartDifficulties,
       lamps: nextFilters.lamps ? normalizeLampSelection(nextFilters.lamps) : state.filters.lamps,
       scoreRanks: nextFilters.scoreRanks ? normalizeScoreRankSelection(nextFilters.scoreRanks) : state.filters.scoreRanks,
       inf: nextFilters.inf ? normalizeBooleanFilter(nextFilters.inf) : state.filters.inf,
@@ -2586,15 +2711,14 @@ export function createStore() {
       return;
     }
 
-    const choices = getChartDifficultySortChoicesFromSongs(getCatalogSnapshot().visibleSongs);
-    if (choices.length === 0) {
+    const rotationState = getChartDifficultyRotationState(getCatalogSnapshot().visibleSongs, state.chartDifficultySortHead);
+    if (rotationState.choices.length === 0) {
       return;
     }
 
-    const currentHead = normalizeChartDifficultySortHeadForChoices(state.chartDifficultySortHead, choices);
-    const currentIndex = choices.indexOf(currentHead);
-    const nextIndex = ((currentIndex >= 0 ? currentIndex : 0) + 1) % choices.length;
-    state.chartDifficultySortHead = choices[nextIndex];
+    const currentIndex = rotationState.choices.indexOf(rotationState.head);
+    const nextIndex = ((currentIndex >= 0 ? currentIndex : 0) + 1) % rotationState.choices.length;
+    state.chartDifficultySortHead = rotationState.choices[nextIndex];
     state.chartDifficultySortHeadMemory = {
       ...state.chartDifficultySortHeadMemory,
       [state.filters.axisMode]: state.chartDifficultySortHead,
@@ -3116,19 +3240,19 @@ export function createStore() {
         ));
     }
 
-    const chartDifficultySortChoices = getChartDifficultySortChoicesFromSongs(filteredVisibleSongs);
-    const effectiveChartDifficultySortHead = state.sortMode === "chartDifficulty" && chartDifficultySortChoices.length > 0
-      ? normalizeChartDifficultySortHeadForChoices(state.chartDifficultySortHead, chartDifficultySortChoices)
+    const chartDifficultyRotationState = getChartDifficultyRotationState(filteredVisibleSongs, state.chartDifficultySortHead);
+    const effectiveChartDifficultySortHead = state.sortMode === "chartDifficulty"
+      ? chartDifficultyRotationState.head
       : state.chartDifficultySortHead;
+    const effectiveChartDifficultySortDirection = state.sortMode === "chartDifficulty"
+      ? chartDifficultyRotationState.direction
+      : null;
     const recommendSortChoices = getRecommendSortChoicesFromSongs(filteredVisibleSongs);
     const effectiveRecommendSortHead = state.sortMode === "recommend" && recommendSortChoices.length > 0
       ? normalizeRecommendSortHeadForChoices(state.recommendSortHead, recommendSortChoices)
       : state.recommendSortHead;
 
-    if (
-      (state.sortMode === "chartDifficulty" && effectiveChartDifficultySortHead !== state.chartDifficultySortHead)
-      || (state.sortMode === "recommend" && effectiveRecommendSortHead !== state.recommendSortHead)
-    ) {
+    if (state.sortMode === "chartDifficulty" || (state.sortMode === "recommend" && effectiveRecommendSortHead !== state.recommendSortHead)) {
       filteredVisibleSongs = [...filteredVisibleSongs].sort((a, b) => compareCatalogSongs(
         a,
         b,
@@ -3138,6 +3262,7 @@ export function createStore() {
         state.randomSeed,
         effectiveChartDifficultySortHead,
         effectiveRecommendSortHead,
+        effectiveChartDifficultySortDirection,
       ));
     }
 
@@ -3170,7 +3295,13 @@ export function createStore() {
 
     const summaryScopeFilters = isTextAxisMode(summaryGraphFilters.axisMode)
       ? { ...summaryGraphFilters }
-      : { ...summaryGraphFilters, axisValue: "", axisRangeModeByAxis: normalizeAxisRangeModeByAxis() };
+      : {
+          ...summaryGraphFilters,
+          axisValue: "",
+          axisRangeModeByAxis: normalizeAxisRangeModeByAxis(AXIS_RANGE_MODE_DISABLED),
+          // lamps: [...LAMP_OPTIONS],
+          // scoreRanks: [...SCORE_RANK_OPTIONS],
+        };
 
     const summaryBandBaseSongs = summaryGraphFilters.axisMode === "katate"
       ? songStates.filter((entry) => entry.katateValue !== null)
@@ -3191,7 +3322,7 @@ export function createStore() {
           ...summaryCountFilters,
           axisMode: "splv",
           axisValue: "",
-          axisRangeModeByAxis: normalizeAxisRangeModeByAxis(),
+          axisRangeModeByAxis: normalizeAxisRangeModeByAxis(AXIS_RANGE_MODE_DISABLED),
         }
       : null;
     const dateSummaryBaseSongs = dateSummaryBaseFilters
@@ -3224,7 +3355,7 @@ export function createStore() {
       summary,
       summaryFilters,
       dateDefaultRange,
-      chartDifficultySortChoices,
+      chartDifficultySortChoices: chartDifficultyRotationState.choices,
       effectiveChartDifficultySortHead,
       recommendSortChoices,
       effectiveRecommendSortHead,

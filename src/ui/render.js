@@ -77,9 +77,9 @@ const SONG_DATA_FILTER_OPTIONS = [
   { value: "all", label: "すべて", inf: "all", acdelete: "all" },
   { value: "ac", label: "AC", inf: "all", acdelete: "no" },
   { value: "infinitas", label: "INFINITAS", inf: "yes", acdelete: "all" },
-  { value: "acOnly", label: "ACのみ", inf: "no", acdelete: "no" },
-  { value: "infinitasOnly", label: "INFINITASのみ", inf: "yes", acdelete: "yes" },
-  { value: "csDeleted", label: "CS/削除曲のみ", inf: "no", acdelete: "yes" },
+  { value: "acOnly", label: "AC限定", inf: "no", acdelete: "no" },
+  { value: "infinitasOnly", label: "INFINITAS限定", inf: "yes", acdelete: "yes" },
+  { value: "csDeleted", label: "CS限定/削除曲のみ", inf: "no", acdelete: "yes" },
 ];
 const SUMMARY_LAMP_DOUBLE_CLICK_MS = 220;
 const SUMMARY_LAMP_SWIPE_SOLO_THRESHOLD = 40;
@@ -92,6 +92,7 @@ const AXIS_OPTIONS = [
   { value: "level", label: "DBRLv." },
   { value: "katate", label: "片手Lv." },
   { value: "version", label: "バージョン" },
+  { value: "bpm", label: "BPM" },
   { value: "date", label: "プレー日" },
   { value: "title", label: "曲名" },
   { value: "memo", label: "メモ" },
@@ -101,11 +102,22 @@ const AXIS_SHORTCUT_KEYS = {
   w: "splv",
   e: "katate",
   v: "version",
+  b: "bpm",
   r: "date",
   s: "title",
   t: "memo",
 };
-const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "version", "date"]);
+const HIDDEN_FLOATING_CLEAR_AXES = new Set(["level", "splv", "katate", "version", "bpm", "date"]);
+const RANGE_ONLY_AXIS_MODES = new Set(["bpm"]);
+const BPM_RANGE_POINTS = [
+  { value: "min", startLabel: "min", endLabel: "min" },
+  ...Array.from({ length: 11 }, (_, index) => {
+    const bpm = 120 + index * 10;
+    return { value: String(bpm), startLabel: String(bpm), endLabel: String(bpm - 1) };
+  }),
+  { value: "250", startLabel: "250", endLabel: "249" },
+  { value: "MAX", startLabel: "MAX", endLabel: "MAX" },
+];
 const VERSION_ORDER_VALUES = ["0", "1", "s", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33"];
 const VERSION_LABELS = new Map([
   ["0", "CS/INFINITAS"],
@@ -216,7 +228,11 @@ function isDateAxisMode(axisMode) {
 }
 
 function isNumericAxisMode(axisMode) {
-  return axisMode === "level" || axisMode === "splv" || axisMode === "katate" || axisMode === "version";
+  return axisMode === "level" || axisMode === "splv" || axisMode === "katate" || axisMode === "version" || axisMode === "bpm";
+}
+
+function isRangeOnlyAxisMode(axisMode) {
+  return RANGE_ONLY_AXIS_MODES.has(axisMode);
 }
 
 function getSongDataFilterOption(value) {
@@ -374,6 +390,10 @@ function formatSortTitleSuffix(song, sortMode, axisMode = "") {
 
   if (axisMode === "katate" && sortMode !== "katate") {
     suffixes.push(formatKatateTitleSuffix(song));
+  }
+
+  if (axisMode === "bpm" && sortMode !== "bpm") {
+    suffixes.push(formatBpmTitleSuffix(song));
   }
 
   return suffixes.filter(Boolean).map((suffix) => `(${suffix})`).join(" ");
@@ -819,7 +839,21 @@ function getAxisValues(bounds, axisMode) {
     return bounds.version.values ?? [];
   }
 
+  if (axisMode === "bpm") {
+    return BPM_RANGE_POINTS.map((point) => point.value);
+  }
+
   return [];
+}
+
+function getBpmRangePoint(value) {
+  return BPM_RANGE_POINTS.find((point) => point.value === String(value));
+}
+
+function formatBpmRangeValue(range) {
+  const startLabel = getBpmRangePoint(range.start)?.startLabel ?? String(range.start ?? "");
+  const endLabel = getBpmRangePoint(range.end)?.endLabel ?? String(range.end ?? "");
+  return `${startLabel} ～ ${endLabel}`;
 }
 
 function formatAxisValue(axisMode, value) {
@@ -841,6 +875,10 @@ function formatAxisValue(axisMode, value) {
 
   if (axisMode === "version") {
     return VERSION_LABELS.get(String(value)) ?? String(value);
+  }
+
+  if (axisMode === "bpm") {
+    return getBpmRangePoint(value)?.startLabel ?? String(value);
   }
 
   return String(value);
@@ -872,7 +910,7 @@ function formatDateRangeValue(filters) {
 
 function isAxisRangeMode(filters) {
   return isNumericAxisMode(filters.axisMode)
-    && Boolean(filters.axisRangeModeByAxis?.[filters.axisMode]);
+    && (isRangeOnlyAxisMode(filters.axisMode) || Boolean(filters.axisRangeModeByAxis?.[filters.axisMode]));
 }
 
 function hasAxisCandidate(axisValues, value) {
@@ -881,6 +919,10 @@ function hasAxisCandidate(axisValues, value) {
   }
 
   return axisValues.some((candidate) => String(candidate) === String(value));
+}
+
+function getAxisRangeMinGap(axisMode) {
+  return axisMode === "bpm" ? 1 : 0;
 }
 
 function getNormalizedAxisRange(filters, axisValues) {
@@ -895,7 +937,7 @@ function getNormalizedAxisRange(filters, axisValues) {
 
   const startIndex = axisValues.findIndex((value) => String(value) === startValue);
   const endIndex = axisValues.findIndex((value) => String(value) === endValue);
-  if (startIndex >= 0 && endIndex >= 0 && startIndex <= endIndex) {
+  if (startIndex >= 0 && endIndex >= 0 && startIndex + getAxisRangeMinGap(axisMode) <= endIndex) {
     return { start: startValue, end: endValue, startIndex, endIndex, valid: true };
   }
 
@@ -911,6 +953,10 @@ function getNormalizedAxisRange(filters, axisValues) {
 }
 
 function formatAxisRangeValue(axisMode, range) {
+  if (axisMode === "bpm") {
+    return formatBpmRangeValue(range);
+  }
+
   return `${formatAxisValue(axisMode, range.start)} ～ ${formatAxisValue(axisMode, range.end)}`;
 }
 
@@ -946,6 +992,71 @@ function summarizeAxisFilter(filters, bounds) {
   }
 
   return `${getAxisLabel(filters.axisMode)} ${formatAxisValue(filters.axisMode, filters.axisValue)}`;
+}
+
+function getActiveChartDifficultiesForSummary(filters) {
+  const chartDifficulties = filters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS;
+  if (filters.axisMode !== "version") {
+    return chartDifficulties;
+  }
+
+  const versionChartDifficulties = filters.versionChartDifficulties ?? CHART_DIFFICULTY_OPTIONS;
+  return chartDifficulties.filter((option) => versionChartDifficulties.includes(option));
+}
+
+function getSummaryChartDifficultyOptions(filters) {
+  return filters.chartDifficulties ?? CHART_DIFFICULTY_OPTIONS;
+}
+
+function formatChartDifficultySelection(values) {
+  const selected = Array.isArray(values) ? values : CHART_DIFFICULTY_OPTIONS;
+  const ordered = CHART_DIFFICULTY_OPTIONS.filter((option) => selected.includes(option));
+  return ordered.length ? ordered.join("/") : "-";
+}
+
+function summarizeSummaryFilterCaption(filters, bounds) {
+  if (filters.axisMode !== "version") {
+    return summarizeAxisFilter(filters, bounds);
+  }
+
+  const versionLabel = isAxisRangeMode(filters)
+    ? formatAxisRangeValue(filters.axisMode, getNormalizedAxisRange(filters, getAxisValues(bounds, filters.axisMode)))
+    : formatAxisValue(filters.axisMode, filters.axisValue);
+
+  const selectedChartDifficulties = getActiveChartDifficultiesForSummary(filters);
+  const visibleChartDifficulties = getSummaryChartDifficultyOptions(filters);
+  if (visibleChartDifficulties.length > 0 && selectedChartDifficulties.length === visibleChartDifficulties.length) {
+    return versionLabel;
+  }
+
+  return `${versionLabel} (${formatChartDifficultySelection(selectedChartDifficulties)})`;
+}
+
+function renderSummaryChartDifficultyFilter(filters) {
+  if (filters.axisMode !== "version") {
+    return "";
+  }
+
+  const selectedChartDifficulties = getActiveChartDifficultiesForSummary(filters);
+  const visibleChartDifficulties = getSummaryChartDifficultyOptions(filters);
+  const chartDifficultyMarkup = visibleChartDifficulties.map((option) => {
+    const checked = selectedChartDifficulties.includes(option) ? "checked" : "";
+    return `
+      <label class="recommend-chip summary-chart-difficulty-chip">
+        <input type="checkbox" data-summary-chart-difficulty="${escapeHtml(option)}" value="${escapeHtml(option)}" ${checked} />
+        <span>${escapeHtml(option)}</span>
+      </label>
+    `;
+  }).join("");
+
+  return `
+    <div class="summary-chart-difficulty-filter">
+      <span class="recommend-label">譜面難易度</span>
+      <div class="recommend-options">
+        ${chartDifficultyMarkup}
+      </div>
+    </div>
+  `;
 }
 
 function renderFloatingToggleLabel(filters, bounds) {
@@ -1092,11 +1203,12 @@ function renderSummary(summaryContainer, summary, filters, bounds, activeFilters
       </button>
     `;
   }).join("");
-  const summaryFilterCaption = summarizeAxisFilter(filters, bounds);
+  const summaryFilterCaption = summarizeSummaryFilterCaption(filters, bounds);
 
   summaryContainer.innerHTML = `
     <div class="summary-panel">
       ${renderSummaryBands(summary)}
+      ${renderSummaryChartDifficultyFilter(filters)}
       <div class="summary-filter-caption">${escapeHtml(summaryFilterCaption)}</div>
       <div class="summary-legend">
         ${legend}
@@ -1214,7 +1326,7 @@ function renderFloatingAxisFilter(container, filters, bounds, isOpen, previewSta
   const currentAxisValue = isTextAxisMode(filters.axisMode)
     ? filters.titleQuery
     : formatAxisValue(filters.axisMode, effectiveAxisValue);
-  const rangeToggleMarkup = isNumericAxisMode(filters.axisMode)
+  const rangeToggleMarkup = isNumericAxisMode(filters.axisMode) && !isRangeOnlyAxisMode(filters.axisMode)
     ? `<button class="floating-filter-inline-action" type="button" data-axis-range-toggle>${rangeMode ? "単一選択" : "範囲選択"}</button>`
     : "";
 
@@ -1519,7 +1631,7 @@ function renderPagination(container, pagination, options = {}) {
     : options.showSortDirectionToggle && options.sortMode === "recommend"
       ? `<button class="button button-tertiary chart-difficulty-head-button" type="button" data-recommend-head-toggle aria-label="先頭のおすすめ度を切り替え">${escapeHtml(formatRecommendSortHead(options.recommendSortHead))}</button>`
     : "";
-  const sortDirectionButton = options.showSortDirectionToggle
+  const sortDirectionButton = options.showSortDirectionToggle && options.sortMode !== "chartDifficulty" && options.sortMode !== "recommend"
     ? `<button class="button button-tertiary catalog-sort-control-button" type="button" data-sort-direction-toggle aria-label="${options.sortMode === "random" ? "ランダム順を変更" : "並び順の昇順降順を切り替え"}">${options.sortMode === "random" ? "？" : (options.sortDirection === "desc" ? "▼" : "▲")}</button>`
     : "";
 
@@ -1573,12 +1685,14 @@ export function createRenderer(store) {
     splv: "",
     katate: "",
     version: "",
+    bpm: "",
   };
   let floatingAxisRangeActiveHandleByAxis = {
     level: "end",
     splv: "end",
     katate: "end",
     version: "end",
+    bpm: "end",
   };
   let floatingQuerySelection = null;
   let floatingQueryComposing = false;
@@ -1847,7 +1961,7 @@ export function createRenderer(store) {
   }
 
   function isNumericAxisMode(axisMode) {
-    return axisMode === "level" || axisMode === "splv" || axisMode === "katate" || axisMode === "version";
+    return axisMode === "level" || axisMode === "splv" || axisMode === "katate" || axisMode === "version" || axisMode === "bpm";
   }
 
   function hasAxisValue(axisMode, value) {
@@ -1960,6 +2074,10 @@ export function createRenderer(store) {
     const currentFilters = store.getSnapshot().filters;
     return {
       ...extraFilters,
+      axisRangeModeByAxis: {
+        ...currentFilters.axisRangeModeByAxis,
+        [axisMode]: true,
+      },
       axisRanges: {
         ...currentFilters.axisRanges,
         [axisMode]: { start: range.start, end: range.end },
@@ -1996,13 +2114,14 @@ export function createRenderer(store) {
       : getActiveAxisRange(activeFilters);
     const range = { ...baseRange };
     const activeHandle = handle === "end" ? "end" : "start";
+    const minGap = getAxisRangeMinGap(activeFilters.axisMode);
 
     const nextRange = { ...range };
     if (activeHandle === "start") {
-      nextRange.startIndex = Math.max(0, Math.min(range.startIndex + delta, range.endIndex));
+      nextRange.startIndex = Math.max(0, Math.min(range.startIndex + delta, range.endIndex - minGap));
       nextRange.start = String(axisValues[nextRange.startIndex]);
     } else {
-      nextRange.endIndex = Math.max(range.startIndex, Math.min(range.endIndex + delta, axisValues.length - 1));
+      nextRange.endIndex = Math.max(range.startIndex + minGap, Math.min(range.endIndex + delta, axisValues.length - 1));
       nextRange.end = String(axisValues[nextRange.endIndex]);
     }
 
@@ -2026,15 +2145,16 @@ export function createRenderer(store) {
       : getActiveAxisRange({ ...activeFilters, axisMode });
     const nextRange = { ...baseRange };
     const nextIndex = Math.max(0, Math.min(targetIndex, axisValues.length - 1));
+    const minGap = getAxisRangeMinGap(axisMode);
     const activeHandle = handle === "auto" && nextRange.startIndex === nextRange.endIndex && nextIndex !== nextRange.startIndex
       ? (nextIndex > nextRange.startIndex ? "end" : "start")
       : (handle === "end" ? "end" : "start");
 
     if (activeHandle === "start") {
-      nextRange.startIndex = Math.min(nextIndex, nextRange.endIndex);
+      nextRange.startIndex = Math.min(nextIndex, nextRange.endIndex - minGap);
       nextRange.start = String(axisValues[nextRange.startIndex] ?? "");
     } else {
-      nextRange.endIndex = Math.max(nextIndex, nextRange.startIndex);
+      nextRange.endIndex = Math.max(nextIndex, nextRange.startIndex + minGap);
       nextRange.end = String(axisValues[nextRange.endIndex] ?? "");
     }
 
@@ -2271,6 +2391,7 @@ export function createRenderer(store) {
   const nodes = {
     summaryPanel: document.querySelector("#summary-cards")?.closest(".panel"),
     summary: document.querySelector("#summary-cards"),
+    summaryDisplayField: document.querySelector("#summary-display-field"),
     summaryDisplaySelect: document.querySelector("#summary-display-select"),
     summaryFiltersToggle: document.querySelector("#summary-filters-toggle"),
     summaryFiltersPanel: document.querySelector("#summary-filters-panel"),
@@ -2518,6 +2639,7 @@ export function createRenderer(store) {
       acdelete: songDataFilter.acdelete,
       recommend: selectedRecommend,
       chartDifficulties: selectedChartDifficulties,
+      versionChartDifficulties: currentFilters.versionChartDifficulties ? [...currentFilters.versionChartDifficulties] : [...CHART_DIFFICULTY_OPTIONS],
       scoreRanks: currentFilters.scoreRanks ? [...currentFilters.scoreRanks] : [...SCORE_RANK_OPTIONS],
       lamps: currentFilters.lamps ? [...currentFilters.lamps] : [...LAMP_OPTIONS],
       includeUnrated: readSelectFilter("includeUnrated"),
@@ -2609,7 +2731,7 @@ export function createRenderer(store) {
       syncQueryScrollLockState();
     }
 
-    if (isSameAxis && isNumericAxisMode(axisMode)) {
+    if (isSameAxis && isNumericAxisMode(axisMode) && !isRangeOnlyAxisMode(axisMode)) {
       toggleAxisRangeMode(axisMode);
       return true;
     }
@@ -2632,6 +2754,12 @@ export function createRenderer(store) {
     floatingAxisPreviewValue = null;
 
     const nextFilters = { axisMode };
+    if (isRangeOnlyAxisMode(axisMode)) {
+      nextFilters.axisRangeModeByAxis = {
+        ...filters.axisRangeModeByAxis,
+        [axisMode]: true,
+      };
+    }
     if (isNumericAxisMode(axisMode) && isAxisRangeMode({ ...filters, axisMode })) {
       const axisValues = getAxisValues(latestFilterBounds, axisMode);
       const rawRange = filters.axisRanges?.[axisMode] ?? { start: "", end: "" };
@@ -2977,6 +3105,7 @@ export function createRenderer(store) {
       acdelete: "all",
       recommend: ["", "△", "○", "◎", "☆"],
       chartDifficulties: ["B", "N", "H", "A", "L"],
+      versionChartDifficulties: filterDraft?.versionChartDifficulties ? [...filterDraft.versionChartDifficulties] : [...CHART_DIFFICULTY_OPTIONS],
       scoreRanks: [...SCORE_RANK_OPTIONS],
       lamps: filterDraft?.lamps ? [...filterDraft.lamps] : [...LAMP_OPTIONS],
       includeUnrated: "all",
@@ -3203,14 +3332,15 @@ export function createRenderer(store) {
       const currentRange = floatingAxisRangePreviewMode === activeFilters.axisMode && floatingAxisRangePreviewValue
         ? floatingAxisRangePreviewValue
         : getActiveAxisRange(activeFilters);
+      const minGap = getAxisRangeMinGap(activeFilters.axisMode);
       let startIndex = currentRange.startIndex;
       let endIndex = currentRange.endIndex;
 
       if (target.hasAttribute("data-axis-range-start")) {
-        startIndex = Math.min(Number(target.value), endIndex);
+        startIndex = Math.min(Number(target.value), endIndex - minGap);
         floatingAxisRangeActiveHandleByAxis[activeFilters.axisMode] = "start";
       } else {
-        endIndex = Math.max(Number(target.value), startIndex);
+        endIndex = Math.max(Number(target.value), startIndex + minGap);
         floatingAxisRangeActiveHandleByAxis[activeFilters.axisMode] = "end";
       }
 
@@ -3311,6 +3441,12 @@ export function createRenderer(store) {
         syncQueryScrollLockState();
         const currentFilters = store.getSnapshot().filters;
         const nextAxisFilters = { axisMode: nextAxisMode };
+        if (isRangeOnlyAxisMode(nextAxisMode)) {
+          nextAxisFilters.axisRangeModeByAxis = {
+            ...currentFilters.axisRangeModeByAxis,
+            [nextAxisMode]: true,
+          };
+        }
         if (isNumericAxisMode(nextAxisMode) && isAxisRangeMode({ ...currentFilters, axisMode: nextAxisMode })) {
           const axisValues = getAxisValues(latestFilterBounds, nextAxisMode);
           const rawRange = currentFilters.axisRanges?.[nextAxisMode] ?? { start: "", end: "" };
@@ -3503,7 +3639,7 @@ export function createRenderer(store) {
   function applySummaryLampVisualState(activeLamps) {
     const activeSet = new Set(activeLamps);
     const filters = filterDraft ?? store.getSnapshot().filters;
-    const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
+    const isScoreMode = getEffectiveSummaryDisplayMode(filters) === "score";
   
     nodes.summary.querySelectorAll("[data-summary-lamp]").forEach((button) => {
       const lamp = button.dataset.summaryLamp;
@@ -3519,7 +3655,7 @@ export function createRenderer(store) {
 
   function getActiveSummaryFilterConfig() {
     const filters = filterDraft ?? store.getSnapshot().filters;
-    const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
+    const isScoreMode = getEffectiveSummaryDisplayMode(filters) === "score";
     return {
       key: isScoreMode ? "scoreRanks" : "lamps",
       options: isScoreMode ? SCORE_RANK_SUMMARY_OPTIONS : LAMP_OPTIONS,
@@ -3582,7 +3718,7 @@ export function createRenderer(store) {
 
     const { key, options } = getActiveSummaryFilterConfig();
     const filters = filterDraft ?? store.getSnapshot().filters;
-    const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
+    const isScoreMode = getEffectiveSummaryDisplayMode(filters) === "score";
     const allValues = isScoreMode ? SCORE_RANK_OPTIONS : options;
     const currentLamps = filterDraft?.[key] ? [...filterDraft[key]] : [...allValues];
     const isActive = isScoreMode && lamp === "F"
@@ -3614,7 +3750,7 @@ export function createRenderer(store) {
 
     const { key } = getActiveSummaryFilterConfig();
     const filters = filterDraft ?? store.getSnapshot().filters;
-    const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
+    const isScoreMode = getEffectiveSummaryDisplayMode(filters) === "score";
     const nextLamps = isScoreMode && lamp === "F" ? ["F", "※"] : [lamp];
     filterDraft = {
       ...(filterDraft ?? store.getSnapshot().filters),
@@ -3622,6 +3758,29 @@ export function createRenderer(store) {
     };
     applySummaryLampVisualState(nextLamps);
     deferDifficultyFilters({ [key]: nextLamps }, { scrollToCatalog: false });
+  }
+
+  function toggleSummaryChartDifficultyFilter(chartDifficulty) {
+    if (!CHART_DIFFICULTY_OPTIONS.includes(chartDifficulty)) {
+      return;
+    }
+
+    const filters = filterDraft ?? store.getSnapshot().filters;
+    if (filters.axisMode !== "version") {
+      return;
+    }
+
+    const currentValues = filters.versionChartDifficulties ? [...filters.versionChartDifficulties] : [...CHART_DIFFICULTY_OPTIONS];
+    const nextValues = currentValues.includes(chartDifficulty)
+      ? currentValues.filter((value) => value !== chartDifficulty)
+      : [...currentValues, chartDifficulty];
+    const orderedValues = CHART_DIFFICULTY_OPTIONS.filter((option) => nextValues.includes(option));
+
+    filterDraft = {
+      ...filters,
+      versionChartDifficulties: orderedValues,
+    };
+    applyDifficultyFilters({ versionChartDifficulties: orderedValues }, { scrollToCatalog: false });
   }
 
   function handleSummaryLampActivation(lamp, timestamp = performance.now()) {
@@ -3632,7 +3791,7 @@ export function createRenderer(store) {
     const { key } = getActiveSummaryFilterConfig();
     if (lastSummaryLampClick.lamp === lamp && timestamp - lastSummaryLampClick.timestamp <= SUMMARY_LAMP_DOUBLE_CLICK_MS) {
       const filters = filterDraft ?? store.getSnapshot().filters;
-      const isScoreMode = (filters.summaryDisplayMode ?? "clear") === "score";
+      const isScoreMode = getEffectiveSummaryDisplayMode(filters) === "score";
       const nextLamps = isScoreMode && lamp === "F" ? ["F", "※"] : [lamp];
       filterDraft = {
         ...(filterDraft ?? store.getSnapshot().filters),
@@ -3818,6 +3977,16 @@ export function createRenderer(store) {
 
     animateSummaryLampSwipeReturn(pointerState.button);
     summaryLampPointerState = null;
+  });
+
+  nodes.summary.addEventListener("change", (event) => {
+    const chartDifficultyInput = event.target instanceof HTMLInputElement
+      ? event.target.closest("[data-summary-chart-difficulty]")
+      : null;
+    if (chartDifficultyInput instanceof HTMLInputElement) {
+      toggleSummaryChartDifficultyFilter(chartDifficultyInput.dataset.summaryChartDifficulty ?? "");
+      return;
+    }
   });
 
   nodes.summary.addEventListener("click", (event) => {
@@ -4071,6 +4240,20 @@ export function createRenderer(store) {
       input.blur();
     }
   }, { passive: false }));
+
+  [
+    [nodes.bpInput, 4],
+    [nodes.badInput, 4],
+    [nodes.poorInput, 4],
+    [nodes.scoreInput, 5],
+  ].forEach(([input, limit]) => {
+    input?.addEventListener("input", () => {
+      const nextValue = String(input.value ?? "").replace(/\D/g, "").slice(0, limit);
+      if (input.value !== nextValue) {
+        input.value = nextValue;
+      }
+    });
+  });
 
   nodes.recordForm.addEventListener("keydown", (event) => {
     if (event.key !== "Enter" || event.isComposing) {
@@ -4417,7 +4600,9 @@ export function createRenderer(store) {
       latestVisibleCount = snapshot.visibleSongs.length;
       if (nodes.summaryDisplaySelect) {
         const effectiveSummaryDisplayMode = getEffectiveSummaryDisplayMode(snapshot.filters);
-        nodes.summaryDisplaySelect.disabled = snapshot.filters.displayMode !== "all";
+        const canSelectSummaryDisplayMode = snapshot.filters.displayMode === "all";
+        nodes.summaryDisplaySelect.disabled = !canSelectSummaryDisplayMode;
+        nodes.summaryDisplayField?.toggleAttribute("hidden", !canSelectSummaryDisplayMode);
         if (nodes.summaryDisplaySelect.value !== effectiveSummaryDisplayMode) {
           nodes.summaryDisplaySelect.value = effectiveSummaryDisplayMode;
         }

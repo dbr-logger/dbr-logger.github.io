@@ -348,6 +348,10 @@ td {
   min-width: 140px;
 }
 
+.header-select[hidden] {
+  display: none;
+}
+
 .header-select span {
   color: var(--muted);
   font-size: 0.82rem;
@@ -956,6 +960,13 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
   font-weight: 700;
   line-height: 1.4;
   margin-bottom: -12px;
+}
+
+.summary-chart-difficulty-filter {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
 }
 
 .summary-legend {
