@@ -53,10 +53,12 @@ const SUMMARY_DISPLAY_MODE_OPTIONS = [
 const CATALOG_SORT_OPTIONS = [
   { value: "title", label: "曲名", modes: ["all", "clear", "score"] },
   { value: "version", label: "バージョン", modes: ["all", "clear", "score"] },
+  { value: "chartDifficulty", label: "譜面難易度", modes: ["all", "clear", "score"] },
   { value: "splv", label: "SPLv.", modes: ["all", "clear", "score"] },
   { value: "level", label: "DBRLv.", modes: ["all", "clear", "score"] },
   { value: "katate", label: "片手Lv.", modes: ["all", "clear", "score"] },
   { value: "bpm", label: "BPM", modes: ["all", "clear", "score"] },
+  { value: "recommend", label: "おすすめ", modes: ["all", "clear", "score"] },
   { value: "clear", label: "クリアランプ", modes: ["all", "clear", "score"] },
   { value: "bestBp", label: "最小BP", modes: ["all", "clear"] },
   { value: "latestBp", label: "最新BP", modes: ["all", "clear"] },
@@ -64,7 +66,6 @@ const CATALOG_SORT_OPTIONS = [
   { value: "latestScore", label: "最新スコア", modes: ["all", "score"] },
   { value: "latest", label: "最終プレー", modes: ["all", "clear", "score"] },
   { value: "entryCount", label: "プレー回数", modes: ["all", "clear", "score"] },
-  { value: "recommend", label: "おすすめ", modes: ["all", "clear", "score"] },
   { value: "memo", label: "メモ", modes: ["all", "clear", "score"] },
   { value: "random", label: "ランダム", modes: ["all", "clear", "score"] },
 ];
@@ -1505,12 +1506,19 @@ function renderPagination(container, pagination, options = {}) {
 
   const prevDisabled = pagination.currentPage <= 1 ? "disabled" : "";
   const nextDisabled = pagination.currentPage >= pagination.totalPages ? "disabled" : "";
+  const chartDifficultyHead = CHART_DIFFICULTY_OPTIONS.includes(options.chartDifficultySortHead)
+    ? options.chartDifficultySortHead
+    : CHART_DIFFICULTY_OPTIONS[0];
+  const chartDifficultyHeadButton = options.showSortDirectionToggle && options.sortMode === "chartDifficulty"
+    ? `<button class="button button-tertiary" type="button" data-chart-difficulty-head-toggle aria-label="先頭の譜面難易度を切り替え">${escapeHtml(chartDifficultyHead)}</button>`
+    : "";
   const sortDirectionButton = options.showSortDirectionToggle
     ? `<button class="button button-tertiary" type="button" data-sort-direction-toggle aria-label="${options.sortMode === "random" ? "ランダム順を変更" : "並び順の昇順降順を切り替え"}">${options.sortMode === "random" ? "？" : (options.sortDirection === "desc" ? "▼" : "▲")}</button>`
     : "";
 
   container.innerHTML = `
     <div class="pagination-controls">
+      ${chartDifficultyHeadButton}
       ${sortDirectionButton}
       <button class="button button-tertiary" type="button" data-page="prev" ${prevDisabled}>前へ</button>
       <span class="pagination-label">${pagination.startIndex}-${pagination.endIndex} / ${pagination.totalItems}</span>
@@ -3845,6 +3853,12 @@ export function createRenderer(store) {
   });
 
   function handlePaginationClick(event, anchorToBottom = false) {
+    const chartDifficultyHeadButton = event.target.closest("[data-chart-difficulty-head-toggle]");
+    if (chartDifficultyHeadButton) {
+      store.rotateChartDifficultySortHead();
+      return;
+    }
+
     const sortDirectionButton = event.target.closest("[data-sort-direction-toggle]");
     if (sortDirectionButton) {
       store.toggleSortDirection();
@@ -4419,6 +4433,7 @@ export function createRenderer(store) {
         showSortDirectionToggle: true,
         sortDirection: snapshot.sortDirection,
         sortMode: snapshot.sortMode,
+        chartDifficultySortHead: snapshot.chartDifficultySortHead,
       });
       renderPagination(nodes.catalogPaginationBottom, snapshot.pagination);
       renderSelectedSong(nodes.selectedSong, snapshot.selectedSong, snapshot.pagedSongs, {

@@ -15,7 +15,7 @@ const SUMMARY_DISPLAY_MODES = ["clear", "score"];
 const SCORE_RANK_OPTIONS = ["AAA", "AA", "A", "B", "C", "D", "E", "F", "※"];
 const SCORE_RANK_SUMMARY_OPTIONS = SCORE_RANK_OPTIONS.filter((rank) => rank !== "※");
 const PAGE_SIZE = 100;
-const SORT_OPTIONS = ["version", "title", "level", "splv", "katate", "bpm", "clear", "bestBp", "latestBp", "bestScore", "latestScore", "latest", "entryCount", "recommend", "memo", "random"];
+const SORT_OPTIONS = ["title", "version", "chartDifficulty", "splv", "level", "katate", "bpm", "recommend", "clear", "bestBp", "latestBp", "bestScore", "latestScore", "latest", "entryCount", "memo", "random"];
 const AXIS_MODES = ["level", "splv", "katate", "version", "title", "memo", "date"];
 const AXIS_MEMORY_MODES = ["level", "splv", "katate", "version"];
 const NUMERIC_AXIS_MODES = ["level", "splv", "katate", "version"];
@@ -399,6 +399,21 @@ function normalizeChartDifficultySelection(values) {
   }
 
   return [...new Set(values.filter((value) => CHART_DIFFICULTY_OPTIONS.includes(value)))];
+}
+
+function normalizeChartDifficultySortHead(value) {
+  return CHART_DIFFICULTY_OPTIONS.includes(value) ? value : CHART_DIFFICULTY_OPTIONS[0];
+}
+
+function normalizeChartDifficultySortHeadMemory(memory) {
+  const normalized = {};
+  AXIS_MODES.forEach((axisMode) => {
+    const value = normalizeChartDifficultySortHead(memory?.[axisMode]);
+    if (value !== CHART_DIFFICULTY_OPTIONS[0]) {
+      normalized[axisMode] = value;
+    }
+  });
+  return normalized;
 }
 
 function normalizeLampSelection(values) {
@@ -823,6 +838,12 @@ function normalizeStoredData(stored) {
       ...normalizedSortModeMemory,
       [normalizedFilters.axisMode]: normalizeSortMode(stored.sortMode),
       [restoredFilters.axisMode]: normalizedSortMode,
+    },
+    chartDifficultySortHead: normalizeChartDifficultySortHead(stored.chartDifficultySortHead),
+    chartDifficultySortHeadMemory: {
+      ...normalizeChartDifficultySortHeadMemory(stored.chartDifficultySortHeadMemory),
+      [normalizedFilters.axisMode]: normalizeChartDifficultySortHead(stored.chartDifficultySortHead),
+      [restoredFilters.axisMode]: normalizeChartDifficultySortHead(stored.chartDifficultySortHead),
     },
     sortDirection: normalizeSortDirection(stored.sortDirection),
     randomSeed: normalizeRandomSeed(stored.randomSeed),
@@ -1454,7 +1475,7 @@ function compareScoreRatePrimaryValues(a, b, valueKey, sortDirection) {
   return compareNullablePrimaryValues(a[valueKey], b[valueKey], (aValue, bValue) => aValue - bValue, sortDirection);
 }
 
-function comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed = 1) {
+function comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed = 1, chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0]) {
   if (sortMode === "random") {
     return createRandomSortValue(getCatalogItemKey(a), randomSeed) - createRandomSortValue(getCatalogItemKey(b), randomSeed);
   }
@@ -1477,6 +1498,10 @@ function comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed = 1) 
 
   if (sortMode === "version") {
     return compareNullablePrimaryValues(a.versionOrder, b.versionOrder, (aValue, bValue) => aValue - bValue, sortDirection);
+  }
+
+  if (sortMode === "chartDifficulty") {
+    return compareChartDifficultyPrimaryValue(a.title, b.title, sortDirection, chartDifficultySortHead);
   }
 
   if (sortMode === "bpm") {
@@ -1523,6 +1548,30 @@ function comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed = 1) 
   }
 
   return compareNullablePrimaryValues(a.levelValue, b.levelValue, (aValue, bValue) => aValue - bValue, sortDirection);
+}
+
+function getRotatedChartDifficultyOrder(sortDirection, head) {
+  const baseOrder = sortDirection === "desc"
+    ? [...CHART_DIFFICULTY_OPTIONS].reverse()
+    : [...CHART_DIFFICULTY_OPTIONS];
+  const normalizedHead = normalizeChartDifficultySortHead(head);
+  const headIndex = baseOrder.indexOf(normalizedHead);
+  if (headIndex < 0) {
+    return baseOrder;
+  }
+
+  return [...baseOrder.slice(headIndex), ...baseOrder.slice(0, headIndex)];
+}
+
+function getChartDifficultySortRank(title, sortDirection, head) {
+  const suffix = splitTitleAndSuffix(title).suffix;
+  const order = getRotatedChartDifficultyOrder(sortDirection, head);
+  const rank = order.indexOf(suffix);
+  return rank >= 0 ? rank : Number.POSITIVE_INFINITY;
+}
+
+function compareChartDifficultyPrimaryValue(aTitle, bTitle, sortDirection, head) {
+  return getChartDifficultySortRank(aTitle, sortDirection, head) - getChartDifficultySortRank(bTitle, sortDirection, head);
 }
 
 function compareRecommendPrimaryValue(aRecommend, bRecommend, sortDirection) {
@@ -1594,7 +1643,7 @@ function compareFilterAxisTieBreak(a, b, axisMode) {
   return 0;
 }
 
-function hasPrimarySortDifference(songs, sortMode) {
+function hasPrimarySortDifference(songs, sortMode, chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0]) {
   if (songs.length <= 1) {
     return false;
   }
@@ -1602,24 +1651,24 @@ function hasPrimarySortDifference(songs, sortMode) {
   const first = songs[0];
 
   return songs.some((song) => (
-    comparePrimarySortValue(first, song, sortMode, "asc") !== 0
+    comparePrimarySortValue(first, song, sortMode, "asc", 1, chartDifficultySortHead) !== 0
   ));
 }
 
-function applySortDirectionFallbackIfNoPrimaryEffect(songs, sortMode, sortDirection) {
+function applySortDirectionFallbackIfNoPrimaryEffect(songs, sortMode, sortDirection, chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0]) {
   if (sortDirection !== "desc" || songs.length <= 1) {
     return songs;
   }
 
-  if (hasPrimarySortDifference(songs, sortMode)) {
+  if (hasPrimarySortDifference(songs, sortMode, chartDifficultySortHead)) {
     return songs;
   }
 
   return [...songs].reverse();
 }
 
-function compareCatalogSongs(a, b, sortMode, sortDirection, axisMode, randomSeed = 1) {
-  return comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed)
+function compareCatalogSongs(a, b, sortMode, sortDirection, axisMode, randomSeed = 1, chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0]) {
+  return comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed, chartDifficultySortHead)
     || compareFilterAxisTieBreak(a, b, axisMode)
     || compareSplvValue(a, b)
     || compareTitleValue(a, b);
@@ -1651,6 +1700,8 @@ export function createStore() {
       version: "",
     },
     sortModeMemory: {},
+    chartDifficultySortHead: CHART_DIFFICULTY_OPTIONS[0],
+    chartDifficultySortHeadMemory: {},
     textQueryMemory: {
       title: "",
       memo: "",
@@ -1717,6 +1768,8 @@ export function createStore() {
       textQueryMemory: state.textQueryMemory,
       axisMemory: state.axisMemory,
       sortModeMemory: state.sortModeMemory,
+      chartDifficultySortHead: state.chartDifficultySortHead,
+      chartDifficultySortHeadMemory: state.chartDifficultySortHeadMemory,
       filters: state.filters,
       sortMode: state.sortMode,
       sortDirection: state.sortDirection,
@@ -1763,6 +1816,7 @@ export function createStore() {
     return JSON.stringify({
       filters: catalogFilters,
       sortMode: state.sortMode,
+      chartDifficultySortHead: state.chartDifficultySortHead,
       randomSeed: state.randomSeed,
     });
   }
@@ -2062,6 +2116,8 @@ export function createStore() {
         state.textQueryMemory = normalized.textQueryMemory;
         state.axisMemory = normalized.axisMemory;
         state.sortModeMemory = normalized.sortModeMemory;
+        state.chartDifficultySortHead = normalized.chartDifficultySortHead;
+        state.chartDifficultySortHeadMemory = normalized.chartDifficultySortHeadMemory;
         state.filters = normalized.filters;
         state.sortMode = normalized.sortMode;
         state.sortDirection = normalized.sortDirection;
@@ -2126,6 +2182,7 @@ export function createStore() {
     const axisModeChanged = nextAxisMode !== previousFilters.axisMode;
     const nextAxisMemory = { ...state.axisMemory };
     const nextSortModeMemory = { ...state.sortModeMemory };
+    const nextChartDifficultySortHeadMemory = { ...state.chartDifficultySortHeadMemory };
 
     if (AXIS_MEMORY_MODES.includes(previousFilters.axisMode)) {
       nextAxisMemory[previousFilters.axisMode] = previousFilters.axisValue;
@@ -2150,6 +2207,7 @@ export function createStore() {
       const wasTextAxisMode = isTextAxisMode(previousFilters.axisMode);
       const nextIsTextAxisMode = isTextAxisMode(nextAxisMode);
       nextSortModeMemory[previousFilters.axisMode] = state.sortMode;
+      nextChartDifficultySortHeadMemory[previousFilters.axisMode] = state.chartDifficultySortHead;
     
       if (wasTextAxisMode) {
         rememberTextQuery(previousFilters.axisMode, previousFilters.titleQuery);
@@ -2196,8 +2254,10 @@ export function createStore() {
         nextSortModeMemory[nextAxisMode] ?? getDefaultSortModeForAxis(nextAxisMode),
         nextDisplayMode,
       );
+      state.chartDifficultySortHead = normalizeChartDifficultySortHead(nextChartDifficultySortHeadMemory[nextAxisMode]);
       state.sortDirection = "asc";
       nextSortModeMemory[nextAxisMode] = state.sortMode;
+      nextChartDifficultySortHeadMemory[nextAxisMode] = state.chartDifficultySortHead;
     }
 
     const nextDateRange = normalizeDateRange(
@@ -2277,6 +2337,7 @@ export function createStore() {
 
     state.axisMemory = nextAxisMemory;
     state.sortModeMemory = nextSortModeMemory;
+    state.chartDifficultySortHeadMemory = nextChartDifficultySortHeadMemory;
     state.filters = nextStateFilters;
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
@@ -2297,9 +2358,14 @@ export function createStore() {
       ...state.sortModeMemory,
       [state.filters.axisMode]: state.sortMode,
     };
+    state.chartDifficultySortHeadMemory = {
+      ...state.chartDifficultySortHeadMemory,
+      [state.filters.axisMode]: state.chartDifficultySortHead,
+    };
     state.filters = { ...state.titleFilterBase };
     state.titleFilterBase = null;
     state.sortMode = normalizeSortModeForDisplay(state.titleSortBase, state.filters.displayMode);
+    state.chartDifficultySortHead = normalizeChartDifficultySortHead(state.chartDifficultySortHeadMemory[state.filters.axisMode]);
     state.sortModeMemory = {
       ...state.sortModeMemory,
       [state.filters.axisMode]: state.sortMode,
@@ -2315,6 +2381,10 @@ export function createStore() {
     state.sortModeMemory = {
       ...state.sortModeMemory,
       [state.filters.axisMode]: state.sortMode,
+    };
+    state.chartDifficultySortHeadMemory = {
+      ...state.chartDifficultySortHeadMemory,
+      [state.filters.axisMode]: state.chartDifficultySortHead,
     };
     state.dateRangeMemory = normalizeDateRange(state.filters.dateStart, state.filters.dateEnd);
     state.filters = state.dateFilterBase
@@ -2334,6 +2404,7 @@ export function createStore() {
       state.sortModeMemory[state.filters.axisMode] ?? getDefaultSortModeForAxis(state.filters.axisMode),
       state.filters.displayMode,
     );
+    state.chartDifficultySortHead = normalizeChartDifficultySortHead(state.chartDifficultySortHeadMemory[state.filters.axisMode]);
     state.sortModeMemory = {
       ...state.sortModeMemory,
       [state.filters.axisMode]: state.sortMode,
@@ -2375,6 +2446,10 @@ export function createStore() {
       ...state.sortModeMemory,
       [state.filters.axisMode]: normalized,
     };
+    state.chartDifficultySortHeadMemory = {
+      ...state.chartDifficultySortHeadMemory,
+      [state.filters.axisMode]: state.chartDifficultySortHead,
+    };
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
     persist();
@@ -2394,6 +2469,25 @@ export function createStore() {
     }
 
     state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
+    invalidateCatalogVisibleOrder();
+    state.currentPage = 1;
+    persist();
+    ensureSelectedSong();
+    emit();
+  }
+
+  function rotateChartDifficultySortHead() {
+    if (state.sortMode !== "chartDifficulty") {
+      return;
+    }
+
+    const currentIndex = CHART_DIFFICULTY_OPTIONS.indexOf(state.chartDifficultySortHead);
+    const nextIndex = ((currentIndex >= 0 ? currentIndex : 0) + 1) % CHART_DIFFICULTY_OPTIONS.length;
+    state.chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[nextIndex];
+    state.chartDifficultySortHeadMemory = {
+      ...state.chartDifficultySortHeadMemory,
+      [state.filters.axisMode]: state.chartDifficultySortHead,
+    };
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
     persist();
@@ -2851,6 +2945,7 @@ export function createStore() {
       state.sortDirection,
       state.filters.axisMode,
       state.randomSeed,
+      state.chartDifficultySortHead,
     ));
 
     let filteredVisibleSongs = songStates.filter((entry) => matchesFiltersFor(entry, state.filters));
@@ -2879,6 +2974,7 @@ export function createStore() {
           state.sortDirection,
           state.filters.axisMode,
           state.randomSeed,
+          state.chartDifficultySortHead,
         ));
     }
 
@@ -2886,6 +2982,7 @@ export function createStore() {
       filteredVisibleSongs,
       state.sortMode,
       state.sortDirection,
+      state.chartDifficultySortHead,
     );
 
     const shouldPreserveVisibleCatalogItems = state.preserveVisibleCatalogItemsOnce;
@@ -3000,6 +3097,7 @@ export function createStore() {
     clearDateFilter,
     setSortMode,
     toggleSortDirection,
+    rotateChartDifficultySortHead,
     toggleCatalogViewMode,
     setPage,
     selectSong,
