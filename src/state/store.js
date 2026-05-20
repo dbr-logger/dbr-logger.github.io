@@ -9,6 +9,7 @@ const { compareIsoDates, formatLocalDateTime, todayIso } = await import(`../util
 const { getSearchTextMatchRank, matchesSearchText } = await import(`../utils/search.js${MODULE_VERSION}`);
 
 const RECOMMEND_OPTIONS = ["", "△", "○", "◎", "☆"];
+const RECOMMEND_SORT_OPTIONS = ["☆", "◎", "○", "△", ""];
 const CHART_DIFFICULTY_OPTIONS = ["B", "N", "H", "A", "L"];
 const DISPLAY_MODES = ["clear", "score", "all"];
 const SUMMARY_DISPLAY_MODES = ["clear", "score"];
@@ -112,13 +113,6 @@ const CHART_SUFFIX_ORDER = new Map([
   ["H", 2],
   ["A", 3],
   ["L", 4],
-]);
-const RECOMMEND_SORT_RANK = new Map([
-  ["☆", 0],
-  ["◎", 1],
-  ["○", 2],
-  ["△", 3],
-  ["", 4],
 ]);
 const SCORE_RANKS = [
   { label: "MAX", numerator: 9 },
@@ -393,6 +387,30 @@ function normalizeRecommendSelection(values) {
   return [...new Set(values.filter((value) => RECOMMEND_OPTIONS.includes(value)))];
 }
 
+function normalizeRecommendSortHead(value) {
+  return RECOMMEND_SORT_OPTIONS.includes(value) ? value : RECOMMEND_SORT_OPTIONS[0];
+}
+
+function getRecommendSortChoicesFromSongs(songs) {
+  const recommends = new Set(songs.map((song) => String(song.recommend ?? "")));
+  return RECOMMEND_SORT_OPTIONS.filter((recommend) => recommends.has(recommend));
+}
+
+function normalizeRecommendSortHeadForChoices(value, choices) {
+  return choices.includes(value) ? value : (choices[0] ?? normalizeRecommendSortHead(value));
+}
+
+function normalizeRecommendSortHeadMemory(memory) {
+  const normalized = {};
+  AXIS_MODES.forEach((axisMode) => {
+    const value = normalizeRecommendSortHead(memory?.[axisMode]);
+    if (value !== RECOMMEND_SORT_OPTIONS[0]) {
+      normalized[axisMode] = value;
+    }
+  });
+  return normalized;
+}
+
 function normalizeChartDifficultySelection(values) {
   if (!Array.isArray(values)) {
     return [...CHART_DIFFICULTY_OPTIONS];
@@ -403,6 +421,19 @@ function normalizeChartDifficultySelection(values) {
 
 function normalizeChartDifficultySortHead(value) {
   return CHART_DIFFICULTY_OPTIONS.includes(value) ? value : CHART_DIFFICULTY_OPTIONS[0];
+}
+
+function getChartDifficultySortChoicesFromSongs(songs) {
+  const suffixes = new Set(
+    songs.map((song) => splitTitleAndSuffix(song.title).suffix)
+      .filter((suffix) => CHART_DIFFICULTY_OPTIONS.includes(suffix)),
+  );
+
+  return CHART_DIFFICULTY_OPTIONS.filter((suffix) => suffixes.has(suffix));
+}
+
+function normalizeChartDifficultySortHeadForChoices(value, choices) {
+  return choices.includes(value) ? value : (choices[0] ?? normalizeChartDifficultySortHead(value));
 }
 
 function normalizeChartDifficultySortHeadMemory(memory) {
@@ -844,6 +875,12 @@ function normalizeStoredData(stored) {
       ...normalizeChartDifficultySortHeadMemory(stored.chartDifficultySortHeadMemory),
       [normalizedFilters.axisMode]: normalizeChartDifficultySortHead(stored.chartDifficultySortHead),
       [restoredFilters.axisMode]: normalizeChartDifficultySortHead(stored.chartDifficultySortHead),
+    },
+    recommendSortHead: normalizeRecommendSortHead(stored.recommendSortHead),
+    recommendSortHeadMemory: {
+      ...normalizeRecommendSortHeadMemory(stored.recommendSortHeadMemory),
+      [normalizedFilters.axisMode]: normalizeRecommendSortHead(stored.recommendSortHead),
+      [restoredFilters.axisMode]: normalizeRecommendSortHead(stored.recommendSortHead),
     },
     sortDirection: normalizeSortDirection(stored.sortDirection),
     randomSeed: normalizeRandomSeed(stored.randomSeed),
@@ -1475,7 +1512,15 @@ function compareScoreRatePrimaryValues(a, b, valueKey, sortDirection) {
   return compareNullablePrimaryValues(a[valueKey], b[valueKey], (aValue, bValue) => aValue - bValue, sortDirection);
 }
 
-function comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed = 1, chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0]) {
+function comparePrimarySortValue(
+  a,
+  b,
+  sortMode,
+  sortDirection,
+  randomSeed = 1,
+  chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0],
+  recommendSortHead = RECOMMEND_SORT_OPTIONS[0],
+) {
   if (sortMode === "random") {
     return createRandomSortValue(getCatalogItemKey(a), randomSeed) - createRandomSortValue(getCatalogItemKey(b), randomSeed);
   }
@@ -1540,7 +1585,7 @@ function comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed = 1, 
   }
 
   if (sortMode === "recommend") {
-    return compareRecommendPrimaryValue(a.recommend, b.recommend, sortDirection);
+    return compareRecommendPrimaryValue(a.recommend, b.recommend, sortDirection, recommendSortHead);
   }
 
   if (sortMode === "memo") {
@@ -1574,11 +1619,25 @@ function compareChartDifficultyPrimaryValue(aTitle, bTitle, sortDirection, head)
   return getChartDifficultySortRank(aTitle, sortDirection, head) - getChartDifficultySortRank(bTitle, sortDirection, head);
 }
 
-function compareRecommendPrimaryValue(aRecommend, bRecommend, sortDirection) {
-  const aRank = RECOMMEND_SORT_RANK.get(String(aRecommend ?? "")) ?? RECOMMEND_SORT_RANK.get("");
-  const bRank = RECOMMEND_SORT_RANK.get(String(bRecommend ?? "")) ?? RECOMMEND_SORT_RANK.get("");
-  const compared = aRank - bRank;
-  return sortDirection === "desc" ? -compared : compared;
+function getRotatedRecommendOrder(sortDirection, head) {
+  const baseOrder = sortDirection === "desc"
+    ? [...RECOMMEND_SORT_OPTIONS].reverse()
+    : [...RECOMMEND_SORT_OPTIONS];
+  const normalizedHead = normalizeRecommendSortHead(head);
+  const headIndex = baseOrder.indexOf(normalizedHead);
+  if (headIndex < 0) {
+    return baseOrder;
+  }
+
+  return [...baseOrder.slice(headIndex), ...baseOrder.slice(0, headIndex)];
+}
+
+function compareRecommendPrimaryValue(aRecommend, bRecommend, sortDirection, head) {
+  const order = getRotatedRecommendOrder(sortDirection, head);
+  const aRank = order.indexOf(String(aRecommend ?? ""));
+  const bRank = order.indexOf(String(bRecommend ?? ""));
+  return (aRank >= 0 ? aRank : Number.POSITIVE_INFINITY)
+    - (bRank >= 0 ? bRank : Number.POSITIVE_INFINITY);
 }
 
 function compareTitlePrimaryValue(aTitle, bTitle, sortDirection) {
@@ -1643,7 +1702,12 @@ function compareFilterAxisTieBreak(a, b, axisMode) {
   return 0;
 }
 
-function hasPrimarySortDifference(songs, sortMode, chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0]) {
+function hasPrimarySortDifference(
+  songs,
+  sortMode,
+  chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0],
+  recommendSortHead = RECOMMEND_SORT_OPTIONS[0],
+) {
   if (songs.length <= 1) {
     return false;
   }
@@ -1651,24 +1715,39 @@ function hasPrimarySortDifference(songs, sortMode, chartDifficultySortHead = CHA
   const first = songs[0];
 
   return songs.some((song) => (
-    comparePrimarySortValue(first, song, sortMode, "asc", 1, chartDifficultySortHead) !== 0
+    comparePrimarySortValue(first, song, sortMode, "asc", 1, chartDifficultySortHead, recommendSortHead) !== 0
   ));
 }
 
-function applySortDirectionFallbackIfNoPrimaryEffect(songs, sortMode, sortDirection, chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0]) {
+function applySortDirectionFallbackIfNoPrimaryEffect(
+  songs,
+  sortMode,
+  sortDirection,
+  chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0],
+  recommendSortHead = RECOMMEND_SORT_OPTIONS[0],
+) {
   if (sortDirection !== "desc" || songs.length <= 1) {
     return songs;
   }
 
-  if (hasPrimarySortDifference(songs, sortMode, chartDifficultySortHead)) {
+  if (hasPrimarySortDifference(songs, sortMode, chartDifficultySortHead, recommendSortHead)) {
     return songs;
   }
 
   return [...songs].reverse();
 }
 
-function compareCatalogSongs(a, b, sortMode, sortDirection, axisMode, randomSeed = 1, chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0]) {
-  return comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed, chartDifficultySortHead)
+function compareCatalogSongs(
+  a,
+  b,
+  sortMode,
+  sortDirection,
+  axisMode,
+  randomSeed = 1,
+  chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[0],
+  recommendSortHead = RECOMMEND_SORT_OPTIONS[0],
+) {
+  return comparePrimarySortValue(a, b, sortMode, sortDirection, randomSeed, chartDifficultySortHead, recommendSortHead)
     || compareFilterAxisTieBreak(a, b, axisMode)
     || compareSplvValue(a, b)
     || compareTitleValue(a, b);
@@ -1702,6 +1781,8 @@ export function createStore() {
     sortModeMemory: {},
     chartDifficultySortHead: CHART_DIFFICULTY_OPTIONS[0],
     chartDifficultySortHeadMemory: {},
+    recommendSortHead: RECOMMEND_SORT_OPTIONS[0],
+    recommendSortHeadMemory: {},
     textQueryMemory: {
       title: "",
       memo: "",
@@ -1770,6 +1851,8 @@ export function createStore() {
       sortModeMemory: state.sortModeMemory,
       chartDifficultySortHead: state.chartDifficultySortHead,
       chartDifficultySortHeadMemory: state.chartDifficultySortHeadMemory,
+      recommendSortHead: state.recommendSortHead,
+      recommendSortHeadMemory: state.recommendSortHeadMemory,
       filters: state.filters,
       sortMode: state.sortMode,
       sortDirection: state.sortDirection,
@@ -1817,6 +1900,7 @@ export function createStore() {
       filters: catalogFilters,
       sortMode: state.sortMode,
       chartDifficultySortHead: state.chartDifficultySortHead,
+      recommendSortHead: state.recommendSortHead,
       randomSeed: state.randomSeed,
     });
   }
@@ -2118,6 +2202,8 @@ export function createStore() {
         state.sortModeMemory = normalized.sortModeMemory;
         state.chartDifficultySortHead = normalized.chartDifficultySortHead;
         state.chartDifficultySortHeadMemory = normalized.chartDifficultySortHeadMemory;
+        state.recommendSortHead = normalized.recommendSortHead;
+        state.recommendSortHeadMemory = normalized.recommendSortHeadMemory;
         state.filters = normalized.filters;
         state.sortMode = normalized.sortMode;
         state.sortDirection = normalized.sortDirection;
@@ -2183,6 +2269,7 @@ export function createStore() {
     const nextAxisMemory = { ...state.axisMemory };
     const nextSortModeMemory = { ...state.sortModeMemory };
     const nextChartDifficultySortHeadMemory = { ...state.chartDifficultySortHeadMemory };
+    const nextRecommendSortHeadMemory = { ...state.recommendSortHeadMemory };
 
     if (AXIS_MEMORY_MODES.includes(previousFilters.axisMode)) {
       nextAxisMemory[previousFilters.axisMode] = previousFilters.axisValue;
@@ -2208,6 +2295,7 @@ export function createStore() {
       const nextIsTextAxisMode = isTextAxisMode(nextAxisMode);
       nextSortModeMemory[previousFilters.axisMode] = state.sortMode;
       nextChartDifficultySortHeadMemory[previousFilters.axisMode] = state.chartDifficultySortHead;
+      nextRecommendSortHeadMemory[previousFilters.axisMode] = state.recommendSortHead;
     
       if (wasTextAxisMode) {
         rememberTextQuery(previousFilters.axisMode, previousFilters.titleQuery);
@@ -2255,9 +2343,11 @@ export function createStore() {
         nextDisplayMode,
       );
       state.chartDifficultySortHead = normalizeChartDifficultySortHead(nextChartDifficultySortHeadMemory[nextAxisMode]);
+      state.recommendSortHead = normalizeRecommendSortHead(nextRecommendSortHeadMemory[nextAxisMode]);
       state.sortDirection = "asc";
       nextSortModeMemory[nextAxisMode] = state.sortMode;
       nextChartDifficultySortHeadMemory[nextAxisMode] = state.chartDifficultySortHead;
+      nextRecommendSortHeadMemory[nextAxisMode] = state.recommendSortHead;
     }
 
     const nextDateRange = normalizeDateRange(
@@ -2338,6 +2428,7 @@ export function createStore() {
     state.axisMemory = nextAxisMemory;
     state.sortModeMemory = nextSortModeMemory;
     state.chartDifficultySortHeadMemory = nextChartDifficultySortHeadMemory;
+    state.recommendSortHeadMemory = nextRecommendSortHeadMemory;
     state.filters = nextStateFilters;
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
@@ -2362,10 +2453,15 @@ export function createStore() {
       ...state.chartDifficultySortHeadMemory,
       [state.filters.axisMode]: state.chartDifficultySortHead,
     };
+    state.recommendSortHeadMemory = {
+      ...state.recommendSortHeadMemory,
+      [state.filters.axisMode]: state.recommendSortHead,
+    };
     state.filters = { ...state.titleFilterBase };
     state.titleFilterBase = null;
     state.sortMode = normalizeSortModeForDisplay(state.titleSortBase, state.filters.displayMode);
     state.chartDifficultySortHead = normalizeChartDifficultySortHead(state.chartDifficultySortHeadMemory[state.filters.axisMode]);
+    state.recommendSortHead = normalizeRecommendSortHead(state.recommendSortHeadMemory[state.filters.axisMode]);
     state.sortModeMemory = {
       ...state.sortModeMemory,
       [state.filters.axisMode]: state.sortMode,
@@ -2386,6 +2482,10 @@ export function createStore() {
       ...state.chartDifficultySortHeadMemory,
       [state.filters.axisMode]: state.chartDifficultySortHead,
     };
+    state.recommendSortHeadMemory = {
+      ...state.recommendSortHeadMemory,
+      [state.filters.axisMode]: state.recommendSortHead,
+    };
     state.dateRangeMemory = normalizeDateRange(state.filters.dateStart, state.filters.dateEnd);
     state.filters = state.dateFilterBase
       ? { ...state.dateFilterBase }
@@ -2405,6 +2505,7 @@ export function createStore() {
       state.filters.displayMode,
     );
     state.chartDifficultySortHead = normalizeChartDifficultySortHead(state.chartDifficultySortHeadMemory[state.filters.axisMode]);
+    state.recommendSortHead = normalizeRecommendSortHead(state.recommendSortHeadMemory[state.filters.axisMode]);
     state.sortModeMemory = {
       ...state.sortModeMemory,
       [state.filters.axisMode]: state.sortMode,
@@ -2450,6 +2551,10 @@ export function createStore() {
       ...state.chartDifficultySortHeadMemory,
       [state.filters.axisMode]: state.chartDifficultySortHead,
     };
+    state.recommendSortHeadMemory = {
+      ...state.recommendSortHeadMemory,
+      [state.filters.axisMode]: state.recommendSortHead,
+    };
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
     persist();
@@ -2481,12 +2586,43 @@ export function createStore() {
       return;
     }
 
-    const currentIndex = CHART_DIFFICULTY_OPTIONS.indexOf(state.chartDifficultySortHead);
-    const nextIndex = ((currentIndex >= 0 ? currentIndex : 0) + 1) % CHART_DIFFICULTY_OPTIONS.length;
-    state.chartDifficultySortHead = CHART_DIFFICULTY_OPTIONS[nextIndex];
+    const choices = getChartDifficultySortChoicesFromSongs(getCatalogSnapshot().visibleSongs);
+    if (choices.length === 0) {
+      return;
+    }
+
+    const currentHead = normalizeChartDifficultySortHeadForChoices(state.chartDifficultySortHead, choices);
+    const currentIndex = choices.indexOf(currentHead);
+    const nextIndex = ((currentIndex >= 0 ? currentIndex : 0) + 1) % choices.length;
+    state.chartDifficultySortHead = choices[nextIndex];
     state.chartDifficultySortHeadMemory = {
       ...state.chartDifficultySortHeadMemory,
       [state.filters.axisMode]: state.chartDifficultySortHead,
+    };
+    invalidateCatalogVisibleOrder();
+    state.currentPage = 1;
+    persist();
+    ensureSelectedSong();
+    emit();
+  }
+
+  function rotateRecommendSortHead() {
+    if (state.sortMode !== "recommend") {
+      return;
+    }
+
+    const choices = getRecommendSortChoicesFromSongs(getCatalogSnapshot().visibleSongs);
+    if (choices.length === 0) {
+      return;
+    }
+
+    const currentHead = normalizeRecommendSortHeadForChoices(state.recommendSortHead, choices);
+    const currentIndex = choices.indexOf(currentHead);
+    const nextIndex = ((currentIndex >= 0 ? currentIndex : 0) + 1) % choices.length;
+    state.recommendSortHead = choices[nextIndex];
+    state.recommendSortHeadMemory = {
+      ...state.recommendSortHeadMemory,
+      [state.filters.axisMode]: state.recommendSortHead,
     };
     invalidateCatalogVisibleOrder();
     state.currentPage = 1;
@@ -2946,6 +3082,7 @@ export function createStore() {
       state.filters.axisMode,
       state.randomSeed,
       state.chartDifficultySortHead,
+      state.recommendSortHead,
     ));
 
     let filteredVisibleSongs = songStates.filter((entry) => matchesFiltersFor(entry, state.filters));
@@ -2975,14 +3112,41 @@ export function createStore() {
           state.filters.axisMode,
           state.randomSeed,
           state.chartDifficultySortHead,
+          state.recommendSortHead,
         ));
+    }
+
+    const chartDifficultySortChoices = getChartDifficultySortChoicesFromSongs(filteredVisibleSongs);
+    const effectiveChartDifficultySortHead = state.sortMode === "chartDifficulty" && chartDifficultySortChoices.length > 0
+      ? normalizeChartDifficultySortHeadForChoices(state.chartDifficultySortHead, chartDifficultySortChoices)
+      : state.chartDifficultySortHead;
+    const recommendSortChoices = getRecommendSortChoicesFromSongs(filteredVisibleSongs);
+    const effectiveRecommendSortHead = state.sortMode === "recommend" && recommendSortChoices.length > 0
+      ? normalizeRecommendSortHeadForChoices(state.recommendSortHead, recommendSortChoices)
+      : state.recommendSortHead;
+
+    if (
+      (state.sortMode === "chartDifficulty" && effectiveChartDifficultySortHead !== state.chartDifficultySortHead)
+      || (state.sortMode === "recommend" && effectiveRecommendSortHead !== state.recommendSortHead)
+    ) {
+      filteredVisibleSongs = [...filteredVisibleSongs].sort((a, b) => compareCatalogSongs(
+        a,
+        b,
+        state.sortMode,
+        state.sortDirection,
+        state.filters.axisMode,
+        state.randomSeed,
+        effectiveChartDifficultySortHead,
+        effectiveRecommendSortHead,
+      ));
     }
 
     const directionAdjustedVisibleSongs = applySortDirectionFallbackIfNoPrimaryEffect(
       filteredVisibleSongs,
       state.sortMode,
       state.sortDirection,
-      state.chartDifficultySortHead,
+      effectiveChartDifficultySortHead,
+      effectiveRecommendSortHead,
     );
 
     const shouldPreserveVisibleCatalogItems = state.preserveVisibleCatalogItemsOnce;
@@ -3060,6 +3224,10 @@ export function createStore() {
       summary,
       summaryFilters,
       dateDefaultRange,
+      chartDifficultySortChoices,
+      effectiveChartDifficultySortHead,
+      recommendSortChoices,
+      effectiveRecommendSortHead,
     };
 
     return catalogSnapshotCache;
@@ -3098,6 +3266,7 @@ export function createStore() {
     setSortMode,
     toggleSortDirection,
     rotateChartDifficultySortHead,
+    rotateRecommendSortHead,
     toggleCatalogViewMode,
     setPage,
     selectSong,

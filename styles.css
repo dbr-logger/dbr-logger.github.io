@@ -773,14 +773,17 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
 }
 
 .recommend-chip span {
+  align-items: center;
   background: white;
   border: 1px solid var(--border);
   border-radius: 999px;
   color: var(--muted);
   display: inline-flex;
+  height: 44px;
   min-width: 44px;
   justify-content: center;
-  padding: 9px 12px;
+  line-height: 1;
+  padding: 1px 12px 0;
 }
 
 .recommend-chip input:checked + span {
@@ -829,6 +832,29 @@ html[data-theme="dark"] .summary-filters-toggle:hover {
   gap: 10px;
   justify-content: flex-end;
   min-width: 0;
+}
+
+.pagination-controls .button {
+  align-items: center;
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  line-height: 1;
+  padding-bottom: 11px;
+  padding-top: 13px;
+}
+
+.catalog-sort-control-button,
+.chart-difficulty-head-button {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 44px;
+  height: 44px;
+  justify-content: center;
+  line-height: 1;
+  padding-left: 0;
+  padding-right: 0;
+  width: 44px;
 }
 
 .pagination-label {
@@ -2702,8 +2728,9 @@ html[data-theme="dark"] .proposal-success-body a {
   }
 
   .recommend-chip span {
+    height: 40px;
     min-width: 40px;
-    padding: 8px 11px;
+    padding: 1px 11px 0;
   }
 
   .field {
@@ -2940,8 +2967,20 @@ html[data-theme="dark"] .proposal-success-body a {
   }
 
   .pagination-controls .button {
+    height: 40px;
+    padding-bottom: 9px;
     padding-left: 10px;
     padding-right: 10px;
+    padding-top: 11px;
+  }
+
+  .pagination-controls .catalog-sort-control-button,
+  .pagination-controls .chart-difficulty-head-button {
+    flex-basis: 40px;
+    height: 40px;
+    padding-left: 0;
+    padding-right: 0;
+    width: 40px;
   }
 }
 
