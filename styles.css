@@ -2759,7 +2759,7 @@ html[data-theme="dark"] .proposal-success-body a {
   .filters-panel .field select,
   .floating-filter-panel .field select,
   .floating-filter-search input,
-  .floating-filter-date-field .form-date {
+  .floating-filter-date-field {
     font-size: 16px;
   }
 
