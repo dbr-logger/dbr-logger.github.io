@@ -39,7 +39,7 @@ export const BPM_RANGE_POINTS = [
   "250",
   "max",
 ];
-export const VERSION_ORDER_VALUES = ["0", "1", "s", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33"];
+export const VERSION_ORDER_VALUES = ["0", "1", "s", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34"];
 export const VERSION_LABELS = new Map([
   ["0", "CS/INFINITAS"],
   ["1", "1st style"],
@@ -76,6 +76,7 @@ export const VERSION_LABELS = new Map([
   ["31", "EPOLIS"],
   ["32", "Pinky Crush"],
   ["33", "Sparkle Shower"],
+  ["34", "ZINRAI"],
 ]);
 export const VERSION_BAND_LABELS = new Map([
   ["0", "CS/INF"],
@@ -113,6 +114,7 @@ export const VERSION_BAND_LABELS = new Map([
   ["31", "EPO"],
   ["32", "Pink"],
   ["33", "SPS"],
+  ["34", "ZIN"],
 ]);
 export const AXIS_RANGE_MODE_DISABLED = {
   level: false,

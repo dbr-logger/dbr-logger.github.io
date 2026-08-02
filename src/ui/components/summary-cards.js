@@ -94,6 +94,7 @@ const VERSION_LABELS = new Map([
   ["31", "EPOLIS"],
   ["32", "Pinky Crush"],
   ["33", "Sparkle Shower"],
+  ["34", "ZINRAI"],
 ]);
 
 const getLampColor = (lamp) => LAMP_COLORS[lamp] ?? "transparent";
