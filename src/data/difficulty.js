@@ -53,6 +53,8 @@ const KATATE_TITLE_ALIASES = new Map([
   ["鬼華-修羅の舞(A)", "鬼華-修羅の舞-(A)"],
 ]);
 
+const KATATE_CASE_SENSITIVE_TITLES = new Set(["switch(A)"]);
+
 function resolveKatateTitleAlias(title) {
   return KATATE_TITLE_ALIASES.get(title) ?? title;
 }
@@ -149,7 +151,9 @@ async function fetchKatateMap() {
     katateMap.set(title, katate);
     katateMap.set(buildTitleMatchKey(title), katate);
     katateMap.set(resolvedTitle, katate);
-    katateMap.set(buildTitleMatchKey(resolvedTitle), katate);
+    if (!KATATE_CASE_SENSITIVE_TITLES.has(resolvedTitle)) {
+      katateMap.set(buildTitleMatchKey(resolvedTitle), katate);
+    }
   });
 
   return katateMap;
