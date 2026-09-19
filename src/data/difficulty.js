@@ -45,6 +45,12 @@ const KATATE_TITLE_ALIASES = new Map([
   ["Ubertreffen(L)", "Übertreffen(L)"],
   ["Dans la nuit de l'eternite(A)", "Dans la nuit de l'éternité(A)"],
   ["Χ-DEN(A)", "X-DEN(A)"],
+  ["FiZZλ_POT!OИ(A)", "FiZZλ_PØT!0И(A)"],
+  ["POLꓘAMAИIA(L)", "POLꞰAMAИIA(L)"],
+  ["Raison d'etre～交差する宿命～(L)", "Raison d'être～交差する宿命～(L)"],
+  ["Space Battleship S4TO(A)", "Space Battleship S4TØ(A)"],
+  ["華麗なる！音戯探偵ひなビタ?(A)", "華麗なる！音戯探偵ひなビタ♫(A)"],
+  ["鬼華-修羅の舞(A)", "鬼華-修羅の舞-(A)"],
 ]);
 
 function resolveKatateTitleAlias(title) {
